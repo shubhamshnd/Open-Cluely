@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="glass-container">
+    <!-- Compact Interface - Horizontal Layout like Cluely -->
+    <div class="main-interface">
+      <!-- Status Section with Timer and Count -->
+      <div class="status-section">
+        <div class="status-dot"></div>
+        <span class="timer">00:00</span>
+        <div class="screenshot-count" id="screenshot-count">0</div>
+      </div>
+      
+      <!-- Action Buttons - Compact -->
+      <div class="content-section">
+        <div class="action-buttons">
+          <button id="screenshot-btn" class="action-btn screenshot-btn" title="Screenshot (Ctrl+Alt+Shift+S)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+            </svg>
+          </button>
+          
+          <button id="analyze-btn" class="action-btn analyze-btn" title="Ask AI (Ctrl+Alt+Shift+A)">
+            Ask AI
+          </button>
+          
+          <button id="clear-btn" class="action-btn clear-btn" title="Clear">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+          
+          <button id="hide-btn" class="action-btn hide-btn" title="Emergency Hide (Ctrl+Alt+Shift+X)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Hidden status text for feedback -->
+    <div id="status-text" class="status-text" style="display: none;">AI Assistant</div>
+    
+    <!-- Expandable Results Panel -->
+    <div id="results-panel" class="results-panel hidden">
+      <div class="results-header">
+        <div class="results-title">
+          <span class="ai-response-icon">✨</span>
+          <span>AI Response</span>
+        </div>
+        <div class="results-actions">
+          <button id="copy-btn" class="copy-btn" title="Copy">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+          </button>
+          <button id="close-results" class="close-btn" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="results-content">
+        <div id="result-text" class="result-text"></div>
+      </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="loading-content">
+        <div class="analyzing-icon">🧠</div>
+        <div class="loading-text">Analyzing screen...</div>
+      </div>
+    </div>
+    
+    <!-- Emergency Overlay -->
+    <div id="emergency-overlay" class="emergency-overlay hidden">
+      <div class="emergency-message">HIDDEN</div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

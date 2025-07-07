@@ -1,0 +1,44 @@
+{
+  "name": "stealth-meeting-assistant",
+  "version": "1.0.0",
+  "description": "Invisible AI assistant for meetings - undetectable during screen share",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dev": "electron . --enable-logging"
+  },
+  "dependencies": {
+    "electron": "^28.0.0",
+    "@google/generative-ai": "^0.2.1",
+    "screenshot-desktop": "^1.15.0",
+    "dotenv": "^16.3.1",
+    "node-window-manager": "^2.2.4"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.stealth.meetingassistant",
+    "productName": "Meeting Assistant",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      ".env"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "author": "Your Name",
+  "license": "MIT"
+}
