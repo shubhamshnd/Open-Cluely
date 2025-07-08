@@ -1,0 +1,104 @@
+
+D:\Open-Cluely>npm start
+
+> stealth-meeting-assistant@1.0.0 start
+> electron .
+
+
+tempy imported: undefined
+Initializing Gemini AI...
+Gemini AI initialized successfully
+App is ready, creating window...
+Creating stealth window...
+Window position: 760, 40, size: 400x600
+BrowserWindow created
+Loading HTML from: D:\Open-Cluely\src\renderer.html
+Applying Windows stealth settings
+Content protection enabled for stealth
+Window setup complete - will show after content loads
+Renderer console.1: Preload script loading...
+Renderer console.1: PreloadAPI: electronAPI exposed successfully
+Renderer console.1: PreloadAPI: Preload script loaded successfully
+Renderer console.1: DOM loaded, initializing...
+Renderer console.1: Initializing renderer...
+Permission check: media file:///
+Renderer console.1: AudioContext created successfully
+Renderer console.1: electronAPI is available
+Renderer console.1: Initializing Whisper Web Worker...
+Renderer console.1: Whisper worker created successfully
+Renderer console.1: Renderer initialized successfully
+DOM is ready
+HTML finished loading
+Renderer console.1: Worker message: {
+  "status": "ready",
+  "message": "Worker initialized and ready"
+}
+Renderer console.2: %cElectron Security Warning (Disabled webSecurity) font-weight: bold; This renderer process has "webSecurity" disabled. This
+  exposes users of this app to severe security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+Renderer console.2: %cElectron Security Warning (allowRunningInsecureContent) font-weight: bold; This renderer process has "allowRunningInsecureContent"
+  enabled. This exposes users of this app to severe security risks.
+
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+Renderer console.2: %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+Renderer console.1: Content check...
+Renderer console.1: Document title: AI Assistant
+Renderer console.1: Body exists: true
+Renderer console.1: App element exists: true
+Renderer console.1: Glass container exists: true
+Renderer console.1: Body made visible
+Renderer console.1: App container made visible
+JavaScript result: Content visibility check complete
+Window shown with transparent background
+Permission check: accessibility-events file:///
+Renderer console.1: Setting up voice recording...
+Permission check: media file:///D:/Open-Cluely/src/renderer.html
+Permission check: media file:///D:/Open-Cluely/src/renderer.html
+Renderer console.1: Available audio devices: 3
+Renderer console.1: Trying constraint: [object Object]
+Permission requested: media
+Granting microphone permission
+Permission check: media file:///
+Permission check: media file:///D:/Open-Cluely/src/renderer.html
+Renderer console.1: Microphone access granted with constraint: [object Object]
+Renderer console.1: Starting recording...
+Renderer console.1: Processing audio chunk...
+Renderer console.1: Sending uint8Array to main process. Type: object Length: 42586
+Renderer console.1: PreloadAPI: convertAudio called
+Error converting audio: TypeError: Cannot read properties of undefined (reading 'file')
+    at D:\Open-Cluely\src\main.js:555:29
+    at WebContents.<anonymous> (node:electron/js2c/browser_init:2:77979)
+    at WebContents.emit (node:events:517:28)
+Renderer console.3: Error processing audio: TypeError: Cannot read properties of null (reading 'buffer')
+Renderer console.1: Processing audio chunk...
+Renderer console.1: Sending uint8Array to main process. Type: object Length: 48710
+Renderer console.1: PreloadAPI: convertAudio called
+Error converting audio: TypeError: Cannot read properties of undefined (reading 'file')
+    at D:\Open-Cluely\src\main.js:555:29
+    at WebContents.<anonymous> (node:electron/js2c/browser_init:2:77979)
+    at WebContents.emit (node:events:517:28)
+Renderer console.3: Error processing audio: TypeError: Cannot read properties of null (reading 'buffer')
+Renderer console.1: Processing audio chunk...
+Renderer console.1: Sending uint8Array to main process. Type: object Length: 48864
+Renderer console.1: PreloadAPI: convertAudio called
+Error converting audio: TypeError: Cannot read properties of undefined (reading 'file')
+    at D:\Open-Cluely\src\main.js:555:29
+    at WebContents.<anonymous> (node:electron/js2c/browser_init:2:77979)
+    at WebContents.emit (node:events:517:28)
+Renderer console.3: Error processing audio: TypeError: Cannot read properties of null (reading 'buffer')
+Renderer console.1: Stopping recording...

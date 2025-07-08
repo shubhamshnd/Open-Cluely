@@ -10,6 +10,7 @@ let audioStream = null;
 let recordingChunks = [];
 let chatMessagesArray = [];
 let isModelLoading = false;
+let audioContext = null;
 
 // Whisper worker
 let worker = null;
@@ -39,7 +40,7 @@ let timerInterval;
 
 // Whisper configuration
 const WHISPER_CONFIG = {
-    model: 'Xenova/whisper-tiny.en',
+    model: 'Xenova/whisper-tiny', // no `.en` needed
     multilingual: false,
     quantized: true,
     subtask: 'transcribe',
@@ -49,6 +50,17 @@ const WHISPER_CONFIG = {
 // Initialize
 async function init() {
     console.log('Initializing renderer...');
+    
+    // Create a single AudioContext
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 16000
+        });
+        console.log('AudioContext created successfully');
+    } catch (error) {
+        console.error('Failed to create AudioContext:', error);
+        showFeedback('Audio processing disabled', 'error');
+    }
     
     // Check if electronAPI is available
     if (typeof window.electronAPI !== 'undefined') {
@@ -82,7 +94,8 @@ async function initializeWhisperWorker() {
         console.log('Initializing Whisper Web Worker...');
         
         // Use the separate worker file
-        worker = new Worker('whisper-worker.js', { type: 'module' });
+        worker = new Worker('dist/whisper-worker.bundle.js', { type: 'module' });
+
         
         worker.addEventListener('message', handleWorkerMessage);
         worker.addEventListener('error', (error) => {
@@ -105,7 +118,7 @@ async function initializeWhisperWorker() {
 function handleWorkerMessage(event) {
     const message = event.data;
     
-    console.log('Worker message:', message);
+    console.log('Worker message:', JSON.stringify(message, null, 2));
     
     switch (message.status) {
         case "progress":
@@ -371,35 +384,11 @@ async function processAudioChunk() {
 
 // Convert audio blob to format for Whisper
 async function convertBlobToAudioBuffer(blob) {
-    try {
-        const arrayBuffer = await blob.arrayBuffer();
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-            sampleRate: 16000
-        });
-        
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        
-        // Convert to mono Float32Array
-        let audio;
-        if (audioBuffer.numberOfChannels === 2) {
-            const SCALING_FACTOR = Math.sqrt(2);
-            const left = audioBuffer.getChannelData(0);
-            const right = audioBuffer.getChannelData(1);
-            
-            audio = new Float32Array(left.length);
-            for (let i = 0; i < audioBuffer.length; ++i) {
-                audio[i] = SCALING_FACTOR * (left[i] + right[i]) / 2;
-            }
-        } else {
-            audio = audioBuffer.getChannelData(0);
-        }
-        
-        return audio;
-        
-    } catch (error) {
-        console.error('Audio conversion failed:', error);
-        return null;
-    }
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    console.log('Sending uint8Array to main process. Type:', typeof uint8Array, 'Length:', uint8Array.length);
+    const audioData = await window.electronAPI.convertAudio(uint8Array);
+    return new Float32Array(audioData.buffer, audioData.byteOffset, audioData.byteLength / Float32Array.BYTES_PER_ELEMENT);
 }
 
 // Filter noise
@@ -836,5 +825,8 @@ window.addEventListener('beforeunload', () => {
     }
     if (worker) {
         worker.terminate();
+    }
+    if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close();
     }
 });

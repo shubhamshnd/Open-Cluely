@@ -1,9 +1,17 @@
+(async () => {
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
-const path = require('path');
+
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const screenshot = require('screenshot-desktop');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
+
+const { path: ffmpegPath } = await import('@ffmpeg-installer/ffmpeg');
+const ffmpeg = (await import('fluent-ffmpeg')).default;
+ffmpeg.setFfmpegPath(ffmpegPath);
+
 
 let mainWindow;
 let screenshots = [];
@@ -129,11 +137,6 @@ function createStealthWindow() {
       relaunchCommand: '',
       relaunchDisplayName: ''
     });
-  } else if (process.platform === 'linux') {
-    mainWindow.setSkipTaskbar(true);
-    if (mainWindow.setHasShadow) {
-      mainWindow.setHasShadow(false);
-    }
   }
   
   mainWindow.setContentProtection(true);
@@ -548,6 +551,38 @@ ipcMain.handle('stop-voice-recognition', () => {
   return { success: true };
 });
 
+ipcMain.handle('convert-audio', async (event, audioData) => {
+  try {
+    const inputFile = path.join(os.tmpdir(), `input-${Date.now()}.webm`);
+    console.log('inputFile:', inputFile);
+    const outputFile = path.join(os.tmpdir(), `output-${Date.now()}.wav`);
+    console.log('outputFile:', outputFile);
+
+    console.log('Received audioData type:', typeof audioData);
+    console.log('Received audioData length:', audioData ? audioData.length : 'N/A');
+    fs.writeFileSync(inputFile, Buffer.from(audioData));
+
+    return new Promise((resolve, reject) => {
+      ffmpeg(inputFile)
+        .toFormat('wav')
+        .audioFrequency(16000)
+        .audioChannels(1)
+        .on('error', (err) => {
+          console.error('FFmpeg error:', err);
+          reject(err);
+        })
+        .on('end', () => {
+          const audioBuffer = fs.readFileSync(outputFile);
+          resolve(audioBuffer);
+        })
+        .save(outputFile);
+    });
+  } catch (error) {
+    console.error('Error converting audio:', error);
+    return null;
+  }
+});
+
 // App event handlers
 app.whenReady().then(() => {
   console.log('App is ready, creating window...');
@@ -596,3 +631,4 @@ app.on('web-contents-created', (event, contents) => {
 });
 
 process.title = 'SystemIdleProcess';
+})();

@@ -70,9 +70,11 @@ const transcribe = async (audio, model, multilingual, quantized, subtask, langua
     const isDistilWhisper = model.startsWith("distil-whisper/");
     
     let modelName = model;
-    if (!isDistilWhisper && !multilingual) {
-        modelName += ".en"
+    if (!isDistilWhisper && !multilingual && !model.endsWith('.en')) {
+        modelName += ".en";
     }
+
+
 
     // Get the pipeline factory
     const p = AutomaticSpeechRecognitionPipelineFactory;

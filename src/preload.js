@@ -78,6 +78,14 @@ try {
         return { error: err.message };
       });
     },
+
+    convertAudio: (audioData) => {
+      console.log('PreloadAPI: convertAudio called');
+      return ipcRenderer.invoke('convert-audio', audioData).catch(err => {
+        console.error('PreloadAPI: convertAudio error:', err);
+        return null;
+      });
+    },
     
     // Event listeners with cleanup functions and error handling
     onScreenshotTakenStealth: (callback) => {
