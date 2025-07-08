@@ -6,14 +6,16 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "dev": "electron . --enable-logging"
+    "dev": "electron . --enable-logging",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "electron": "^28.0.0",
     "@google/generative-ai": "^0.2.1",
     "screenshot-desktop": "^1.15.0",
     "dotenv": "^16.3.1",
-    "node-window-manager": "^2.2.4"
+    "node-window-manager": "^2.2.4",
+    "@xenova/transformers": "^2.17.2"
   },
   "devDependencies": {
     "electron-builder": "^24.0.0"
@@ -27,7 +29,11 @@
     "files": [
       "src/**/*",
       "package.json",
-      ".env"
+      ".env",
+      "node_modules/@xenova/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/@xenova/**/*"
     ],
     "mac": {
       "category": "public.app-category.productivity"

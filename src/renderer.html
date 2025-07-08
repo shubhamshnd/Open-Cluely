@@ -20,6 +20,15 @@
       <!-- Action Buttons - Compact -->
       <div class="content-section">
         <div class="action-buttons">
+          <button id="voice-toggle" class="action-btn voice-btn" title="Toggle Voice Recognition (Ctrl+Alt+Shift+V)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <path d="M12 19v4"/>
+              <path d="M8 23h8"/>
+            </svg>
+          </button>
+          
           <button id="screenshot-btn" class="action-btn screenshot-btn" title="Screenshot (Ctrl+Alt+Shift+S)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
@@ -45,10 +54,27 @@
       </div>
     </div>
     
+    <!-- Chat Interface -->
+    <div id="chat-container" class="chat-container">
+      <div class="chat-header">
+        <span class="chat-title">🤖 AI Assistant</span>
+        <div class="chat-controls">
+          <button id="copy-btn" class="copy-btn" title="Copy Last Response">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="chat-messages" class="chat-messages">
+        <!-- Messages will be added here dynamically -->
+      </div>
+    </div>
+    
     <!-- Hidden status text for feedback -->
     <div id="status-text" class="status-text" style="display: none;">AI Assistant</div>
     
-    <!-- Expandable Results Panel -->
+    <!-- Expandable Results Panel (Legacy - now using chat) -->
     <div id="results-panel" class="results-panel hidden">
       <div class="results-header">
         <div class="results-title">
@@ -56,11 +82,6 @@
           <span>AI Response</span>
         </div>
         <div class="results-actions">
-          <button id="copy-btn" class="copy-btn" title="Copy">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-            </svg>
-          </button>
           <button id="close-results" class="close-btn" title="Close">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
