@@ -1,31 +1,58 @@
-// whisper-worker.js - Fixed Whisper Web Worker for Electron
-// This is a complete working implementation based on the official Whisper Web demo
+/* eslint-disable camelcase */
+// REPLACE your entire whisper-worker.js with this exact working version
+import { pipeline, env } from "@xenova/transformers";
 
+// Disable local models
+env.allowLocalModels = false;
+
+// Define model factories
+// Ensures only one model is created of each type
 class PipelineFactory {
     static task = null;
     static model = null;
     static quantized = null;
     static instance = null;
 
+    constructor(tokenizer, model, quantized) {
+        this.tokenizer = tokenizer;
+        this.model = model;
+        this.quantized = quantized;
+    }
+
     static async getInstance(progress_callback = null) {
         if (this.instance === null) {
-            // Import Transformers.js dynamically in the worker
-            const { pipeline, env } = await import('@xenova/transformers');
-            
-            // Configure environment for Electron
-            env.allowLocalModels = false;
-            env.allowRemoteModels = true;
-            env.useBrowserCache = true;
-            
             this.instance = pipeline(this.task, this.model, {
                 quantized: this.quantized,
                 progress_callback,
-                revision: this.model?.includes("/whisper-medium") ? "no_attentions" : "main"
+                // For medium models, we need to load the `no_attentions` revision to avoid running out of memory
+                revision: this.model.includes("/whisper-medium") ? "no_attentions" : "main"
             });
         }
         return this.instance;
     }
 }
+
+self.addEventListener("message", async (event) => {
+    const message = event.data;
+
+    // Do transcription work
+    let transcript = await transcribe(
+        message.audio,
+        message.model,
+        message.multilingual,
+        message.quantized,
+        message.subtask,
+        message.language,
+    );
+    if (transcript === null) return;
+
+    // Send the result back to the main thread
+    self.postMessage({
+        status: "complete",
+        task: "automatic-speech-recognition",
+        data: transcript,
+    });
+});
 
 class AutomaticSpeechRecognitionPipelineFactory extends PipelineFactory {
     static task = "automatic-speech-recognition";
@@ -33,87 +60,58 @@ class AutomaticSpeechRecognitionPipelineFactory extends PipelineFactory {
     static quantized = null;
 }
 
-// Listen for messages from the main thread
-self.addEventListener("message", async (event) => {
-    const message = event.data;
-    
-    try {
-        let transcript = await transcribe(
-            message.audio,
-            message.model,
-            message.multilingual,
-            message.quantized,
-            message.subtask,
-            message.language,
-        );
-        
-        if (transcript === null) return;
-
-        // Send the result back to the main thread
-        self.postMessage({
-            status: "complete",
-            task: "automatic-speech-recognition",
-            data: transcript,
-        });
-    } catch (error) {
-        console.error('Worker transcription error:', error);
-        self.postMessage({
-            status: "error",
-            task: "automatic-speech-recognition",
-            data: { message: error.message },
-        });
-    }
-});
-
-// Main transcription function
-const transcribe = async (audio, model, multilingual, quantized, subtask, language) => {
+const transcribe = async (
+    audio,
+    model,
+    multilingual,
+    quantized,
+    subtask,
+    language,
+) => {
     const isDistilWhisper = model.startsWith("distil-whisper/");
-    
+
     let modelName = model;
-    if (!isDistilWhisper && !multilingual && !model.endsWith('.en')) {
-        modelName += ".en";
+    if (!isDistilWhisper && !multilingual) {
+        modelName += ".en"
     }
 
-
-
-    // Get the pipeline factory
     const p = AutomaticSpeechRecognitionPipelineFactory;
-    
-    // Check if we need to reload the model
     if (p.model !== modelName || p.quantized !== quantized) {
+        // Invalidate model if different
         p.model = modelName;
         p.quantized = quantized;
 
-        // Dispose of the previous instance if it exists
         if (p.instance !== null) {
             (await p.getInstance()).dispose();
             p.instance = null;
         }
     }
 
-    // Get the transcriber pipeline
+    // Load transcriber model
     let transcriber = await p.getInstance((data) => {
-        // Send progress updates to the main thread
         self.postMessage(data);
     });
 
-    // Calculate time precision for timestamps
-    const time_precision = transcriber.processor.feature_extractor.config.chunk_length /
+    const time_precision =
+        transcriber.processor.feature_extractor.config.chunk_length /
         transcriber.model.config.max_source_positions;
 
-    // Initialize chunk processing
-    let chunks_to_process = [{
-        tokens: [],
-        finalised: false,
-    }];
+    // Storage for chunks to be processed. Initialise with an empty chunk.
+    let chunks_to_process = [
+        {
+            tokens: [],
+            finalised: false,
+        },
+    ];
 
-    // Callback for when a chunk is completed
     function chunk_callback(chunk) {
         let last = chunks_to_process[chunks_to_process.length - 1];
+
+        // Overwrite last chunk with new info
         Object.assign(last, chunk);
         last.finalised = true;
 
-        // If this isn't the last chunk, prepare for the next one
+        // Create an empty chunk after, if it not the last chunk
         if (!chunk.is_last) {
             chunks_to_process.push({
                 tokens: [],
@@ -122,12 +120,14 @@ const transcribe = async (audio, model, multilingual, quantized, subtask, langua
         }
     }
 
-    // Callback for streaming results
+    // Inject custom callback function to handle merging of chunks
     function callback_function(item) {
         let last = chunks_to_process[chunks_to_process.length - 1];
+
+        // Update tokens of last chunk
         last.tokens = [...item[0].output_token_ids];
 
-        // Decode the current state and send update
+        // Merge text chunks
         let data = transcriber.tokenizer._decode_asr(chunks_to_process, {
             time_precision: time_precision,
             return_timestamps: true,
@@ -141,22 +141,31 @@ const transcribe = async (audio, model, multilingual, quantized, subtask, langua
         });
     }
 
-    // Run the transcription
+    // Actually run transcription
     let output = await transcriber(audio, {
+        // Greedy
         top_k: 0,
         do_sample: false,
+
+        // Sliding window
         chunk_length_s: isDistilWhisper ? 20 : 30,
         stride_length_s: isDistilWhisper ? 3 : 5,
+
+        // Language and task
         language: language,
         task: subtask,
+
+        // Return timestamps
         return_timestamps: true,
         force_full_sequences: false,
-        callback_function: callback_function,
-        chunk_callback: chunk_callback,
+
+        // Callback functions
+        callback_function: callback_function, // after each generation step
+        chunk_callback: chunk_callback, // after each chunk is processed
     }).catch((error) => {
         self.postMessage({
             status: "error",
-            task: "automatic-speech-recognition", 
+            task: "automatic-speech-recognition",
             data: error,
         });
         return null;
@@ -164,9 +173,3 @@ const transcribe = async (audio, model, multilingual, quantized, subtask, langua
 
     return output;
 };
-
-// Send ready message once the worker is loaded
-self.postMessage({
-    status: "ready",
-    message: "Worker initialized and ready"
-});

@@ -70,7 +70,6 @@ try {
         return { error: err.message };
       });
     },
-    
     stopVoiceRecognition: () => {
       console.log('PreloadAPI: stopVoiceRecognition called');
       return ipcRenderer.invoke('stop-voice-recognition').catch(err => {

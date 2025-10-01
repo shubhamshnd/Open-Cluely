@@ -40,12 +40,13 @@ let timerInterval;
 
 // Whisper configuration
 const WHISPER_CONFIG = {
-    model: 'Xenova/whisper-tiny', // no `.en` needed
+    model: 'Xenova/whisper-tiny.en', // English-only for better performance
     multilingual: false,
     quantized: true,
     subtask: 'transcribe',
     language: 'english'
 };
+
 
 // Initialize
 async function init() {
@@ -88,14 +89,13 @@ async function init() {
     console.log('Renderer initialized successfully');
 }
 
-// Initialize Whisper Web Worker using separate file
 async function initializeWhisperWorker() {
     try {
         console.log('Initializing Whisper Web Worker...');
         
-        // Use the separate worker file
-        worker = new Worker('dist/whisper-worker.bundle.js', { type: 'module' });
-
+        // Since you have the bundled version in dist/, use that
+        // Use relative path from the renderer.html location
+        worker = new Worker('./dist/whisper-worker.bundle.js', { type: 'module' });
         
         worker.addEventListener('message', handleWorkerMessage);
         worker.addEventListener('error', (error) => {
@@ -104,15 +104,32 @@ async function initializeWhisperWorker() {
         });
         
         console.log('Whisper worker created successfully');
-        showFeedback('Whisper worker initialized', 'success');
         return true;
         
     } catch (error) {
         console.error('Failed to initialize Whisper worker:', error);
         showFeedback('Failed to initialize speech recognition', 'error');
-        return false;
+        
+        // Fallback: try the unbundled version
+        try {
+            console.log('Trying fallback worker path...');
+            worker = new Worker('./whisper-worker.js', { type: 'module' });
+            
+            worker.addEventListener('message', handleWorkerMessage);
+            worker.addEventListener('error', (error) => {
+                console.error('Fallback worker error:', error);
+                showFeedback('Speech recognition worker failed', 'error');
+            });
+            
+            console.log('Fallback whisper worker created successfully');
+            return true;
+            
+        } catch (fallbackError) {
+            console.error('Fallback worker also failed:', fallbackError);
+            return false;
+        }
     }
-}
+}   
 
 // Handle worker messages
 function handleWorkerMessage(event) {
@@ -126,13 +143,31 @@ function handleWorkerMessage(event) {
             showFeedback(`Loading model: ${percent}%`, 'info');
             break;
             
-        case "complete":
-            if (message.data && message.data.text) {
-                const transcribedText = message.data.text.trim();
-                console.log('Transcription result:', transcribedText);
+        case "update":
+            // Handle interim results but don't add to chat yet
+            if (message.data && message.data[0]) {
+                const interimText = message.data[0].trim();
+                console.log('Interim transcription:', interimText);
                 
-                if (transcribedText.length > 3 && !isNoise(transcribedText)) {
+                // Only show meaningful interim results
+                if (interimText.length > 3 && !isNoise(interimText)) {
+                    // You could display this as interim feedback
+                    // showFeedback(`Hearing: "${interimText}"`, 'info');
+                }
+            }
+            break;
+            
+        case "complete":
+            if (message.data && message.data[0]) {
+                const transcribedText = message.data[0].trim();
+                console.log('Final transcription result:', transcribedText);
+                
+                // More strict filtering for final results
+                if (transcribedText.length > 3 && !isNoise(transcribedText) && !isRepeatedPattern(transcribedText)) {
                     addChatMessage('voice', transcribedText);
+                    showFeedback('Voice captured', 'success');
+                } else {
+                    console.log('Filtered out noise/invalid transcription:', transcribedText);
                 }
             }
             break;
@@ -153,18 +188,11 @@ function handleWorkerMessage(event) {
             showFeedback('Speech recognition error', 'error');
             isModelLoading = false;
             break;
-            
-        case "done":
-            if (message.file && message.file.includes('tokenizer')) {
-                isWorkerReady = true;
-                isModelLoading = false;
-                showFeedback('Speech recognition ready', 'success');
-            }
-            break;
     }
     
     updateUI();
 }
+
 
 // Setup audio recording
 // Alternative microphone access approach
@@ -313,70 +341,121 @@ function stopAutoRecording() {
 
 // Start chunked recording
 function startChunkedRecording() {
-    const chunkDuration = 3000; // 3 seconds
+    const chunkDuration = 3000; // 3 seconds for better audio quality
+    const silenceTimeout = 100;  // Minimal gap between chunks
     
     function recordChunk() {
         if (!isRecording) return;
         
         recordingChunks = [];
         
-        mediaRecorder = new MediaRecorder(audioStream, {
-            mimeType: 'audio/webm;codecs=opus'
-        });
-        
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                recordingChunks.push(event.data);
-            }
-        };
-        
-        mediaRecorder.onstop = async () => {
-            if (recordingChunks.length > 0 && isRecording) {
-                await processAudioChunk();
+        try {
+            // Better MediaRecorder configuration
+            const options = {
+                mimeType: 'audio/webm;codecs=opus',
+                bitsPerSecond: 32000 // Higher bitrate for better quality
+            };
+            
+            // Fallback for different browsers
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options.mimeType = 'audio/webm';
             }
             
+            mediaRecorder = new MediaRecorder(audioStream, options);
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 500) { // Only process substantial chunks
+                    recordingChunks.push(event.data);
+                    console.log('Audio chunk received, size:', event.data.size);
+                }
+            };
+            
+            mediaRecorder.onstop = async () => {
+                console.log('MediaRecorder stopped, chunks:', recordingChunks.length);
+                
+                if (recordingChunks.length > 0 && isRecording) {
+                    await processAudioChunk();
+                }
+                
+                if (isRecording) {
+                    setTimeout(recordChunk, silenceTimeout);
+                }
+            };
+            
+            mediaRecorder.onerror = (event) => {
+                console.error('MediaRecorder error:', event.error);
+                if (isRecording) {
+                    setTimeout(recordChunk, 1000); // Retry after error
+                }
+            };
+            
+            mediaRecorder.start();
+            console.log('MediaRecorder started');
+            
+            setTimeout(() => {
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    console.log('Stopping MediaRecorder after', chunkDuration, 'ms');
+                    mediaRecorder.stop();
+                }
+            }, chunkDuration);
+            
+        } catch (error) {
+            console.error('Error in recordChunk:', error);
             if (isRecording) {
-                setTimeout(recordChunk, 100);
+                setTimeout(recordChunk, 1000); // Retry after 1 second
             }
-        };
-        
-        mediaRecorder.start();
-        
-        setTimeout(() => {
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-        }, chunkDuration);
+        }
     }
     
     recordChunk();
 }
 
+
 // Process audio chunk
 async function processAudioChunk() {
     if (!worker || !isWorkerReady || recordingChunks.length === 0) return;
-    
     try {
         console.log('Processing audio chunk...');
-        
-        const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
-        const audioBuffer = await convertBlobToAudioBuffer(audioBlob);
-        
-        if (!audioBuffer || audioBuffer.length === 0) {
-            console.warn('No audio data to process');
+        const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' }); // Or 'audio/webm;codecs=opus'
+        // Check if audio is substantial enough to process
+        if (audioBlob.size < 2000) { // Less than 2KB, likely silence
+            console.log('Audio chunk too small, skipping. Size:', audioBlob.size);
             return;
         }
-        
-        // Send to worker
+        // Call the NEW convertBlobToAudioBuffer function (renderer-based)
+        const audioBuffer = await convertBlobToAudioBuffer(audioBlob);
+        if (!audioBuffer || audioBuffer.length === 0) {
+            console.warn('No audio data to process after conversion');
+            return;
+        }
+        // Enhanced audio quality checks (using the Float32Array from renderer)
+        const maxAmplitude = Math.max(...audioBuffer.map(Math.abs));
+        const rms = Math.sqrt(audioBuffer.reduce((sum, val) => sum + val * val, 0) / audioBuffer.length);
+        console.log(`Audio quality - Length: ${audioBuffer.length}, Max: ${maxAmplitude.toFixed(4)}, RMS: ${rms.toFixed(4)}`);
+
+        // More strict thresholds
+        const minAmplitude = 0.005; // Minimum peak amplitude
+        const minRMS = 0.001;       // Minimum RMS energy
+        if (maxAmplitude < minAmplitude || rms < minRMS) {
+            console.log(`Audio too quiet - Max: ${maxAmplitude.toFixed(4)} < ${minAmplitude}, RMS: ${rms.toFixed(4)} < ${minRMS}`);
+            return;
+        }
+        // Check for minimum duration (at least 0.5 seconds at 16kHz)
+        const minSamples = 8000; // 0.5 seconds at 16kHz
+        if (audioBuffer.length < minSamples) {
+            console.log(`Audio too short: ${audioBuffer.length} samples < ${minSamples} required`);
+            return;
+        }
+        console.log('Sending quality audio to Whisper worker');
+        // Send the 16kHz Float32Array directly to the worker
         worker.postMessage({
-            audio: audioBuffer,
+            audio: audioBuffer, // This is now the Float32Array from renderer
             model: WHISPER_CONFIG.model,
             multilingual: WHISPER_CONFIG.multilingual,
             quantized: WHISPER_CONFIG.quantized,
             subtask: WHISPER_CONFIG.subtask,
             language: WHISPER_CONFIG.language
         });
-        
     } catch (error) {
         console.error('Error processing audio:', error);
     }
@@ -384,24 +463,124 @@ async function processAudioChunk() {
 
 // Convert audio blob to format for Whisper
 async function convertBlobToAudioBuffer(blob) {
-    const arrayBuffer = await blob.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    console.log('Sending uint8Array to main process. Type:', typeof uint8Array, 'Length:', uint8Array.length);
-    const audioData = await window.electronAPI.convertAudio(uint8Array);
-    return new Float32Array(audioData.buffer, audioData.byteOffset, audioData.byteLength / Float32Array.BYTES_PER_ELEMENT);
+    try {
+        console.log('Converting blob to audio buffer. Size:', blob.size);
+        if (blob.size === 0) {
+            console.warn('Empty audio blob');
+            return null;
+        }
+
+        // Decode the audio blob using the AudioContext created in init()
+        const arrayBuffer = await blob.arrayBuffer();
+        // Ensure audioContext is available and resume if suspended
+        if (!audioContext) {
+            console.error('AudioContext is not available');
+            return null;
+        }
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
+
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        // Get the first channel (mono)
+        const rawData = audioBuffer.getChannelData(0);
+        const sampleRate = audioBuffer.sampleRate;
+
+        console.log(`Decoded audio: ${rawData.length} samples, ${sampleRate} Hz`);
+
+        // Whisper expects 16kHz. Resample if necessary using a simple averaging method.
+        const targetSampleRate = 16000;
+        if (sampleRate !== targetSampleRate) {
+            console.log(`Resampling from ${sampleRate} Hz to ${targetSampleRate} Hz`);
+            const resampledData = resampleAudio(rawData, sampleRate, targetSampleRate);
+            console.log(`Resampled data length: ${resampledData.length}`);
+            return resampledData; // Return the Float32Array at 16kHz
+        }
+
+        // If already 16kHz, return the raw data directly
+        console.log(`Audio already at target sample rate ${targetSampleRate} Hz`);
+        return rawData; // rawData is already a Float32Array
+
+    } catch (error) {
+        console.error('Error decoding audio blob:', error);
+        return null;
+    }
+}
+
+function resampleAudio(buffer, fromRate, toRate) {
+    if (fromRate === toRate) {
+        return buffer;
+    }
+    const sampleRateRatio = fromRate / toRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+
+    while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+        let accum = 0;
+        let count = 0;
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+            accum += buffer[i];
+            count++;
+        }
+        result[offsetResult] = accum / count;
+        offsetResult++;
+        offsetBuffer = nextOffsetBuffer;
+    }
+    return result;
 }
 
 // Filter noise
 function isNoise(text) {
+    const cleanText = text.trim().toLowerCase();
+    
+    // Filter out noise patterns
     const noisePatterns = [
-        /^[^\w]*$/,
-        /^(uh|um|er|ah)+$/i,
-        /^[.!?]+$/,
-        /^silence$/i,
-        /^background/i,
+        /^[^\w\s]*$/,                    // Only punctuation
+        /^[!@#$%^&*()_+\-=\[\]{}|;':".,<>?\/`~]*$/, // Only symbols
+        /^(uh|um|er|ah|oh|hmm)+$/i,      // Filler words
+        /^[.!?]+$/,                      // Only punctuation
+        /^silence$/i,                    // Literal "silence"
+        /^background/i,                  // Background noise
+        /^[!]{2,}$/,                     // Multiple exclamation marks (your issue!)
+        /^[\s]*$/,                       // Only whitespace
+        /^[a-z]$/i,                      // Single characters
+        /^[0-9]+$/,                      // Only numbers
+        /^[.,;:!?]+$/,                   // Only punctuation
+        /^music$/i,                      // Music detection
+        /^noise$/i,                      // Noise detection
     ];
     
-    return noisePatterns.some(pattern => pattern.test(text.trim()));
+    // Check length - very short transcriptions are usually noise
+    if (cleanText.length < 3) {
+        return true;
+    }
+    
+    // Check against patterns
+    return noisePatterns.some(pattern => pattern.test(cleanText));
+}
+
+function isRepeatedPattern(text) {
+    // Check for repeated single characters
+    if (/^(.)\1{3,}$/.test(text)) {
+        return true;
+    }
+    
+    // Check for repeated short patterns
+    if (text.length > 6) {
+        for (let len = 1; len <= 3; len++) {
+            const pattern = text.substring(0, len);
+            const repeated = pattern.repeat(Math.floor(text.length / len));
+            if (text.startsWith(repeated) && repeated.length >= text.length * 0.8) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
 }
 
 // Toggle voice recognition

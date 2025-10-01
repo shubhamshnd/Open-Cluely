@@ -8,10 +8,10 @@ const screenshot = require('screenshot-desktop');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
-const { path: ffmpegPath } = await import('@ffmpeg-installer/ffmpeg');
-const ffmpeg = (await import('fluent-ffmpeg')).default;
-ffmpeg.setFfmpegPath(ffmpegPath);
-
+// REMOVED: FFmpeg imports - not needed for Whisper Web approach!
+// const { path: ffmpegPath } = await import('@ffmpeg-installer/ffmpeg');
+// const ffmpeg = (await import('fluent-ffmpeg')).default;
+// ffmpeg.setFfmpegPath(ffmpegPath);
 
 let mainWindow;
 let screenshots = [];
@@ -551,37 +551,9 @@ ipcMain.handle('stop-voice-recognition', () => {
   return { success: true };
 });
 
-ipcMain.handle('convert-audio', async (event, audioData) => {
-  try {
-    const inputFile = path.join(os.tmpdir(), `input-${Date.now()}.webm`);
-    console.log('inputFile:', inputFile);
-    const outputFile = path.join(os.tmpdir(), `output-${Date.now()}.wav`);
-    console.log('outputFile:', outputFile);
-
-    console.log('Received audioData type:', typeof audioData);
-    console.log('Received audioData length:', audioData ? audioData.length : 'N/A');
-    fs.writeFileSync(inputFile, Buffer.from(audioData));
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputFile)
-        .toFormat('wav')
-        .audioFrequency(16000)
-        .audioChannels(1)
-        .on('error', (err) => {
-          console.error('FFmpeg error:', err);
-          reject(err);
-        })
-        .on('end', () => {
-          const audioBuffer = fs.readFileSync(outputFile);
-          resolve(audioBuffer);
-        })
-        .save(outputFile);
-    });
-  } catch (error) {
-    console.error('Error converting audio:', error);
-    return null;
-  }
-});
+// REMOVED: convert-audio handler - not needed with direct AudioContext approach!
+// The renderer will handle audio conversion directly using AudioContext.decodeAudioData()
+// This is much more reliable and simpler than FFmpeg
 
 // App event handlers
 app.whenReady().then(() => {
