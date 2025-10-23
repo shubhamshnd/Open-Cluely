@@ -85,6 +85,81 @@ try {
         return null;
       });
     },
+
+    // New Cluely-style features
+
+    // Transcribe audio using Gemini
+    transcribeAudio: (base64Audio, mimeType) => {
+      console.log('PreloadAPI: transcribeAudio called');
+      return ipcRenderer.invoke('transcribe-audio', base64Audio, mimeType).catch(err => {
+        console.error('PreloadAPI: transcribeAudio error:', err);
+        return { success: false, error: err.message };
+      });
+    },
+
+    addVoiceTranscript: (transcript) => {
+      console.log('PreloadAPI: addVoiceTranscript called');
+      return ipcRenderer.invoke('add-voice-transcript', transcript).catch(err => {
+        console.error('PreloadAPI: addVoiceTranscript error:', err);
+        return { error: err.message };
+      });
+    },
+
+    suggestResponse: (context) => {
+      console.log('PreloadAPI: suggestResponse called');
+      return ipcRenderer.invoke('suggest-response', context).catch(err => {
+        console.error('PreloadAPI: suggestResponse error:', err);
+        return { error: err.message };
+      });
+    },
+
+    generateMeetingNotes: () => {
+      console.log('PreloadAPI: generateMeetingNotes called');
+      return ipcRenderer.invoke('generate-meeting-notes').catch(err => {
+        console.error('PreloadAPI: generateMeetingNotes error:', err);
+        return { error: err.message };
+      });
+    },
+
+    generateFollowUpEmail: () => {
+      console.log('PreloadAPI: generateFollowUpEmail called');
+      return ipcRenderer.invoke('generate-follow-up-email').catch(err => {
+        console.error('PreloadAPI: generateFollowUpEmail error:', err);
+        return { error: err.message };
+      });
+    },
+
+    answerQuestion: (question) => {
+      console.log('PreloadAPI: answerQuestion called');
+      return ipcRenderer.invoke('answer-question', question).catch(err => {
+        console.error('PreloadAPI: answerQuestion error:', err);
+        return { error: err.message };
+      });
+    },
+
+    getConversationInsights: () => {
+      console.log('PreloadAPI: getConversationInsights called');
+      return ipcRenderer.invoke('get-conversation-insights').catch(err => {
+        console.error('PreloadAPI: getConversationInsights error:', err);
+        return { error: err.message };
+      });
+    },
+
+    clearConversationHistory: () => {
+      console.log('PreloadAPI: clearConversationHistory called');
+      return ipcRenderer.invoke('clear-conversation-history').catch(err => {
+        console.error('PreloadAPI: clearConversationHistory error:', err);
+        return { error: err.message };
+      });
+    },
+
+    getConversationHistory: () => {
+      console.log('PreloadAPI: getConversationHistory called');
+      return ipcRenderer.invoke('get-conversation-history').catch(err => {
+        console.error('PreloadAPI: getConversationHistory error:', err);
+        return { error: err.message };
+      });
+    },
     
     // Event listeners with cleanup functions and error handling
     onScreenshotTakenStealth: (callback) => {
@@ -199,7 +274,7 @@ try {
         ipcRenderer.removeListener('voice-transcript', handler);
       };
     },
-    
+
     onVoiceError: (callback) => {
       const handler = (event, error) => {
         console.log('PreloadAPI: onVoiceError event received, error:', error);
@@ -213,6 +288,87 @@ try {
       return () => {
         console.log('PreloadAPI: removing onVoiceError listener');
         ipcRenderer.removeListener('voice-error', handler);
+      };
+    },
+
+    // Vosk live transcription events
+    onVoskStatus: (callback) => {
+      const handler = (event, data) => {
+        console.log('PreloadAPI: onVoskStatus event received, status:', data.status);
+        try {
+          callback(data);
+        } catch (err) {
+          console.error('PreloadAPI: onVoskStatus callback error:', err);
+        }
+      };
+      ipcRenderer.on('vosk-status', handler);
+      return () => {
+        console.log('PreloadAPI: removing onVoskStatus listener');
+        ipcRenderer.removeListener('vosk-status', handler);
+      };
+    },
+
+    onVoskPartial: (callback) => {
+      const handler = (event, data) => {
+        console.log('PreloadAPI: onVoskPartial event received');
+        try {
+          callback(data);
+        } catch (err) {
+          console.error('PreloadAPI: onVoskPartial callback error:', err);
+        }
+      };
+      ipcRenderer.on('vosk-partial', handler);
+      return () => {
+        console.log('PreloadAPI: removing onVoskPartial listener');
+        ipcRenderer.removeListener('vosk-partial', handler);
+      };
+    },
+
+    onVoskFinal: (callback) => {
+      const handler = (event, data) => {
+        console.log('PreloadAPI: onVoskFinal event received');
+        try {
+          callback(data);
+        } catch (err) {
+          console.error('PreloadAPI: onVoskFinal callback error:', err);
+        }
+      };
+      ipcRenderer.on('vosk-final', handler);
+      return () => {
+        console.log('PreloadAPI: removing onVoskFinal listener');
+        ipcRenderer.removeListener('vosk-final', handler);
+      };
+    },
+
+    onVoskError: (callback) => {
+      const handler = (event, data) => {
+        console.log('PreloadAPI: onVoskError event received, error:', data.error);
+        try {
+          callback(data);
+        } catch (err) {
+          console.error('PreloadAPI: onVoskError callback error:', err);
+        }
+      };
+      ipcRenderer.on('vosk-error', handler);
+      return () => {
+        console.log('PreloadAPI: removing onVoskError listener');
+        ipcRenderer.removeListener('vosk-error', handler);
+      };
+    },
+
+    onVoskStopped: (callback) => {
+      const handler = () => {
+        console.log('PreloadAPI: onVoskStopped event received');
+        try {
+          callback();
+        } catch (err) {
+          console.error('PreloadAPI: onVoskStopped callback error:', err);
+        }
+      };
+      ipcRenderer.on('vosk-stopped', handler);
+      return () => {
+        console.log('PreloadAPI: removing onVoskStopped listener');
+        ipcRenderer.removeListener('vosk-stopped', handler);
       };
     },
     

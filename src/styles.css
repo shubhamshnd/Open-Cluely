@@ -207,6 +207,40 @@ body {
   transform: none;
 }
 
+/* New Cluely-style feature buttons */
+.action-btn.suggest-btn {
+  background: rgba(251, 191, 36, 0.3);
+  border-color: rgba(251, 191, 36, 0.5);
+  font-size: 14px;
+}
+
+.action-btn.suggest-btn:hover {
+  background: rgba(251, 191, 36, 0.5);
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.3);
+}
+
+.action-btn.notes-btn {
+  background: rgba(139, 92, 246, 0.3);
+  border-color: rgba(139, 92, 246, 0.5);
+  font-size: 14px;
+}
+
+.action-btn.notes-btn:hover {
+  background: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+}
+
+.action-btn.insights-btn {
+  background: rgba(236, 72, 153, 0.3);
+  border-color: rgba(236, 72, 153, 0.5);
+  font-size: 14px;
+}
+
+.action-btn.insights-btn:hover {
+  background: rgba(236, 72, 153, 0.5);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.3);
+}
+
 @keyframes voicePulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }
@@ -319,6 +353,39 @@ body {
   background: rgba(255, 193, 7, 0.1);
   border-left: 3px solid rgba(255, 193, 7, 0.6);
   opacity: 0.8;
+}
+
+.chat-message.partial {
+  background: rgba(34, 197, 94, 0.15);
+  border-left: 3px solid rgba(34, 197, 94, 0.8);
+  opacity: 0.9;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.partial-indicator {
+  font-size: 9px;
+  color: rgba(34, 197, 94, 0.9);
+  font-weight: 600;
+  padding: 2px 6px;
+  background: rgba(34, 197, 94, 0.2);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.partial-text {
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.85);
 }
 
 .message-header {

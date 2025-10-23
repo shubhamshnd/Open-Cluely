@@ -4,7 +4,6 @@
   "description": "Invisible AI assistant for meetings - undetectable during screen share",
   "main": "src/main.js",
   "scripts": {
-    "build-worker": "esbuild src/whisper-worker.js --bundle --platform=browser --format=esm --outfile=src/dist/whisper-worker.bundle.js --external:@xenova/transformers",
     "start": "electron .",
     "build": "electron-builder",
     "dev": "electron . --enable-logging",
@@ -12,7 +11,6 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.2.1",
-    "@xenova/transformers": "^2.17.2",
     "dotenv": "^16.3.1",
     "electron": "^28.0.0",
     "node-window-manager": "^2.2.4",
@@ -31,11 +29,7 @@
     "files": [
       "src/**/*",
       "package.json",
-      ".env",
-      "node_modules/@xenova/**/*"
-    ],
-    "asarUnpack": [
-      "node_modules/@xenova/**/*"
+      ".env"
     ],
     "mac": {
       "category": "public.app-category.productivity"

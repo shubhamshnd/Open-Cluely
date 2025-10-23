@@ -1,5 +1,4 @@
-// Renderer with Vosk Live Transcription - Real-time & Accurate!
-// Uses Vosk model vosk-model-en-us-0.22 for offline, accurate transcription
+// Renderer with Web Speech API (Instant - No Model Loading!)
 
 let screenshotsCount = 0;
 let isAnalyzing = false;
@@ -7,8 +6,10 @@ let stealthModeActive = false;
 let stealthHideTimeout = null;
 let isRecording = false;
 let chatMessagesArray = [];
-let currentPartialText = '';
-let lastPartialMessageDiv = null;
+
+// Web Speech API - Instant recognition!
+let recognition = null;
+let isRecognitionReady = false;
 
 // DOM elements
 const statusText = document.getElementById('status-text');
@@ -39,8 +40,9 @@ let timerInterval;
 
 // Initialize
 async function init() {
-    console.log('Initializing renderer with Vosk Live Transcription...');
+    console.log('Initializing renderer with Web Speech API...');
 
+    // Check if electronAPI is available
     if (typeof window.electronAPI !== 'undefined') {
         console.log('electronAPI is available');
     } else {
@@ -48,6 +50,7 @@ async function init() {
         showFeedback('electronAPI not available', 'error');
     }
 
+    initializeWebSpeech();
     setupEventListeners();
     setupIpcListeners();
     updateUI();
@@ -62,76 +65,191 @@ async function init() {
         app.style.display = 'block';
     }
 
-    console.log('Renderer initialized - Ready for live transcription!');
-    showFeedback('Vosk ready - click microphone to start real-time transcription', 'success');
+    console.log('Renderer initialized successfully with Web Speech API');
 }
 
-// Start Vosk voice recognition
-async function startVoiceRecording() {
+// Initialize Web Speech API (instant!)
+function initializeWebSpeech() {
+    try {
+        // Check for browser support
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            console.error('Web Speech API not supported in this browser');
+            showFeedback('Speech recognition not supported', 'error');
+            return;
+        }
+
+        console.log('Initializing Web Speech API...');
+        recognition = new SpeechRecognition();
+
+        // Configuration
+        recognition.continuous = true;           // Keep listening
+        recognition.interimResults = true;       // Get partial results
+        recognition.lang = 'en-US';             // Language
+        recognition.maxAlternatives = 1;         // Only get best result
+
+        // Event handlers
+        recognition.onstart = () => {
+            console.log('Speech recognition started');
+            isRecognitionReady = true;
+            isRecording = true;
+            updateVoiceUI();
+            showFeedback('Listening...', 'success');
+        };
+
+        recognition.onresult = (event) => {
+            console.log('Speech recognition result');
+
+            // Get the latest result
+            const lastResultIndex = event.results.length - 1;
+            const result = event.results[lastResultIndex];
+            const transcript = result[0].transcript.trim();
+
+            console.log('Transcript:', transcript, 'Final:', result.isFinal);
+
+            // Only add final results to chat
+            if (result.isFinal && transcript.length > 0) {
+                // Filter out noise
+                if (!isNoise(transcript)) {
+                    addChatMessage('voice', transcript);
+                    showFeedback('Voice captured', 'success');
+
+                    // Add to Gemini conversation history
+                    if (window.electronAPI && window.electronAPI.addVoiceTranscript) {
+                        window.electronAPI.addVoiceTranscript(transcript).catch(err => {
+                            console.error('Failed to add transcript to history:', err);
+                        });
+                    }
+                } else {
+                    console.log('Filtered out noise:', transcript);
+                }
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+
+            // Handle different error types
+            let errorMessage = 'Speech recognition error';
+            switch (event.error) {
+                case 'no-speech':
+                    errorMessage = 'No speech detected';
+                    break;
+                case 'audio-capture':
+                    errorMessage = 'No microphone found';
+                    break;
+                case 'not-allowed':
+                    errorMessage = 'Microphone permission denied';
+                    break;
+                case 'network':
+                    errorMessage = 'Network error';
+                    break;
+                case 'aborted':
+                    // Don't show error for intentional stops
+                    return;
+                default:
+                    errorMessage = `Error: ${event.error}`;
+            }
+
+            showFeedback(errorMessage, 'error');
+
+            // Auto-restart on some errors
+            if (isRecording && (event.error === 'no-speech' || event.error === 'network')) {
+                console.log('Auto-restarting recognition...');
+                setTimeout(() => {
+                    if (isRecording) {
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.error('Failed to restart:', e);
+                        }
+                    }
+                }, 1000);
+            }
+        };
+
+        recognition.onend = () => {
+            console.log('Speech recognition ended');
+
+            // Auto-restart if we're still supposed to be recording
+            if (isRecording) {
+                console.log('Auto-restarting recognition...');
+                try {
+                    recognition.start();
+                } catch (error) {
+                    console.error('Failed to restart recognition:', error);
+                    isRecording = false;
+                    updateVoiceUI();
+                }
+            } else {
+                updateVoiceUI();
+            }
+        };
+
+        isRecognitionReady = true;
+        console.log('Web Speech API initialized successfully - INSTANT!');
+        showFeedback('Speech recognition ready - No loading needed!', 'success');
+
+    } catch (error) {
+        console.error('Failed to initialize Web Speech API:', error);
+        showFeedback('Failed to initialize speech recognition', 'error');
+    }
+}
+
+// Start voice recognition
+async function startVoiceRecognition() {
+    if (!recognition || !isRecognitionReady) {
+        showFeedback('Speech recognition not available', 'error');
+        return;
+    }
+
     if (isRecording) {
         console.log('Already recording');
         return;
     }
 
     try {
-        console.log('Starting Vosk live transcription...');
-
-        // Call main process to start Vosk Python process
-        const result = await window.electronAPI.startVoiceRecognition();
-
-        if (result && result.error) {
-            throw new Error(result.error);
-        }
-
+        console.log('Starting voice recognition...');
         isRecording = true;
+        recognition.start();
         updateVoiceUI();
-
-        addChatMessage('system', 'Live transcription started - speak now!');
-        showFeedback('Listening with Vosk...', 'success');
-
+        addChatMessage('system', 'Voice recording started...');
     } catch (error) {
-        console.error('Failed to start Vosk:', error);
-        showFeedback(`Failed to start: ${error.message}`, 'error');
+        console.error('Failed to start recognition:', error);
+        showFeedback('Failed to start recording', 'error');
         isRecording = false;
         updateVoiceUI();
     }
 }
 
-// Stop Vosk voice recognition
-async function stopVoiceRecording() {
-    if (!isRecording) return;
+// Stop voice recognition
+function stopVoiceRecognition() {
+    if (!recognition || !isRecording) {
+        return;
+    }
+
+    console.log('Stopping voice recognition...');
+    isRecording = false;
 
     try {
-        console.log('Stopping Vosk transcription...');
-
-        await window.electronAPI.stopVoiceRecognition();
-
-        isRecording = false;
-        updateVoiceUI();
-
-        // Clear any partial text display
-        if (lastPartialMessageDiv) {
-            lastPartialMessageDiv.remove();
-            lastPartialMessageDiv = null;
-        }
-        currentPartialText = '';
-
-        addChatMessage('system', 'Live transcription stopped');
-        showFeedback('Stopped listening', 'info');
-
+        recognition.stop();
     } catch (error) {
-        console.error('Failed to stop Vosk:', error);
-        showFeedback('Stop failed', 'error');
+        console.error('Error stopping recognition:', error);
     }
+
+    updateVoiceUI();
+    addChatMessage('system', 'Voice recording stopped');
+    showFeedback('Recording stopped', 'info');
 }
 
 // Toggle voice recognition
 async function toggleVoiceRecognition() {
     if (isRecording) {
-        await stopVoiceRecording();
+        stopVoiceRecognition();
         voiceToggle.classList.remove('active');
     } else {
-        await startVoiceRecording();
+        await startVoiceRecognition();
         if (isRecording) {
             voiceToggle.classList.add('active');
         }
@@ -149,62 +267,21 @@ function updateVoiceUI() {
     }
 }
 
-// Handle Vosk partial results (real-time display)
-function handleVoskPartial(data) {
-    if (!data.text || data.text.trim().length === 0) return;
+// Filter noise (simple version)
+function isNoise(text) {
+    const cleanText = text.trim().toLowerCase();
 
-    currentPartialText = data.text.trim();
-    console.log('Partial:', currentPartialText);
+    // Very short or empty
+    if (cleanText.length < 2) return true;
 
-    // Update or create partial message div
-    if (!lastPartialMessageDiv) {
-        lastPartialMessageDiv = document.createElement('div');
-        lastPartialMessageDiv.className = 'chat-message voice-message partial';
+    // Only punctuation or symbols
+    if (/^[^\w\s]*$/.test(cleanText)) return true;
 
-        const timestamp = new Date().toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+    // Common filler words alone
+    const fillerWords = ['uh', 'um', 'er', 'ah', 'oh', 'hmm'];
+    if (fillerWords.includes(cleanText)) return true;
 
-        lastPartialMessageDiv.innerHTML = `
-            <div class="message-header">
-                <span class="message-icon">🎤</span>
-                <span class="message-time">${timestamp}</span>
-                <span class="partial-indicator">⏱️ Live</span>
-            </div>
-            <div class="message-content partial-text">${currentPartialText}</div>
-        `;
-
-        chatMessagesElement.appendChild(lastPartialMessageDiv);
-    } else {
-        // Update existing partial message
-        const contentDiv = lastPartialMessageDiv.querySelector('.message-content');
-        if (contentDiv) {
-            contentDiv.textContent = currentPartialText;
-        }
-    }
-
-    // Auto-scroll to bottom
-    chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
-}
-
-// Handle Vosk final results
-function handleVoskFinal(data) {
-    if (!data.text || data.text.trim().length === 0) return;
-
-    const finalText = data.text.trim();
-    console.log('Final:', finalText);
-
-    // Remove partial message if exists
-    if (lastPartialMessageDiv) {
-        lastPartialMessageDiv.remove();
-        lastPartialMessageDiv = null;
-    }
-    currentPartialText = '';
-
-    // Add as final message
-    addChatMessage('voice', finalText);
-    showFeedback('Voice captured', 'success');
+    return false;
 }
 
 // Screenshot functions
@@ -228,6 +305,7 @@ async function analyzeScreenshots() {
         setAnalyzing(true);
         showLoadingOverlay();
 
+        // Get conversation context
         const context = chatMessagesArray
             .map(msg => `${msg.type}: ${msg.content}`)
             .join('\n\n');
@@ -365,9 +443,7 @@ function updateUI() {
     }
 
     if (analyzeBtn) {
-        // Enable Ask AI button if we have screenshots OR conversation history
-        const hasContent = screenshotsCount > 0 || chatMessagesArray.length > 0;
-        analyzeBtn.disabled = isAnalyzing || !hasContent;
+        analyzeBtn.disabled = isAnalyzing || screenshotsCount === 0;
     }
 }
 
@@ -437,6 +513,7 @@ async function copyToClipboard() {
 
 // Chat message management
 function formatResponse(text) {
+    // Basic markdown formatting
     let formatted = text
         .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -487,9 +564,6 @@ function addChatMessage(type, content) {
         content,
         timestamp: new Date()
     });
-
-    // Update UI to enable/disable buttons based on content
-    updateUI();
 }
 
 // Timer
@@ -597,66 +671,6 @@ function setupIpcListeners() {
 
     window.electronAPI.onError((message) => {
         showFeedback(message, 'error');
-    });
-
-    // Vosk live transcription event listeners
-    window.electronAPI.onVoskStatus((data) => {
-        console.log('Vosk status:', data.status, '-', data.message);
-
-        switch (data.status) {
-            case 'downloading':
-                showFeedback(`Downloading model... ${data.message}`, 'info');
-                break;
-            case 'extracting':
-                showFeedback('Extracting model...', 'info');
-                break;
-            case 'loading':
-                showFeedback('Loading Vosk model...', 'info');
-                break;
-            case 'ready':
-                showFeedback('Vosk ready!', 'success');
-                break;
-            case 'listening':
-                showFeedback('Listening...', 'success');
-                break;
-            case 'stopped':
-                showFeedback('Stopped listening', 'info');
-                break;
-        }
-    });
-
-    window.electronAPI.onVoskPartial((data) => {
-        handleVoskPartial(data);
-    });
-
-    window.electronAPI.onVoskFinal((data) => {
-        handleVoskFinal(data);
-    });
-
-    window.electronAPI.onVoskError((data) => {
-        console.error('Vosk error:', data.error);
-        showFeedback(`Vosk error: ${data.error}`, 'error');
-        addChatMessage('system', `Vosk error: ${data.error}`);
-
-        // Stop recording on error
-        if (isRecording) {
-            isRecording = false;
-            updateVoiceUI();
-            if (voiceToggle) {
-                voiceToggle.classList.remove('active');
-            }
-        }
-    });
-
-    window.electronAPI.onVoskStopped(() => {
-        console.log('Vosk stopped');
-        if (isRecording) {
-            isRecording = false;
-            updateVoiceUI();
-            if (voiceToggle) {
-                voiceToggle.classList.remove('active');
-            }
-        }
     });
 }
 

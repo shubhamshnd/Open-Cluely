@@ -1,38 +1,36 @@
 (async () => {
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
+const { spawn } = require('child_process');
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const GeminiService = require('./gemini-service');
 require('dotenv').config();
-
-// REMOVED: FFmpeg imports - not needed for Whisper Web approach!
-// const { path: ffmpegPath } = await import('@ffmpeg-installer/ffmpeg');
-// const ffmpeg = (await import('fluent-ffmpeg')).default;
-// ffmpeg.setFfmpegPath(ffmpegPath);
 
 let mainWindow;
 let screenshots = [];
 let chatContext = [];
 const MAX_SCREENSHOTS = 3;
 
-// Initialize Gemini AI with better error handling
-let genAI = null;
-let model = null;
+// Vosk live transcription process
+let voskProcess = null;
+let isVoskRunning = false;
+
+// Initialize Gemini Service with rate limiting
+let geminiService = null;
 
 try {
   if (!process.env.GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY not found in environment variables');
   } else {
-    console.log('Initializing Gemini AI...');
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    console.log('Gemini AI initialized successfully');
+    console.log('Initializing Gemini AI Service with rate limiting...');
+    geminiService = new GeminiService(process.env.GEMINI_API_KEY);
+    console.log('Gemini AI Service initialized successfully');
   }
 } catch (error) {
-  console.error('Failed to initialize Gemini AI:', error);
+  console.error('Failed to initialize Gemini AI Service:', error);
 }
 
 function createStealthWindow() {
@@ -447,12 +445,9 @@ Rules:
 
 Analyze the screenshots and conversation context:`;
 
-    console.log('Sending request to Gemini...');
-    const result = await model.generateContent([prompt, ...imageParts]);
+    console.log('Sending request to Gemini with rate limiting...');
+    const text = await geminiService.generateMultimodal([prompt, ...imageParts]);
     console.log('Received response from Gemini');
-    
-    const response = await result.response;
-    const text = response.text();
     
     console.log('Generated text length:', text.length);
     console.log('Generated text preview:', text.substring(0, 200) + '...');
@@ -541,19 +536,323 @@ ipcMain.handle('clear-stealth', () => {
   return { success: true };
 });
 
+// Start Vosk live transcription
 ipcMain.handle('start-voice-recognition', () => {
   console.log('IPC: start-voice-recognition called');
-  return { success: true };
+
+  if (isVoskRunning) {
+    console.log('Vosk already running');
+    return { success: true, message: 'Already running' };
+  }
+
+  try {
+    const pythonScript = path.join(__dirname, '..', 'vosk_live.py');
+    console.log('Starting Vosk live transcription:', pythonScript);
+
+    voskProcess = spawn('python', [pythonScript]);
+    isVoskRunning = true;
+
+    // Handle stdout (JSON transcription results)
+    voskProcess.stdout.on('data', (data) => {
+      const lines = data.toString().split('\n');
+
+      lines.forEach(line => {
+        if (!line.trim()) return;
+
+        try {
+          const result = JSON.parse(line);
+
+          switch (result.type) {
+            case 'status':
+              console.log(`Vosk status: ${result.status} - ${result.message}`);
+              mainWindow.webContents.send('vosk-status', result);
+              break;
+
+            case 'partial':
+              // Real-time partial result
+              mainWindow.webContents.send('vosk-partial', { text: result.text });
+              break;
+
+            case 'final':
+              // Final transcription result
+              console.log('Vosk transcription:', result.text);
+              mainWindow.webContents.send('vosk-final', { text: result.text });
+
+              // Add to Gemini history
+              if (geminiService && result.text) {
+                geminiService.addToHistory('user', result.text);
+              }
+              break;
+
+            case 'error':
+              console.error('Vosk error:', result.error);
+              mainWindow.webContents.send('vosk-error', { error: result.error });
+              break;
+          }
+        } catch (parseError) {
+          console.error('Failed to parse Vosk output:', line);
+        }
+      });
+    });
+
+    voskProcess.stderr.on('data', (data) => {
+      console.error('Vosk stderr:', data.toString());
+    });
+
+    voskProcess.on('close', (code) => {
+      console.log('Vosk process exited with code:', code);
+      isVoskRunning = false;
+      voskProcess = null;
+      mainWindow.webContents.send('vosk-stopped');
+    });
+
+    voskProcess.on('error', (error) => {
+      console.error('Failed to start Vosk:', error.message);
+      isVoskRunning = false;
+      voskProcess = null;
+      return { success: false, error: 'Python or Vosk not installed. See SETUP-VOSK.md' };
+    });
+
+    return { success: true };
+
+  } catch (error) {
+    console.error('Error starting Vosk:', error.message);
+    isVoskRunning = false;
+    return { success: false, error: error.message };
+  }
 });
 
+// Stop Vosk live transcription
 ipcMain.handle('stop-voice-recognition', () => {
   console.log('IPC: stop-voice-recognition called');
-  return { success: true };
+
+  if (!isVoskRunning || !voskProcess) {
+    return { success: true, message: 'Not running' };
+  }
+
+  try {
+    voskProcess.kill('SIGINT');  // Graceful shutdown
+    isVoskRunning = false;
+    voskProcess = null;
+    return { success: true };
+  } catch (error) {
+    console.error('Error stopping Vosk:', error.message);
+    return { success: false, error: error.message };
+  }
 });
 
 // REMOVED: convert-audio handler - not needed with direct AudioContext approach!
 // The renderer will handle audio conversion directly using AudioContext.decodeAudioData()
 // This is much more reliable and simpler than FFmpeg
+
+// New Cluely-style feature handlers
+
+// Transcribe audio using Python Whisper subprocess (FAST & OFFLINE!)
+ipcMain.handle('transcribe-audio', async (event, base64Audio, mimeType) => {
+  console.log('IPC: transcribe-audio called, size:', base64Audio.length);
+
+  const tmpDir = path.join(app.getPath('temp'), 'cluely-audio');
+
+  try {
+    // Create temp directory
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+
+    // Save base64 audio to temp file
+    const audioBuffer = Buffer.from(base64Audio, 'base64');
+    const tempAudioPath = path.join(tmpDir, `audio_${Date.now()}.webm`);
+    fs.writeFileSync(tempAudioPath, audioBuffer);
+
+    console.log('Saved temp audio:', tempAudioPath, audioBuffer.length, 'bytes');
+
+    // Spawn Python process
+    return new Promise((resolve, reject) => {
+      const pythonScript = path.join(__dirname, '..', 'transcribe.py');
+      console.log('Running Python script:', pythonScript);
+
+      const python = spawn('python', [pythonScript, tempAudioPath]);
+
+      let output = '';
+      let errorOutput = '';
+
+      python.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      python.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      python.on('close', (code) => {
+        // Clean up temp file
+        try {
+          fs.unlinkSync(tempAudioPath);
+        } catch (e) {
+          console.error('Failed to delete temp file:', e);
+        }
+
+        if (code !== 0) {
+          console.error('Python exited with code:', code);
+          console.error('Error:', errorOutput);
+          resolve({ success: false, error: `Python error: ${errorOutput || 'Unknown error'}` });
+          return;
+        }
+
+        try {
+          const result = JSON.parse(output.trim());
+          console.log('Transcription:', result.text || result.error);
+
+          // Add to Gemini history if successful
+          if (result.success && result.text && geminiService) {
+            geminiService.addToHistory('user', result.text.trim());
+          }
+
+          resolve({
+            success: result.success,
+            transcript: result.text || '',
+            error: result.error
+          });
+
+        } catch (parseError) {
+          console.error('Failed to parse output:', output);
+          resolve({ success: false, error: 'Failed to parse result' });
+        }
+      });
+
+      python.on('error', (error) => {
+        console.error('Failed to start Python:', error.message);
+
+        // Clean up
+        try {
+          fs.unlinkSync(tempAudioPath);
+        } catch (e) {}
+
+        resolve({
+          success: false,
+          error: 'Python not found. Install Python and run: pip install openai-whisper'
+        });
+      });
+    });
+
+  } catch (error) {
+    console.error('Error in transcribe-audio:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add voice transcript to history
+ipcMain.handle('add-voice-transcript', async (event, transcript) => {
+  console.log('IPC: add-voice-transcript called');
+  if (geminiService) {
+    geminiService.addToHistory('user', transcript);
+  }
+  return { success: true };
+});
+
+// "What should I say?" feature
+ipcMain.handle('suggest-response', async (event, context) => {
+  console.log('IPC: suggest-response called');
+  try {
+    if (!geminiService) {
+      throw new Error('Gemini service not initialized');
+    }
+    const suggestions = await geminiService.suggestResponse(context);
+    return { success: true, suggestions };
+  } catch (error) {
+    console.error('Error generating suggestions:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Generate meeting notes
+ipcMain.handle('generate-meeting-notes', async () => {
+  console.log('IPC: generate-meeting-notes called');
+  try {
+    if (!geminiService) {
+      throw new Error('Gemini service not initialized');
+    }
+    const notes = await geminiService.generateMeetingNotes();
+    return { success: true, notes };
+  } catch (error) {
+    console.error('Error generating meeting notes:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Generate follow-up email
+ipcMain.handle('generate-follow-up-email', async () => {
+  console.log('IPC: generate-follow-up-email called');
+  try {
+    if (!geminiService) {
+      throw new Error('Gemini service not initialized');
+    }
+    const email = await geminiService.generateFollowUpEmail();
+    return { success: true, email };
+  } catch (error) {
+    console.error('Error generating email:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Answer specific question
+ipcMain.handle('answer-question', async (event, question) => {
+  console.log('IPC: answer-question called');
+  try {
+    if (!geminiService) {
+      throw new Error('Gemini service not initialized');
+    }
+    const answer = await geminiService.answerQuestion(question);
+    return { success: true, answer };
+  } catch (error) {
+    console.error('Error answering question:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get conversation insights
+ipcMain.handle('get-conversation-insights', async () => {
+  console.log('IPC: get-conversation-insights called');
+  try {
+    if (!geminiService) {
+      throw new Error('Gemini service not initialized');
+    }
+    const insights = await geminiService.getConversationInsights();
+    return { success: true, insights };
+  } catch (error) {
+    console.error('Error getting insights:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Clear conversation history
+ipcMain.handle('clear-conversation-history', async () => {
+  console.log('IPC: clear-conversation-history called');
+  try {
+    if (geminiService) {
+      geminiService.clearHistory();
+    }
+    chatContext = [];
+    return { success: true };
+  } catch (error) {
+    console.error('Error clearing history:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get conversation history
+ipcMain.handle('get-conversation-history', async () => {
+  console.log('IPC: get-conversation-history called');
+  try {
+    if (!geminiService) {
+      return { success: true, history: [] };
+    }
+    return { success: true, history: geminiService.conversationHistory };
+  } catch (error) {
+    console.error('Error getting history:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 // App event handlers
 app.whenReady().then(() => {
