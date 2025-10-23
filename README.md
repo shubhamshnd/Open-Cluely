@@ -476,4 +476,4 @@ For issues, questions, or suggestions:
 
 **Made with ❤️ for productive meetings**
 
-*Disclaimer: Use responsibly and ethically. The developers are not responsible for misuse of this tool.*
+*Disclaimer: Use responsibly and ethically. The developer is not responsible for misuse of this tool.*
