@@ -453,10 +453,10 @@ For issues, questions, or suggestions:
 
 ---
 
-### Version 2.0.0 (Web Speech API)
+### Version 2.0.0 (Vosk Worker)
 
 **Changes:**
-- Replaced Whisper with Web Speech API
+- Replaced Whisper with Vosk
 - Instant startup
 
 **Issues:**
