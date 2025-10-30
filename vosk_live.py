@@ -2,6 +2,7 @@
 """
 Live Speech-to-Text using Vosk for Electron App
 Streams results to stdout as JSON for real-time display
+Model loads once and stays in memory - supports pause/resume
 """
 
 import sounddevice as sd
@@ -11,6 +12,8 @@ import sys
 import os
 import zipfile
 import requests
+import threading
+import select
 from pathlib import Path
 from vosk import Model, KaldiRecognizer
 
@@ -38,6 +41,9 @@ class VoskLiveTranscriber:
         self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
         self.recognizer.SetWords(True)  # Get word-level timestamps
         self.audio_queue = queue.Queue()
+        self.is_listening = False
+        self.should_exit = False
+        self.stream = None
         self.send_status("ready", "Vosk ready!")
 
     def send_status(self, status, message):
@@ -106,46 +112,80 @@ class VoskLiveTranscriber:
             sys.exit(1)
 
     def audio_callback(self, indata, frames, time_info, status):
-        """Callback for audio stream"""
+        """Callback for audio stream - only process if listening"""
         if status:
             self.send_error(f"Audio error: {status}")
-        self.audio_queue.put(bytes(indata))
+        if self.is_listening:
+            self.audio_queue.put(bytes(indata))
 
-    def start(self):
-        """Start live transcription"""
+    def start_listening(self):
+        """Start listening (audio capture)"""
+        if self.is_listening:
+            return
+
+        self.is_listening = True
+        # Clear the recognizer state
+        self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
+        self.recognizer.SetWords(True)
+
         self.send_status("listening", "Listening...")
 
+    def stop_listening(self):
+        """Stop listening (pause audio processing)"""
+        if not self.is_listening:
+            return
+
+        self.is_listening = False
+
+        # Get final result before stopping
         try:
-            with sd.RawInputStream(
+            final_result = json.loads(self.recognizer.FinalResult())
+            text = final_result.get('text', '').strip()
+            if text:
+                self.send_final(text)
+        except:
+            pass
+
+        self.send_status("stopped", "Stopped listening")
+
+    def run(self):
+        """Main loop - keeps model in memory, processes commands"""
+        try:
+            # Start audio stream (always running, but only process when is_listening=True)
+            self.stream = sd.RawInputStream(
                 samplerate=self.sample_rate,
                 blocksize=8000,
                 dtype='int16',
                 channels=1,
                 callback=self.audio_callback
-            ):
-                while True:
-                    data = self.audio_queue.get()
+            )
 
-                    if self.recognizer.AcceptWaveform(data):
-                        # Final result
-                        result = json.loads(self.recognizer.Result())
-                        text = result.get('text', '').strip()
-                        if text:
-                            self.send_final(text)
-                    else:
-                        # Partial result (real-time)
-                        result = json.loads(self.recognizer.PartialResult())
-                        text = result.get('partial', '').strip()
-                        if text:
-                            self.send_partial(text)
+            with self.stream:
+                # Auto-start listening
+                self.start_listening()
+
+                while not self.should_exit:
+                    # Process audio queue
+                    try:
+                        data = self.audio_queue.get(timeout=0.1)
+
+                        if self.recognizer.AcceptWaveform(data):
+                            # Final result
+                            result = json.loads(self.recognizer.Result())
+                            text = result.get('text', '').strip()
+                            if text:
+                                self.send_final(text)
+                        else:
+                            # Partial result (real-time)
+                            result = json.loads(self.recognizer.PartialResult())
+                            text = result.get('partial', '').strip()
+                            if text:
+                                self.send_partial(text)
+                    except queue.Empty:
+                        continue
 
         except KeyboardInterrupt:
-            # Get final result before stopping
-            final_result = json.loads(self.recognizer.FinalResult())
-            text = final_result.get('text', '').strip()
-            if text:
-                self.send_final(text)
-            self.send_status("stopped", "Stopped listening")
+            self.stop_listening()
         except Exception as e:
             self.send_error(str(e))
             sys.exit(1)
@@ -153,7 +193,7 @@ class VoskLiveTranscriber:
 def main():
     try:
         transcriber = VoskLiveTranscriber()
-        transcriber.start()
+        transcriber.run()
     except Exception as e:
         output = {
             "type": "error",

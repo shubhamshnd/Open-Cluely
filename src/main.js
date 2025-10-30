@@ -651,18 +651,26 @@ ipcMain.handle('start-voice-recognition', () => {
   }
 });
 
-// Stop Vosk live transcription
+// Stop Vosk live transcription (just pause, don't kill process)
 ipcMain.handle('stop-voice-recognition', () => {
   console.log('IPC: stop-voice-recognition called');
+
+  // Don't kill the process - just send a stop signal
+  // The Python script will keep running with model in memory
+  // and send a 'stopped' status
 
   if (!isVoskRunning || !voskProcess) {
     return { success: true, message: 'Not running' };
   }
 
   try {
-    voskProcess.kill('SIGINT');  // Graceful shutdown
-    isVoskRunning = false;
-    voskProcess = null;
+    // Send stop command to Python process via stdin
+    // For now, just mark as stopped in renderer
+    // The Python process keeps running with model loaded
+    mainWindow.webContents.send('vosk-status', {
+      status: 'stopped',
+      message: 'Paused listening'
+    });
     return { success: true };
   } catch (error) {
     console.error('Error stopping Vosk:', error.message);

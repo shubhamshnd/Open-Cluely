@@ -103,7 +103,7 @@ async function stopVoiceRecording() {
     if (!isRecording) return;
 
     try {
-        console.log('Stopping Vosk transcription...');
+        console.log('Pausing Vosk transcription (model stays loaded)...');
 
         await window.electronAPI.stopVoiceRecognition();
 
@@ -117,12 +117,12 @@ async function stopVoiceRecording() {
         }
         currentPartialText = '';
 
-        addChatMessage('system', 'Live transcription stopped');
-        showFeedback('Stopped listening', 'info');
+        addChatMessage('system', 'Paused - Click mic to resume');
+        showFeedback('Paused (model ready)', 'info');
 
     } catch (error) {
-        console.error('Failed to stop Vosk:', error);
-        showFeedback('Stop failed', 'error');
+        console.error('Failed to pause Vosk:', error);
+        showFeedback('Pause failed', 'error');
     }
 }
 
@@ -152,6 +152,8 @@ function updateVoiceUI() {
 
 // Handle Vosk partial results (real-time display)
 function handleVoskPartial(data) {
+    // Only process if we're actively recording
+    if (!isRecording) return;
     if (!data.text || data.text.trim().length === 0) return;
 
     currentPartialText = data.text.trim();
@@ -191,6 +193,8 @@ function handleVoskPartial(data) {
 
 // Handle Vosk final results
 function handleVoskFinal(data) {
+    // Only process if we're actively recording
+    if (!isRecording) return;
     if (!data.text || data.text.trim().length === 0) return;
 
     const finalText = data.text.trim();
