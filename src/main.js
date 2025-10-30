@@ -7,7 +7,13 @@ const os = require('os');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
 const GeminiService = require('./gemini-service');
-require('dotenv').config();
+
+// Load .env from the correct location (handles both dev and production)
+const envPath = app.isPackaged
+  ? path.join(process.resourcesPath, '.env')
+  : path.join(__dirname, '..', '.env');
+
+require('dotenv').config({ path: envPath });
 
 let mainWindow;
 let screenshots = [];
@@ -537,6 +543,12 @@ ipcMain.handle('clear-stealth', () => {
   screenshots = [];
   chatContext = [];
   console.log('All screenshots and context cleared');
+  return { success: true };
+});
+
+ipcMain.handle('close-app', () => {
+  console.log('IPC: close-app called');
+  app.quit();
   return { success: true };
 });
 

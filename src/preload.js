@@ -372,11 +372,20 @@ try {
       };
     },
     
+    // Close application
+    closeApp: () => {
+      console.log('PreloadAPI: closeApp called');
+      return ipcRenderer.invoke('close-app').catch(err => {
+        console.error('PreloadAPI: closeApp error:', err);
+        return { error: err.message };
+      });
+    },
+
     // Utility functions for debugging
     log: (message) => {
       console.log('PreloadAPI log:', message);
     },
-    
+
     // Check if electronAPI is working
     isAvailable: () => {
       console.log('PreloadAPI: isAvailable check');

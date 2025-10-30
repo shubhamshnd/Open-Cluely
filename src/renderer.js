@@ -27,6 +27,7 @@ const clearBtn = document.getElementById('clear-btn');
 const hideBtn = document.getElementById('hide-btn');
 const copyBtn = document.getElementById('copy-btn');
 const closeResultsBtn = document.getElementById('close-results');
+const closeAppBtn = document.getElementById('close-app-btn');
 
 // New Cluely-style buttons
 const suggestBtn = document.getElementById('suggest-btn');
@@ -261,6 +262,15 @@ async function emergencyHide() {
         showEmergencyOverlay();
     } catch (error) {
         console.error('Emergency hide error:', error);
+    }
+}
+
+async function closeApplication() {
+    try {
+        console.log('Closing application...');
+        await window.electronAPI.closeApp();
+    } catch (error) {
+        console.error('Close application error:', error);
     }
 }
 
@@ -514,6 +524,7 @@ function setupEventListeners() {
     if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
     if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
     if (voiceToggle) voiceToggle.addEventListener('click', toggleVoiceRecognition);
+    if (closeAppBtn) closeAppBtn.addEventListener('click', closeApplication);
 
     // New feature buttons
     if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);

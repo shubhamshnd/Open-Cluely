@@ -29,10 +29,14 @@
     "files": [
       "src/**/*",
       "package.json",
-      ".env",
-      "!node_modules/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache/**/*",
       "!.git/**/*",
       "!dist/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/screenshot-desktop/**/*",
+      "node_modules/node-window-manager/**/*"
     ],
     "extraResources": [
       {
@@ -65,6 +69,6 @@
       "icon": "assets/chrome.png"
     }
   },
-  "author": "Your Name",
+  "author": "Shubham",
   "license": "MIT"
 }

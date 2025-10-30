@@ -59,6 +59,42 @@ body {
   z-index: 10;
   background: transparent;
   border-radius: 12px 12px 0 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 8px;
+}
+
+/* CLOSE BUTTON */
+.close-app-btn {
+  -webkit-app-region: no-drag;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 59, 48, 0.8);
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin: 0;
+  opacity: 0.6;
+}
+
+.close-app-btn:hover {
+  background: rgba(255, 59, 48, 1);
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.close-app-btn:active {
+  transform: scale(0.95);
 }
 
 /* RESIZE HANDLES - Visual indicators for resizing */
