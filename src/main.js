@@ -18,13 +18,20 @@ function getAppPath() {
 
 // Load .env from the correct location (handles both dev and production)
 // Do this after app is ready
+const isDev = !app.isPackaged;
 let envPath;
-if (process.env.NODE_ENV === 'development' || !process.defaultApp) {
-  // Try to load from parent directory first (development)
+
+if (isDev) {
   envPath = path.join(__dirname, '..', '.env');
 } else {
-  envPath = path.join(__dirname, '..', '.env');
+  envPath = path.join(process.resourcesPath, '.env');
 }
+
+require('dotenv').config({ path: envPath });
+
+console.log('Loaded .env from:', envPath);
+console.log('GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ Found' : '❌ Missing');
+
 
 require('dotenv').config({ path: envPath });
 
