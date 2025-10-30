@@ -36,10 +36,10 @@ try {
 function createStealthWindow() {
   console.log('Creating stealth window...');
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  
-  // Adjusted window size for chat interface
-  const windowWidth = 400;
-  const windowHeight = 600;
+
+  // Short and wide window dimensions
+  const windowWidth = 800;
+  const windowHeight = 250;
   const x = Math.floor((width - windowWidth) / 2);
   const y = 40;
   
@@ -349,7 +349,7 @@ async function analyzeForMeetingWithContext(context = '') {
   console.log('Starting context-aware analysis...');
   console.log('Context length:', context.length);
   console.log('API Key exists:', !!process.env.GEMINI_API_KEY);
-  console.log('Model initialized:', !!model);
+  console.log('Model initialized:', !!(geminiService && geminiService.model));
   console.log('Screenshots count:', screenshots.length);
 
   if (!process.env.GEMINI_API_KEY) {
@@ -360,7 +360,7 @@ async function analyzeForMeetingWithContext(context = '') {
     return;
   }
 
-  if (!model) {
+  if (!geminiService || !geminiService.model) {
     console.error('Gemini model not initialized');
     mainWindow.webContents.send('analysis-result', {
       error: 'AI model not initialized. Please check your API key.'

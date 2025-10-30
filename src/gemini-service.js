@@ -190,18 +190,47 @@ class GeminiService {
     async analyzeScreenshot(imageBase64, additionalContext = '') {
         const contextString = this.getContextString();
 
-        const prompt = `You are an AI meeting assistant helping the user during a live conversation.
+        const prompt = `You are Cluely AI - an intelligent assistant that helps users during meetings, interviews, and coding challenges in real-time.
 
 ${contextString ? `Previous conversation context:\n${contextString}\n\n` : ''}
 
 ${additionalContext ? `Additional context:\n${additionalContext}\n\n` : ''}
 
-Analyze this screenshot and provide:
-1. Key information visible on screen
-2. Relevant insights or suggestions
-3. If there's text/questions visible, provide a brief, helpful response
+**ANALYSIS INSTRUCTIONS:**
 
-Keep your response concise, actionable, and directly useful for the meeting.`;
+1. **For Coding Problems (LeetCode, HackerRank, CodeForces, etc.):**
+   - **DETECT THE PROGRAMMING LANGUAGE** from the screenshot (Python, Java, C++, JavaScript, Go, Rust, C#, etc.)
+   - If no specific language is visible, default to Python
+   - Identify the problem and provide a clear problem summary
+   - Give **multiple solutions in the DETECTED LANGUAGE** (at least 2-3 approaches: brute force, optimized, and optimal)
+   - For each solution, include:
+     * Time complexity and Space complexity analysis
+     * Step-by-step explanation of the approach
+     * Clean, well-commented code in the DETECTED LANGUAGE
+     * Mention edge cases to consider
+   - Highlight which solution is recommended and why
+   - Format code in markdown code blocks with proper language tag (e.g., \`\`\`python, \`\`\`java, \`\`\`cpp, \`\`\`javascript)
+
+2. **For Technical Discussions/Meetings:**
+   - Summarize key points being discussed
+   - Provide relevant technical insights or clarifications
+   - Suggest thoughtful questions or responses
+
+3. **For General Questions:**
+   - Provide clear, concise, and actionable information
+   - Include examples where helpful
+   - Anticipate follow-up questions
+
+**OUTPUT FORMAT:**
+Use clear markdown formatting with:
+- **Bold** for important concepts
+- Code blocks with proper language syntax highlighting (e.g., \`\`\`python, \`\`\`java, \`\`\`cpp, \`\`\`javascript, \`\`\`go, \`\`\`rust)
+- Bullet points for lists
+- Headers (##) for sections
+
+**IMPORTANT:** Always use the programming language visible in the screenshot or interface. Do NOT force Python if another language is being used.
+
+Keep responses comprehensive but well-organized. Be direct and practical.`;
 
         const parts = [
             { text: prompt },
@@ -222,16 +251,28 @@ Keep your response concise, actionable, and directly useful for the meeting.`;
     async suggestResponse(context) {
         const contextString = this.getContextString();
 
-        const prompt = `You are an AI meeting assistant. Based on the conversation so far, suggest 2-3 brief, professional responses the user could say.
+        const prompt = `You are Cluely AI. Based on the conversation/situation, suggest 3-4 smart responses or talking points.
 
 ${contextString ? `Conversation history:\n${contextString}\n\n` : ''}
 
 Current situation: ${context}
 
-Provide 2-3 short, natural response options (1-2 sentences each) that would be appropriate. Format as:
-1. [response option]
-2. [response option]
-3. [response option]`;
+**Provide suggestions for:**
+- If it's a coding problem: Key insights about the approach, time/space complexity clarifications, or edge cases to mention
+- If it's an interview: Thoughtful questions, clarifications, or professional responses
+- If it's a discussion: Relevant points to contribute or questions to ask
+
+Format each suggestion clearly and make them natural to say out loud. Include WHY each suggestion is valuable.
+
+Format as:
+**Option 1:** [suggestion]
+*Why:* [brief reason]
+
+**Option 2:** [suggestion]
+*Why:* [brief reason]
+
+**Option 3:** [suggestion]
+*Why:* [brief reason]`;
 
         const result = await this.generateText(prompt);
         return result;
@@ -245,11 +286,38 @@ Provide 2-3 short, natural response options (1-2 sentences each) that would be a
 
         const contextString = this.getContextString();
 
-        const prompt = `Create concise meeting notes from this conversation:
+        const prompt = `Create comprehensive notes from this session:
 
 ${contextString}
 
-Format:
+**Format based on content type:**
+
+**For Coding Sessions:**
+# Session Summary
+[Brief overview of problems tackled]
+
+## Problems Solved
+- **Problem Name:** [Brief description]
+  - Language: [Language used]
+  - Approach: [Method used]
+  - Complexity: Time O(X), Space O(Y)
+  - Key insights: [Important points]
+
+## Code Snippets
+[Use the appropriate language code blocks: \`\`\`python, \`\`\`java, \`\`\`cpp, \`\`\`javascript, \`\`\`go, etc.]
+\`\`\`language
+[Key code solutions in the language that was used]
+\`\`\`
+
+## Lessons Learned
+- [Technical insight 1]
+- [Technical insight 2]
+
+## Review Later
+- [ ] [Concepts to practice]
+- [ ] [Similar problems to solve]
+
+**For Meetings/Discussions:**
 # Meeting Summary
 [Brief overview]
 
@@ -263,7 +331,9 @@ Format:
 
 ## Important Details
 - [Detail 1]
-- [Detail 2]`;
+- [Detail 2]
+
+Use the format that best fits the content.`;
 
         const result = await this.generateText(prompt);
         return result;
@@ -302,7 +372,17 @@ Keep it concise and professional.`;
 
 Question: ${question}
 
-Provide a brief, helpful answer (2-3 sentences max).`;
+**Answer the question with:**
+- If it's a coding/algorithm question:
+  * Detect the programming language from context (or default to Python if unclear)
+  * Provide code examples in that language
+  * Explain time/space complexity
+  * Mention edge cases
+  * Use proper language code blocks (\`\`\`python, \`\`\`java, \`\`\`cpp, \`\`\`javascript, etc.)
+- If it's a technical concept: Give clear explanation with examples
+- If it's a general question: Provide concise, actionable answer
+
+Use markdown formatting. Be thorough but concise.`;
 
         const result = await this.generateText(prompt);
         this.addToHistory('user', question);
@@ -318,16 +398,47 @@ Provide a brief, helpful answer (2-3 sentences max).`;
 
         const contextString = this.getContextString();
 
-        const prompt = `Analyze this conversation and provide brief insights:
+        const prompt = `Analyze this session and provide actionable insights:
 
 ${contextString}
 
-Provide:
-1. Main topics discussed (2-3 bullet points)
-2. Key decisions or conclusions (2-3 bullet points)
-3. Suggested follow-up topics (2-3 bullet points)
+**Provide insights based on content:**
 
-Keep it very concise.`;
+**For Coding Sessions:**
+## 📊 Performance Analysis
+- Algorithms used: [List approaches]
+- Complexity patterns: [Time/space complexity trends]
+- Problem-solving approach: [Your strategy]
+
+## 💡 Key Learnings
+- [Technical concept 1]
+- [Technical concept 2]
+- [Pattern or technique learned]
+
+## 🎯 Improvement Areas
+- [Skill to practice]
+- [Concept to review]
+- [Alternative approach to explore]
+
+## 🔗 Related Topics to Study
+- [Related algorithm/data structure]
+- [Similar problem types]
+- [Advanced techniques]
+
+**For Meetings/Discussions:**
+## Main Topics Discussed
+- [Topic 1]
+- [Topic 2]
+
+## Key Decisions/Conclusions
+- [Decision 1]
+- [Decision 2]
+
+## Suggested Follow-ups
+- [Follow-up topic 1]
+- [Follow-up topic 2]
+
+Use the format that best matches the session content.`;
 
         const result = await this.generateText(prompt);
         return result;

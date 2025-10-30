@@ -45,3 +45,5 @@ coverage/
 Thumbs.db
 
 .claude/
+
+.stealth_screenshots/

@@ -27,24 +27,38 @@ body {
   width: 100vw;
   height: 100vh;
   background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   padding: 8px;
   position: relative;
-  
+
   /* Cluely-style glass effect */
-  box-shadow: 
+  box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  
+
   -webkit-app-region: no-drag;
   opacity: 1;
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* DRAG HANDLE - Makes window movable */
+.drag-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  -webkit-app-region: drag;
+  cursor: move;
+  z-index: 10;
+  background: transparent;
+  border-radius: 12px 12px 0 0;
 }
 
 /* COMPACT LAYOUT - HORIZONTAL */
@@ -54,7 +68,8 @@ body {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  padding: 0;
+  padding: 30px 0 0 0;
+  margin-top: -22px;
 }
 
 /* COMPACT STATUS */
@@ -261,8 +276,8 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   overflow: hidden;
-  min-height: 200px;
-  max-height: 400px;
+  min-height: 150px;
+  max-height: 180px;
 }
 
 .chat-header {
