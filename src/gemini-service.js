@@ -258,7 +258,11 @@ ${contextString ? `Conversation history:\n${contextString}\n\n` : ''}
 Current situation: ${context}
 
 **Provide suggestions for:**
-- If it's a coding problem: Key insights about the approach, time/space complexity clarifications, or edge cases to mention
+- If it's a coding problem:
+  * Detect the programming language being used (Python, Java, C++, JavaScript, Go, etc.)
+  * Provide key insights about the approach specific to that language
+  * Suggest time/space complexity clarifications
+  * Mention edge cases or language-specific considerations
 - If it's an interview: Thoughtful questions, clarifications, or professional responses
 - If it's a discussion: Relevant points to contribute or questions to ask
 
