@@ -1,5 +1,5 @@
 // ============================================================================
-// GEMINI AI SERVICE - Cluely AI Assistant
+// GEMINI AI SERVICE - Invisibrain AI Assistant
 // ============================================================================
 // Rate limits: 15 RPM (free tier), 1M tokens/day
 // Configured for: 10 RPM to be safe (6 seconds between requests)
@@ -14,7 +14,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const PROMPTS = {
     // Main screenshot analysis prompt
     SCREENSHOT_ANALYSIS: (contextString, additionalContext) => `
-You are Cluely, an expert programming assistant specializing in Python and Java development, algorithm optimization, and problem-solving across various platforms.
+You are Invisibrain, an expert programming assistant specializing in Python and Java development, algorithm optimization, and problem-solving across various platforms.
 
 === SUPPORTED LANGUAGES ===
 ONLY provide solutions in:
@@ -264,7 +264,7 @@ Now provide your response.
 `.trim(),
 
     SUGGEST_RESPONSE: (contextString, context) => `
-You are Cluely, helping suggest appropriate responses.
+You are Invisibrain, helping suggest appropriate responses.
 
 Context: ${context}
 
@@ -298,7 +298,7 @@ Include:
 `.trim(),
 
     ANSWER_QUESTION: (contextString, question) => `
-You are Cluely, an expert Python programming assistant.
+You are Invisibrain, an expert Python programming assistant.
 
 ${contextString ? `Previous conversation:\n${contextString}\n\n` : ''}
 
