@@ -6,15 +6,25 @@ const os = require('os');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
 
-// Determine if we're in production (packaged) or development
-const isDev = !app.isPackaged;
-const appPath = isDev ? __dirname : path.join(process.resourcesPath, 'app.asar');
-const srcPath = isDev ? __dirname : path.join(appPath, 'src');
+// Helper function to check if running in dev mode
+function isDevelopment() {
+  return !app.isPackaged;
+}
+
+// Helper function to get the correct path based on environment
+function getAppPath() {
+  return isDevelopment() ? __dirname : path.join(process.resourcesPath, 'app.asar');
+}
 
 // Load .env from the correct location (handles both dev and production)
-const envPath = isDev
-  ? path.join(__dirname, '..', '.env')
-  : path.join(process.resourcesPath, '.env');
+// Do this after app is ready
+let envPath;
+if (process.env.NODE_ENV === 'development' || !process.defaultApp) {
+  // Try to load from parent directory first (development)
+  envPath = path.join(__dirname, '..', '.env');
+} else {
+  envPath = path.join(__dirname, '..', '.env');
+}
 
 require('dotenv').config({ path: envPath });
 
@@ -332,7 +342,7 @@ async function takeStealthScreenshot() {
     await new Promise(resolve => setTimeout(resolve, 200));
 
     // Use app data directory for screenshots in production
-    const screenshotsDir = isDev
+    const screenshotsDir = isDevelopment()
       ? path.join(__dirname, '..', '.stealth_screenshots')
       : path.join(app.getPath('userData'), '.stealth_screenshots');
 
@@ -573,7 +583,7 @@ ipcMain.handle('start-voice-recognition', () => {
   }
 
   try {
-    const pythonScript = isDev
+    const pythonScript = isDevelopment()
       ? path.join(__dirname, '..', 'vosk_live.py')
       : path.join(process.resourcesPath, 'vosk_live.py');
     console.log('Starting Vosk live transcription:', pythonScript);
@@ -705,7 +715,7 @@ ipcMain.handle('transcribe-audio', async (event, base64Audio, mimeType) => {
 
     // Spawn Python process
     return new Promise((resolve, reject) => {
-      const pythonScript = isDev
+      const pythonScript = isDevelopment()
         ? path.join(__dirname, '..', 'transcribe.py')
         : path.join(process.resourcesPath, 'transcribe.py');
       console.log('Running Python script:', pythonScript);
