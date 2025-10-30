@@ -398,8 +398,13 @@ function showFeedback(message, type = 'info') {
     }
 }
 
-function showLoadingOverlay() {
+function showLoadingOverlay(message = 'Analyzing screen...') {
     if (loadingOverlay) {
+        // Update the loading text if custom message provided
+        const loadingTextElement = loadingOverlay.querySelector('.loading-text');
+        if (loadingTextElement) {
+            loadingTextElement.innerHTML = message;
+        }
         loadingOverlay.classList.remove('hidden');
     }
 }
@@ -407,6 +412,11 @@ function showLoadingOverlay() {
 function hideLoadingOverlay() {
     if (loadingOverlay) {
         loadingOverlay.classList.add('hidden');
+        // Reset to default text
+        const loadingTextElement = loadingOverlay.querySelector('.loading-text');
+        if (loadingTextElement) {
+            loadingTextElement.innerHTML = 'Analyzing screen...';
+        }
     }
 }
 
@@ -616,22 +626,41 @@ function setupIpcListeners() {
 
         switch (data.status) {
             case 'downloading':
+                showLoadingOverlay(`Downloading Vosk model...<br><small>${data.message}</small>`);
                 showFeedback(`Downloading model... ${data.message}`, 'info');
                 break;
             case 'extracting':
+                showLoadingOverlay('Extracting model...<br><small>Almost ready!</small>');
                 showFeedback('Extracting model...', 'info');
                 break;
             case 'loading':
+                showLoadingOverlay('Loading Vosk AI model...<br><small>This may take 10-30 seconds</small>');
                 showFeedback('Loading Vosk model...', 'info');
                 break;
             case 'ready':
-                showFeedback('Vosk ready!', 'success');
+                hideLoadingOverlay();
+                showFeedback('✓ Model loaded! Click mic again to start speaking', 'success');
+                // Keep button in "ready to record" state
+                if (voiceToggle) {
+                    voiceToggle.classList.remove('active');
+                    voiceToggle.style.background = 'rgba(52, 199, 89, 0.2)';
+                }
                 break;
             case 'listening':
-                showFeedback('Listening...', 'success');
+                hideLoadingOverlay();
+                showFeedback('🎤 Listening... Speak now!', 'success');
+                if (voiceToggle) {
+                    voiceToggle.classList.add('active');
+                    voiceToggle.style.background = 'rgba(255, 59, 48, 0.3)';
+                }
                 break;
             case 'stopped':
+                hideLoadingOverlay();
                 showFeedback('Stopped listening', 'info');
+                if (voiceToggle) {
+                    voiceToggle.classList.remove('active');
+                    voiceToggle.style.background = '';
+                }
                 break;
         }
     });

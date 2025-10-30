@@ -32,7 +32,9 @@
       "node_modules/**/*",
       "!node_modules/.cache/**/*",
       "!.git/**/*",
-      "!dist/**/*"
+      "!dist/**/*",
+      "vosk_live.py",
+      "transcribe.py"
     ],
     "asarUnpack": [
       "node_modules/screenshot-desktop/**/*",
@@ -42,6 +44,16 @@
       {
         "from": ".env",
         "to": ".env"
+      },
+      {
+        "from": "vosk_live.py",
+        "to": "vosk_live.py",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "transcribe.py",
+        "to": "transcribe.py",
+        "filter": ["**/*"]
       }
     ],
     "mac": {

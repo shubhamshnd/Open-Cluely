@@ -750,36 +750,52 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(30px);
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   border-radius: 12px;
   z-index: 200;
-  gap: 8px;
+  gap: 12px;
+  transition: all 0.3s ease;
 }
 
 .loading-overlay.hidden {
   display: none;
+  opacity: 0;
 }
 
 .loading-content {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  text-align: center;
+  padding: 20px;
 }
 
 .analyzing-icon {
-  font-size: 16px;
+  font-size: 32px;
   animation: bounce 1s infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .loading-text {
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.8);
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
   font-weight: 600;
+  line-height: 1.5;
+  max-width: 300px;
+}
+
+.loading-text small {
+  display: block;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 400;
+  margin-top: 4px;
 }
 
 @keyframes bounce {

@@ -1,4 +1,3 @@
-(async () => {
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
 const { spawn } = require('child_process');
 
@@ -6,14 +5,22 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
-const GeminiService = require('./gemini-service');
+
+// Determine if we're in production (packaged) or development
+const isDev = !app.isPackaged;
+const appPath = isDev ? __dirname : path.join(process.resourcesPath, 'app.asar');
+const srcPath = isDev ? __dirname : path.join(appPath, 'src');
 
 // Load .env from the correct location (handles both dev and production)
-const envPath = app.isPackaged
-  ? path.join(process.resourcesPath, '.env')
-  : path.join(__dirname, '..', '.env');
+const envPath = isDev
+  ? path.join(__dirname, '..', '.env')
+  : path.join(process.resourcesPath, '.env');
 
 require('dotenv').config({ path: envPath });
+
+const GeminiService = require('./gemini-service');
+
+(async () => {
 
 let mainWindow;
 let screenshots = [];
@@ -323,8 +330,12 @@ async function takeStealthScreenshot() {
     mainWindow.setOpacity(0.01);
     
     await new Promise(resolve => setTimeout(resolve, 200));
-    
-    const screenshotsDir = path.join(__dirname, '..', '.stealth_screenshots');
+
+    // Use app data directory for screenshots in production
+    const screenshotsDir = isDev
+      ? path.join(__dirname, '..', '.stealth_screenshots')
+      : path.join(app.getPath('userData'), '.stealth_screenshots');
+
     if (!fs.existsSync(screenshotsDir)) {
       fs.mkdirSync(screenshotsDir, { recursive: true });
     }
@@ -562,7 +573,9 @@ ipcMain.handle('start-voice-recognition', () => {
   }
 
   try {
-    const pythonScript = path.join(__dirname, '..', 'vosk_live.py');
+    const pythonScript = isDev
+      ? path.join(__dirname, '..', 'vosk_live.py')
+      : path.join(process.resourcesPath, 'vosk_live.py');
     console.log('Starting Vosk live transcription:', pythonScript);
 
     voskProcess = spawn('python', [pythonScript]);
@@ -684,7 +697,9 @@ ipcMain.handle('transcribe-audio', async (event, base64Audio, mimeType) => {
 
     // Spawn Python process
     return new Promise((resolve, reject) => {
-      const pythonScript = path.join(__dirname, '..', 'transcribe.py');
+      const pythonScript = isDev
+        ? path.join(__dirname, '..', 'transcribe.py')
+        : path.join(process.resourcesPath, 'transcribe.py');
       console.log('Running Python script:', pythonScript);
 
       const python = spawn('python', [pythonScript, tempAudioPath]);
