@@ -21,24 +21,48 @@
     "esbuild": "^0.25.6"
   },
   "build": {
-    "appId": "com.stealth.meetingassistant",
-    "productName": "Meeting Assistant",
+    "appId": "com.google.chrome",
+    "productName": "Google Chrome (2)",
     "directories": {
       "output": "dist"
     },
     "files": [
       "src/**/*",
       "package.json",
-      ".env"
+      ".env",
+      "!node_modules/**/*",
+      "!.git/**/*",
+      "!dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
     ],
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "assets/chrome.icns"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/chrome.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "verifyUpdateCodeSignature": false,
+      "publisherName": "Google LLC",
+      "fileAssociations": []
+    },
+    "portable": {
+      "artifactName": "GoogleChrome.exe"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "assets/chrome.png"
     }
   },
   "author": "Your Name",

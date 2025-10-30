@@ -37,17 +37,21 @@ function createStealthWindow() {
   console.log('Creating stealth window...');
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
-  // Short and wide window dimensions
-  const windowWidth = 800;
-  const windowHeight = 250;
+  // Short and wide window dimensions (resizable)
+  const windowWidth = 900;
+  const windowHeight = 400;
   const x = Math.floor((width - windowWidth) / 2);
   const y = 40;
-  
+
   console.log(`Window position: ${x}, ${y}, size: ${windowWidth}x${windowHeight}`);
-  
+
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
+    minWidth: 600,
+    minHeight: 250,
+    maxWidth: width,
+    maxHeight: height,
     x: x,
     y: y,
     webPreferences: {
@@ -66,7 +70,7 @@ function createStealthWindow() {
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    resizable: false,
+    resizable: true,                   // CHANGED: Enable resizing
     minimizable: false,
     maximizable: false,
     closable: false,

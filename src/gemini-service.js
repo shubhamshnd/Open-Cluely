@@ -1,199 +1,22 @@
-// Gemini API Service with Rate Limiting and Advanced Features
-// Rate limits for Gemini 1.5 Flash: 15 RPM (free tier), 1M tokens/day
-// Using 10 RPM to be safe
+// ============================================================================
+// GEMINI AI SERVICE - Cluely AI Assistant
+// ============================================================================
+// Rate limits: 15 RPM (free tier), 1M tokens/day
+// Configured for: 10 RPM to be safe (6 seconds between requests)
+// ============================================================================
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-class GeminiService {
-    constructor(apiKey) {
-        this.genAI = new GoogleGenerativeAI(apiKey);
-        // Try different model names for compatibility
-        // gemini-pro is the most widely supported free model
-        try {
-            this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
-        } catch (e) {
-            console.warn('gemini-pro failed, trying gemini-1.5-flash-latest:', e);
-            this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
-        }
+// ============================================================================
+// PROMPT TEMPLATES
+// ============================================================================
 
-        // Rate limiting
-        this.requestQueue = [];
-        this.lastRequestTime = 0;
-        this.minRequestInterval = 6000; // 6 seconds between requests (10 RPM = 1 per 6s)
-        this.maxRetries = 3;
-        this.isProcessing = false;
-
-        // Token tracking
-        this.dailyTokenCount = 0;
-        this.maxDailyTokens = 4000000; // 4M tokens per day
-        this.lastResetTime = Date.now();
-
-        // Conversation context
-        this.conversationHistory = [];
-        this.maxHistoryLength = 20;
-    }
-
-    // Reset daily token count
-    checkAndResetDailyLimit() {
-        const now = Date.now();
-        const dayInMs = 24 * 60 * 60 * 1000;
-
-        if (now - this.lastResetTime >= dayInMs) {
-            console.log('Resetting daily token count');
-            this.dailyTokenCount = 0;
-            this.lastResetTime = now;
-        }
-    }
-
-    // Estimate token count (rough approximation)
-    estimateTokens(text) {
-        // Rough estimate: 1 token ≈ 4 characters
-        return Math.ceil(text.length / 4);
-    }
-
-    // Wait for rate limit
-    async waitForRateLimit() {
-        const now = Date.now();
-        const timeSinceLastRequest = now - this.lastRequestTime;
-
-        if (timeSinceLastRequest < this.minRequestInterval) {
-            const waitTime = this.minRequestInterval - timeSinceLastRequest;
-            console.log(`Rate limit: waiting ${waitTime}ms`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-
-        this.lastRequestTime = Date.now();
-    }
-
-    // Process queue
-    async processQueue() {
-        if (this.isProcessing || this.requestQueue.length === 0) return;
-
-        this.isProcessing = true;
-
-        while (this.requestQueue.length > 0) {
-            const request = this.requestQueue.shift();
-
-            try {
-                await this.waitForRateLimit();
-                const result = await this._executeRequest(request);
-                request.resolve(result);
-            } catch (error) {
-                request.reject(error);
-            }
-        }
-
-        this.isProcessing = false;
-    }
-
-    // Execute request with retry logic
-    async _executeRequest(request, retryCount = 0) {
-        try {
-            this.checkAndResetDailyLimit();
-
-            // Check daily token limit
-            const estimatedTokens = this.estimateTokens(JSON.stringify(request.data));
-            if (this.dailyTokenCount + estimatedTokens > this.maxDailyTokens) {
-                throw new Error('Daily token limit reached');
-            }
-
-            let result;
-
-            if (request.type === 'text') {
-                result = await this.model.generateContent(request.data);
-            } else if (request.type === 'multimodal') {
-                result = await this.model.generateContent(request.data);
-            }
-
-            // Update token count
-            this.dailyTokenCount += estimatedTokens;
-
-            const text = result.response.text();
-            return text;
-
-        } catch (error) {
-            console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
-
-            // Retry on rate limit or server errors
-            if (retryCount < this.maxRetries) {
-                const isRetryable =
-                    error.message.includes('429') ||
-                    error.message.includes('500') ||
-                    error.message.includes('503') ||
-                    error.message.includes('RATE_LIMIT');
-
-                if (isRetryable) {
-                    const backoffTime = Math.pow(2, retryCount) * 2000; // Exponential backoff
-                    console.log(`Retrying in ${backoffTime}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, backoffTime));
-                    return await this._executeRequest(request, retryCount + 1);
-                }
-            }
-
-            throw error;
-        }
-    }
-
-    // Add to conversation history
-    addToHistory(role, content) {
-        this.conversationHistory.push({ role, content });
-
-        // Keep only recent history
-        if (this.conversationHistory.length > this.maxHistoryLength) {
-            this.conversationHistory = this.conversationHistory.slice(-this.maxHistoryLength);
-        }
-    }
-
-    // Clear conversation history
-    clearHistory() {
-        this.conversationHistory = [];
-    }
-
-    // Get conversation context
-    getContextString() {
-        return this.conversationHistory
-            .map(entry => `${entry.role}: ${entry.content}`)
-            .join('\n\n');
-    }
-
-    // Queue a text request
-    async generateText(prompt, options = {}) {
-        return new Promise((resolve, reject) => {
-            const request = {
-                type: 'text',
-                data: prompt,
-                resolve,
-                reject
-            };
-
-            this.requestQueue.push(request);
-            this.processQueue();
-        });
-    }
-
-    // Queue a multimodal request (text + images)
-    async generateMultimodal(parts, options = {}) {
-        return new Promise((resolve, reject) => {
-            const request = {
-                type: 'multimodal',
-                data: parts,
-                resolve,
-                reject
-            };
-
-            this.requestQueue.push(request);
-            this.processQueue();
-        });
-    }
-
-    // Analyze screenshot with context
-    async analyzeScreenshot(imageBase64, additionalContext = '') {
-        const contextString = this.getContextString();
-
-        const prompt = `You are Cluely AI - an intelligent assistant that helps users during meetings, interviews, and coding challenges in real-time.
+const PROMPTS = {
+    // Main screenshot analysis prompt
+    SCREENSHOT_ANALYSIS: (contextString, additionalContext) => `
+You are Cluely AI - an intelligent assistant that helps users during meetings, interviews, and coding challenges in real-time.
 
 ${contextString ? `Previous conversation context:\n${contextString}\n\n` : ''}
-
 ${additionalContext ? `Additional context:\n${additionalContext}\n\n` : ''}
 
 **ANALYSIS INSTRUCTIONS:**
@@ -230,28 +53,12 @@ Use clear markdown formatting with:
 
 **IMPORTANT:** Always use the programming language visible in the screenshot or interface. Do NOT force Python if another language is being used.
 
-Keep responses comprehensive but well-organized. Be direct and practical.`;
-
-        const parts = [
-            { text: prompt },
-            {
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: imageBase64
-                }
-            }
-        ];
-
-        const result = await this.generateMultimodal(parts);
-        this.addToHistory('assistant', `Screenshot analysis: ${result}`);
-        return result;
-    }
+Keep responses comprehensive but well-organized. Be direct and practical.
+`.trim(),
 
     // "What should I say?" feature
-    async suggestResponse(context) {
-        const contextString = this.getContextString();
-
-        const prompt = `You are Cluely AI. Based on the conversation/situation, suggest 3-4 smart responses or talking points.
+    SUGGEST_RESPONSE: (contextString, context) => `
+You are Cluely AI. Based on the conversation/situation, suggest 3-4 smart responses or talking points.
 
 ${contextString ? `Conversation history:\n${contextString}\n\n` : ''}
 
@@ -276,21 +83,12 @@ Format as:
 *Why:* [brief reason]
 
 **Option 3:** [suggestion]
-*Why:* [brief reason]`;
+*Why:* [brief reason]
+`.trim(),
 
-        const result = await this.generateText(prompt);
-        return result;
-    }
-
-    // Generate meeting notes
-    async generateMeetingNotes() {
-        if (this.conversationHistory.length === 0) {
-            return 'No conversation history to summarize.';
-        }
-
-        const contextString = this.getContextString();
-
-        const prompt = `Create comprehensive notes from this session:
+    // Meeting notes generation
+    MEETING_NOTES: (contextString) => `
+Create comprehensive notes from this session:
 
 ${contextString}
 
@@ -337,21 +135,12 @@ ${contextString}
 - [Detail 1]
 - [Detail 2]
 
-Use the format that best fits the content.`;
+Use the format that best fits the content.
+`.trim(),
 
-        const result = await this.generateText(prompt);
-        return result;
-    }
-
-    // Generate follow-up email
-    async generateFollowUpEmail() {
-        if (this.conversationHistory.length === 0) {
-            return 'No conversation history to create email from.';
-        }
-
-        const contextString = this.getContextString();
-
-        const prompt = `Create a professional follow-up email based on this meeting conversation:
+    // Follow-up email
+    FOLLOW_UP_EMAIL: (contextString) => `
+Create a professional follow-up email based on this meeting conversation:
 
 ${contextString}
 
@@ -362,17 +151,12 @@ Format as a complete email with:
 - Next steps
 - Professional closing
 
-Keep it concise and professional.`;
+Keep it concise and professional.
+`.trim(),
 
-        const result = await this.generateText(prompt);
-        return result;
-    }
-
-    // Answer specific question with context
-    async answerQuestion(question) {
-        const contextString = this.getContextString();
-
-        const prompt = `${contextString ? `Conversation context:\n${contextString}\n\n` : ''}
+    // Answer question
+    ANSWER_QUESTION: (contextString, question) => `
+${contextString ? `Conversation context:\n${contextString}\n\n` : ''}
 
 Question: ${question}
 
@@ -386,23 +170,12 @@ Question: ${question}
 - If it's a technical concept: Give clear explanation with examples
 - If it's a general question: Provide concise, actionable answer
 
-Use markdown formatting. Be thorough but concise.`;
+Use markdown formatting. Be thorough but concise.
+`.trim(),
 
-        const result = await this.generateText(prompt);
-        this.addToHistory('user', question);
-        this.addToHistory('assistant', result);
-        return result;
-    }
-
-    // Get conversation insights
-    async getConversationInsights() {
-        if (this.conversationHistory.length === 0) {
-            return 'Not enough conversation data for insights.';
-        }
-
-        const contextString = this.getContextString();
-
-        const prompt = `Analyze this session and provide actionable insights:
+    // Conversation insights
+    INSIGHTS: (contextString) => `
+Analyze this session and provide actionable insights:
 
 ${contextString}
 
@@ -442,11 +215,319 @@ ${contextString}
 - [Follow-up topic 1]
 - [Follow-up topic 2]
 
-Use the format that best matches the session content.`;
+Use the format that best matches the session content.
+`.trim()
+};
 
+// ============================================================================
+// GEMINI SERVICE CLASS
+// ============================================================================
+
+class GeminiService {
+    constructor(apiKey) {
+        this.genAI = new GoogleGenerativeAI(apiKey);
+
+        // Initialize the model (try fallback if needed)
+        this._initializeModel();
+
+        // Rate limiting configuration
+        this.requestQueue = [];
+        this.lastRequestTime = 0;
+        this.minRequestInterval = 6000; // 6 seconds (10 RPM = 1 request per 6 seconds)
+        this.maxRetries = 3;
+        this.isProcessing = false;
+
+        // Token tracking
+        this.dailyTokenCount = 0;
+        this.maxDailyTokens = 4000000; // 4M tokens per day
+        this.lastResetTime = Date.now();
+
+        // Conversation context management
+        this.conversationHistory = [];
+        this.maxHistoryLength = 20;
+    }
+
+    // ========================================================================
+    // INITIALIZATION
+    // ========================================================================
+
+    _initializeModel() {
+        try {
+            this.model = this.genAI.getGenerativeModel({
+                model: "gemini-2.5-flash-lite"
+            });
+        } catch (error) {
+            console.warn('Primary model failed, using fallback:', error);
+            this.model = this.genAI.getGenerativeModel({
+                model: "gemini-2.5-flash-lite"
+            });
+        }
+    }
+
+    // ========================================================================
+    // TOKEN & RATE LIMIT MANAGEMENT
+    // ========================================================================
+
+    checkAndResetDailyLimit() {
+        const now = Date.now();
+        const dayInMs = 24 * 60 * 60 * 1000;
+
+        if (now - this.lastResetTime >= dayInMs) {
+            console.log('Resetting daily token count');
+            this.dailyTokenCount = 0;
+            this.lastResetTime = now;
+        }
+    }
+
+    estimateTokens(text) {
+        // Rough estimate: 1 token ≈ 4 characters
+        return Math.ceil(text.length / 4);
+    }
+
+    async waitForRateLimit() {
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastRequestTime;
+
+        if (timeSinceLastRequest < this.minRequestInterval) {
+            const waitTime = this.minRequestInterval - timeSinceLastRequest;
+            console.log(`Rate limit: waiting ${waitTime}ms`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+
+        this.lastRequestTime = Date.now();
+    }
+
+    // ========================================================================
+    // REQUEST QUEUE PROCESSING
+    // ========================================================================
+
+    async processQueue() {
+        if (this.isProcessing || this.requestQueue.length === 0) {
+            return;
+        }
+
+        this.isProcessing = true;
+
+        while (this.requestQueue.length > 0) {
+            const request = this.requestQueue.shift();
+
+            try {
+                await this.waitForRateLimit();
+                const result = await this._executeRequest(request);
+                request.resolve(result);
+            } catch (error) {
+                request.reject(error);
+            }
+        }
+
+        this.isProcessing = false;
+    }
+
+    async _executeRequest(request, retryCount = 0) {
+        try {
+            this.checkAndResetDailyLimit();
+
+            // Check daily token limit
+            const estimatedTokens = this.estimateTokens(JSON.stringify(request.data));
+            if (this.dailyTokenCount + estimatedTokens > this.maxDailyTokens) {
+                throw new Error('Daily token limit reached');
+            }
+
+            // Execute request based on type
+            let result;
+            if (request.type === 'text') {
+                result = await this.model.generateContent(request.data);
+            } else if (request.type === 'multimodal') {
+                result = await this.model.generateContent(request.data);
+            }
+
+            // Update token count
+            this.dailyTokenCount += estimatedTokens;
+
+            return result.response.text();
+
+        } catch (error) {
+            console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
+
+            // Retry logic for rate limit or server errors
+            if (retryCount < this.maxRetries) {
+                const isRetryable =
+                    error.message.includes('429') ||
+                    error.message.includes('500') ||
+                    error.message.includes('503') ||
+                    error.message.includes('RATE_LIMIT');
+
+                if (isRetryable) {
+                    const backoffTime = Math.pow(2, retryCount) * 2000; // Exponential backoff
+                    console.log(`Retrying in ${backoffTime}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, backoffTime));
+                    return await this._executeRequest(request, retryCount + 1);
+                }
+            }
+
+            throw error;
+        }
+    }
+
+    // ========================================================================
+    // CONVERSATION HISTORY MANAGEMENT
+    // ========================================================================
+
+    addToHistory(role, content) {
+        this.conversationHistory.push({ role, content });
+
+        // Keep only recent history to avoid token overflow
+        if (this.conversationHistory.length > this.maxHistoryLength) {
+            this.conversationHistory = this.conversationHistory.slice(-this.maxHistoryLength);
+        }
+    }
+
+    clearHistory() {
+        this.conversationHistory = [];
+    }
+
+    getContextString() {
+        return this.conversationHistory
+            .map(entry => `${entry.role}: ${entry.content}`)
+            .join('\n\n');
+    }
+
+    // ========================================================================
+    // BASE REQUEST METHODS
+    // ========================================================================
+
+    async generateText(prompt, options = {}) {
+        return new Promise((resolve, reject) => {
+            const request = {
+                type: 'text',
+                data: prompt,
+                resolve,
+                reject
+            };
+
+            this.requestQueue.push(request);
+            this.processQueue();
+        });
+    }
+
+    async generateMultimodal(parts, options = {}) {
+        return new Promise((resolve, reject) => {
+            const request = {
+                type: 'multimodal',
+                data: parts,
+                resolve,
+                reject
+            };
+
+            this.requestQueue.push(request);
+            this.processQueue();
+        });
+    }
+
+    // ========================================================================
+    // PUBLIC API METHODS
+    // ========================================================================
+
+    /**
+     * Analyze screenshot with context
+     * @param {string} imageBase64 - Base64 encoded image
+     * @param {string} additionalContext - Additional context to provide
+     * @returns {Promise<string>} - AI analysis result
+     */
+    async analyzeScreenshot(imageBase64, additionalContext = '') {
+        const contextString = this.getContextString();
+        const prompt = PROMPTS.SCREENSHOT_ANALYSIS(contextString, additionalContext);
+
+        const parts = [
+            { text: prompt },
+            {
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: imageBase64
+                }
+            }
+        ];
+
+        const result = await this.generateMultimodal(parts);
+        this.addToHistory('assistant', `Screenshot analysis: ${result}`);
+        return result;
+    }
+
+    /**
+     * Suggest responses based on current context
+     * @param {string} context - Current situation description
+     * @returns {Promise<string>} - Suggested responses
+     */
+    async suggestResponse(context) {
+        const contextString = this.getContextString();
+        const prompt = PROMPTS.SUGGEST_RESPONSE(contextString, context);
+        const result = await this.generateText(prompt);
+        return result;
+    }
+
+    /**
+     * Generate meeting notes from conversation history
+     * @returns {Promise<string>} - Formatted meeting notes
+     */
+    async generateMeetingNotes() {
+        if (this.conversationHistory.length === 0) {
+            return 'No conversation history to summarize.';
+        }
+
+        const contextString = this.getContextString();
+        const prompt = PROMPTS.MEETING_NOTES(contextString);
+        const result = await this.generateText(prompt);
+        return result;
+    }
+
+    /**
+     * Generate a professional follow-up email
+     * @returns {Promise<string>} - Follow-up email content
+     */
+    async generateFollowUpEmail() {
+        if (this.conversationHistory.length === 0) {
+            return 'No conversation history to create email from.';
+        }
+
+        const contextString = this.getContextString();
+        const prompt = PROMPTS.FOLLOW_UP_EMAIL(contextString);
+        const result = await this.generateText(prompt);
+        return result;
+    }
+
+    /**
+     * Answer a specific question with context
+     * @param {string} question - The question to answer
+     * @returns {Promise<string>} - Answer to the question
+     */
+    async answerQuestion(question) {
+        const contextString = this.getContextString();
+        const prompt = PROMPTS.ANSWER_QUESTION(contextString, question);
+
+        const result = await this.generateText(prompt);
+        this.addToHistory('user', question);
+        this.addToHistory('assistant', result);
+        return result;
+    }
+
+    /**
+     * Get conversation insights and analysis
+     * @returns {Promise<string>} - Insights and analysis
+     */
+    async getConversationInsights() {
+        if (this.conversationHistory.length === 0) {
+            return 'Not enough conversation data for insights.';
+        }
+
+        const contextString = this.getContextString();
+        const prompt = PROMPTS.INSIGHTS(contextString);
         const result = await this.generateText(prompt);
         return result;
     }
 }
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
 
 module.exports = GeminiService;
