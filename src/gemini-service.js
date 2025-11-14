@@ -151,10 +151,10 @@ DO NOT provide solutions in C++, JavaScript, or any other programming languages.
    **Complexity:**
    Time: O(?) | Space: O(?)
 
-   **Solution (Python):** [or Java if requested]
-   ```python
-   # Complete, runnable code here
-   ```
+    **Solution (Python):** [or Java if requested]
+    \`\`\`python
+    # Complete, runnable code here
+    \`\`\`
 
    **Explanation:** (if helpful)
    Walk through example or key logic
@@ -168,10 +168,10 @@ DO NOT provide solutions in C++, JavaScript, or any other programming languages.
    **Root Cause:**
    The underlying issue
 
-   === CORRECTED CODE ===
-   ```python
-   # Complete, runnable fixed code here
-   ```
+    === CORRECTED CODE ===
+    \`\`\`python
+    # Complete, runnable fixed code here
+    \`\`\`
 
    **Changes Made:**
    What was fixed and why it works now
@@ -182,10 +182,10 @@ DO NOT provide solutions in C++, JavaScript, or any other programming languages.
    **Answer:**
    Clear explanation
 
-   **Example:** (if relevant)
-   ```python
-   # Code example
-   ```
+    **Example:** (if relevant)
+    \`\`\`python
+    # Code example
+    \`\`\`
 
    **Tips:** (if applicable)
    Best practices or important notes
