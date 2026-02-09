@@ -78,12 +78,9 @@ try {
       });
     },
 
-    convertAudio: (audioData) => {
-      console.log('PreloadAPI: convertAudio called');
-      return ipcRenderer.invoke('convert-audio', audioData).catch(err => {
-        console.error('PreloadAPI: convertAudio error:', err);
-        return null;
-      });
+    // Send raw PCM16 audio chunk to main process for AssemblyAI streaming
+    sendAudioChunk: (audioData) => {
+      ipcRenderer.send('audio-chunk', audioData);
     },
 
     // New Cluely-style features
@@ -372,6 +369,23 @@ try {
       };
     },
     
+    // Settings
+    getSettings: () => {
+      console.log('PreloadAPI: getSettings called');
+      return ipcRenderer.invoke('get-settings').catch(err => {
+        console.error('PreloadAPI: getSettings error:', err);
+        return { error: err.message };
+      });
+    },
+
+    saveSettings: (settings) => {
+      console.log('PreloadAPI: saveSettings called');
+      return ipcRenderer.invoke('save-settings', settings).catch(err => {
+        console.error('PreloadAPI: saveSettings error:', err);
+        return { success: false, error: err.message };
+      });
+    },
+
     // Close application
     closeApp: () => {
       console.log('PreloadAPI: closeApp called');

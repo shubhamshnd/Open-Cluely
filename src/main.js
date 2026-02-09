@@ -1,5 +1,5 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
-const { spawn } = require('child_process');
+const WebSocket = require('ws');
 
 const fs = require('fs');
 const os = require('os');
@@ -31,6 +31,7 @@ require('dotenv').config({ path: envPath });
 
 console.log('Loaded .env from:', envPath);
 console.log('GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ Found' : '❌ Missing');
+console.log('ASSEMBLY_AI_API_KEY:', process.env.ASSEMBLY_AI_API_KEY ? '✅ Found' : '❌ Missing');
 
 
 require('dotenv').config({ path: envPath });
@@ -44,9 +45,10 @@ let screenshots = [];
 let chatContext = [];
 const MAX_SCREENSHOTS = 3;
 
-// Vosk live transcription process
-let voskProcess = null;
-let isVoskRunning = false;
+// AssemblyAI streaming transcription
+let assemblyWs = null;
+let isStreamingSTT = false;
+const ASSEMBLY_AI_SAMPLE_RATE = 16000;
 
 // Initialize Gemini Service with rate limiting
 let geminiService = null;
@@ -55,8 +57,9 @@ try {
   if (!process.env.GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY not found in environment variables');
   } else {
-    console.log('Initializing Gemini AI Service with rate limiting...');
-    geminiService = new GeminiService(process.env.GEMINI_API_KEY);
+    const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+    console.log('Initializing Gemini AI Service with model:', geminiModel);
+    geminiService = new GeminiService(process.env.GEMINI_API_KEY, geminiModel);
     console.log('Gemini AI Service initialized successfully');
   }
 } catch (error) {
@@ -580,216 +583,277 @@ ipcMain.handle('close-app', () => {
   return { success: true };
 });
 
-// Start Vosk live transcription
+// Start AssemblyAI streaming transcription via WebSocket
 ipcMain.handle('start-voice-recognition', () => {
   console.log('IPC: start-voice-recognition called');
 
-  if (isVoskRunning) {
-    console.log('Vosk already running');
+  if (isStreamingSTT) {
+    console.log('AssemblyAI streaming already running');
     return { success: true, message: 'Already running' };
   }
 
+  const apiKey = process.env.ASSEMBLY_AI_API_KEY;
+  if (!apiKey) {
+    console.error('ASSEMBLY_AI_API_KEY not found');
+    mainWindow.webContents.send('vosk-error', { error: 'ASSEMBLY_AI_API_KEY not configured in .env' });
+    return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured' };
+  }
+
   try {
-    const pythonScript = isDevelopment()
-      ? path.join(__dirname, '..', 'vosk_live.py')
-      : path.join(process.resourcesPath, 'vosk_live.py');
-    console.log('Starting Vosk live transcription:', pythonScript);
+    const speechModel = process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english';
+    const queryParams = new URLSearchParams({
+      sample_rate: String(ASSEMBLY_AI_SAMPLE_RATE),
+      format_turns: 'true',
+      speech_model: speechModel
+    });
+    const wsUrl = `wss://streaming.assemblyai.com/v3/ws?${queryParams.toString()}`;
 
-    voskProcess = spawn('python', [pythonScript]);
-    isVoskRunning = true;
+    console.log('Connecting to AssemblyAI streaming API...');
+    mainWindow.webContents.send('vosk-status', {
+      status: 'loading',
+      message: 'Connecting to AssemblyAI...'
+    });
 
-    // Handle stdout (JSON transcription results)
-    voskProcess.stdout.on('data', (data) => {
-      const lines = data.toString().split('\n');
+    assemblyWs = new WebSocket(wsUrl, {
+      headers: { Authorization: apiKey }
+    });
 
-      lines.forEach(line => {
-        if (!line.trim()) return;
+    assemblyWs.on('open', () => {
+      console.log('AssemblyAI WebSocket connected');
+      isStreamingSTT = true;
+      // Don't send 'listening' yet - wait for Begin message
+    });
 
-        try {
-          const result = JSON.parse(line);
+    assemblyWs.on('message', (rawMessage) => {
+      try {
+        const msg = JSON.parse(rawMessage.toString());
 
-          switch (result.type) {
-            case 'status':
-              console.log(`Vosk status: ${result.status} - ${result.message}`);
-              mainWindow.webContents.send('vosk-status', result);
-              break;
+        switch (msg.type) {
+          case 'Begin':
+            console.log('AssemblyAI session started:', msg.id);
+            mainWindow.webContents.send('vosk-status', {
+              status: 'listening',
+              message: 'Listening via AssemblyAI...'
+            });
+            break;
 
-            case 'partial':
-              // Real-time partial result
-              mainWindow.webContents.send('vosk-partial', { text: result.text });
-              break;
+          case 'Turn':
+            if (msg.transcript) {
+              if (msg.end_of_turn) {
+                // Final result for this turn
+                console.log('AssemblyAI final:', msg.transcript);
+                mainWindow.webContents.send('vosk-final', { text: msg.transcript });
 
-            case 'final':
-              // Final transcription result
-              console.log('Vosk transcription:', result.text);
-              mainWindow.webContents.send('vosk-final', { text: result.text });
-
-              // Add to Gemini history
-              if (geminiService && result.text) {
-                geminiService.addToHistory('user', result.text);
+                // Add to Gemini history
+                if (geminiService && msg.transcript) {
+                  geminiService.addToHistory('user', msg.transcript);
+                }
+              } else {
+                // Partial / in-progress result
+                mainWindow.webContents.send('vosk-partial', { text: msg.transcript });
               }
-              break;
+            }
+            break;
 
-            case 'error':
-              console.error('Vosk error:', result.error);
-              mainWindow.webContents.send('vosk-error', { error: result.error });
-              break;
-          }
-        } catch (parseError) {
-          console.error('Failed to parse Vosk output:', line);
+          case 'Termination':
+            console.log('AssemblyAI session terminated. Audio duration:', msg.audio_duration_seconds, 's');
+            isStreamingSTT = false;
+            assemblyWs = null;
+            mainWindow.webContents.send('vosk-stopped');
+            break;
+
+          default:
+            console.log('AssemblyAI message:', msg.type);
+            break;
         }
-      });
+      } catch (parseError) {
+        console.error('Failed to parse AssemblyAI message:', parseError);
+      }
     });
 
-    voskProcess.stderr.on('data', (data) => {
-      console.error('Vosk stderr:', data.toString());
+    assemblyWs.on('error', (error) => {
+      console.error('AssemblyAI WebSocket error:', error.message);
+      mainWindow.webContents.send('vosk-error', { error: `AssemblyAI connection error: ${error.message}` });
+      isStreamingSTT = false;
+      assemblyWs = null;
     });
 
-    voskProcess.on('close', (code) => {
-      console.log('Vosk process exited with code:', code);
-      isVoskRunning = false;
-      voskProcess = null;
-      mainWindow.webContents.send('vosk-stopped');
-    });
-
-    voskProcess.on('error', (error) => {
-      console.error('Failed to start Vosk:', error.message);
-      isVoskRunning = false;
-      voskProcess = null;
-      return { success: false, error: 'Python or Vosk not installed. See SETUP-VOSK.md' };
+    assemblyWs.on('close', (code, reason) => {
+      console.log('AssemblyAI WebSocket closed:', code, reason?.toString());
+      if (isStreamingSTT) {
+        isStreamingSTT = false;
+        assemblyWs = null;
+        mainWindow.webContents.send('vosk-stopped');
+      }
     });
 
     return { success: true };
 
   } catch (error) {
-    console.error('Error starting Vosk:', error.message);
-    isVoskRunning = false;
+    console.error('Error starting AssemblyAI streaming:', error.message);
+    isStreamingSTT = false;
     return { success: false, error: error.message };
   }
 });
 
-// Stop Vosk live transcription (just pause, don't kill process)
+// Receive audio chunks from renderer and forward to AssemblyAI
+ipcMain.on('audio-chunk', (event, audioData) => {
+  if (assemblyWs && assemblyWs.readyState === WebSocket.OPEN) {
+    assemblyWs.send(Buffer.from(audioData));
+  }
+});
+
+// Stop AssemblyAI streaming transcription
 ipcMain.handle('stop-voice-recognition', () => {
   console.log('IPC: stop-voice-recognition called');
 
-  // Don't kill the process - just send a stop signal
-  // The Python script will keep running with model in memory
-  // and send a 'stopped' status
-
-  if (!isVoskRunning || !voskProcess) {
+  if (!isStreamingSTT || !assemblyWs) {
     return { success: true, message: 'Not running' };
   }
 
   try {
-    // Send stop command to Python process via stdin
-    // For now, just mark as stopped in renderer
-    // The Python process keeps running with model loaded
+    // Send graceful terminate message
+    if (assemblyWs.readyState === WebSocket.OPEN) {
+      assemblyWs.send(JSON.stringify({ type: 'Terminate' }));
+    }
+    // The WebSocket 'close' or 'Termination' message handler will clean up
+
     mainWindow.webContents.send('vosk-status', {
       status: 'stopped',
-      message: 'Paused listening'
+      message: 'Stopped listening'
     });
+
+    isStreamingSTT = false;
     return { success: true };
   } catch (error) {
-    console.error('Error stopping Vosk:', error.message);
+    console.error('Error stopping AssemblyAI:', error.message);
     return { success: false, error: error.message };
   }
 });
 
-// REMOVED: convert-audio handler - not needed with direct AudioContext approach!
-// The renderer will handle audio conversion directly using AudioContext.decodeAudioData()
-// This is much more reliable and simpler than FFmpeg
-
-// New Cluely-style feature handlers
-
-// Transcribe audio using Python Whisper subprocess (FAST & OFFLINE!)
-ipcMain.handle('transcribe-audio', async (event, base64Audio, mimeType) => {
+// Transcribe audio file using AssemblyAI async API
+ipcMain.handle('transcribe-audio', async (event, base64Audio) => {
   console.log('IPC: transcribe-audio called, size:', base64Audio.length);
 
-  const tmpDir = path.join(app.getPath('temp'), 'cluely-audio');
+  const apiKey = process.env.ASSEMBLY_AI_API_KEY;
+  if (!apiKey) {
+    return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured in .env' };
+  }
 
   try {
-    // Create temp directory
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir, { recursive: true });
-    }
-
-    // Save base64 audio to temp file
     const audioBuffer = Buffer.from(base64Audio, 'base64');
-    const tempAudioPath = path.join(tmpDir, `audio_${Date.now()}.webm`);
-    fs.writeFileSync(tempAudioPath, audioBuffer);
 
-    console.log('Saved temp audio:', tempAudioPath, audioBuffer.length, 'bytes');
+    // Step 1: Upload audio to AssemblyAI
+    console.log('Uploading audio to AssemblyAI...');
+    const https = require('https');
 
-    // Spawn Python process
-    return new Promise((resolve, reject) => {
-      const pythonScript = isDevelopment()
-        ? path.join(__dirname, '..', 'transcribe.py')
-        : path.join(process.resourcesPath, 'transcribe.py');
-      console.log('Running Python script:', pythonScript);
-
-      const python = spawn('python', [pythonScript, tempAudioPath]);
-
-      let output = '';
-      let errorOutput = '';
-
-      python.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      python.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      python.on('close', (code) => {
-        // Clean up temp file
-        try {
-          fs.unlinkSync(tempAudioPath);
-        } catch (e) {
-          console.error('Failed to delete temp file:', e);
+    const uploadUrl = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.assemblyai.com',
+        path: '/v2/upload',
+        method: 'POST',
+        headers: {
+          Authorization: apiKey,
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': audioBuffer.length
         }
-
-        if (code !== 0) {
-          console.error('Python exited with code:', code);
-          console.error('Error:', errorOutput);
-          resolve({ success: false, error: `Python error: ${errorOutput || 'Unknown error'}` });
-          return;
-        }
-
-        try {
-          const result = JSON.parse(output.trim());
-          console.log('Transcription:', result.text || result.error);
-
-          // Add to Gemini history if successful
-          if (result.success && result.text && geminiService) {
-            geminiService.addToHistory('user', result.text.trim());
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            if (result.upload_url) {
+              resolve(result.upload_url);
+            } else {
+              reject(new Error(result.error || 'Upload failed'));
+            }
+          } catch (e) {
+            reject(new Error('Failed to parse upload response'));
           }
-
-          resolve({
-            success: result.success,
-            transcript: result.text || '',
-            error: result.error
-          });
-
-        } catch (parseError) {
-          console.error('Failed to parse output:', output);
-          resolve({ success: false, error: 'Failed to parse result' });
-        }
-      });
-
-      python.on('error', (error) => {
-        console.error('Failed to start Python:', error.message);
-
-        // Clean up
-        try {
-          fs.unlinkSync(tempAudioPath);
-        } catch (e) {}
-
-        resolve({
-          success: false,
-          error: 'Python not found. Install Python and run: pip install openai-whisper'
         });
       });
+      req.on('error', reject);
+      req.write(audioBuffer);
+      req.end();
     });
+
+    console.log('Audio uploaded, creating transcript...');
+
+    // Step 2: Create transcript
+    const transcriptId = await new Promise((resolve, reject) => {
+      const body = JSON.stringify({ audio_url: uploadUrl, language_code: 'en' });
+      const req = https.request({
+        hostname: 'api.assemblyai.com',
+        path: '/v2/transcript',
+        method: 'POST',
+        headers: {
+          Authorization: apiKey,
+          'Content-Type': 'application/json'
+        }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            if (result.id) {
+              resolve(result.id);
+            } else {
+              reject(new Error(result.error || 'Transcript creation failed'));
+            }
+          } catch (e) {
+            reject(new Error('Failed to parse transcript response'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    console.log('Transcript created, polling for result...');
+
+    // Step 3: Poll for result
+    const pollTranscript = () => new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.assemblyai.com',
+        path: `/v2/transcript/${transcriptId}`,
+        method: 'GET',
+        headers: { Authorization: apiKey }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error('Failed to parse poll response'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    let transcript;
+    while (true) {
+      transcript = await pollTranscript();
+      if (transcript.status === 'completed') break;
+      if (transcript.status === 'error') {
+        throw new Error(transcript.error || 'Transcription failed');
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    console.log('Transcription complete:', transcript.text);
+
+    // Add to Gemini history
+    if (transcript.text && geminiService) {
+      geminiService.addToHistory('user', transcript.text.trim());
+    }
+
+    return { success: true, transcript: transcript.text || '' };
 
   } catch (error) {
     console.error('Error in transcribe-audio:', error.message);
@@ -906,6 +970,69 @@ ipcMain.handle('get-conversation-history', async () => {
     return { success: true, history: geminiService.conversationHistory };
   } catch (error) {
     console.error('Error getting history:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get current settings (API keys + models)
+ipcMain.handle('get-settings', () => {
+  return {
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+    assemblyAiApiKey: process.env.ASSEMBLY_AI_API_KEY || '',
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+    assemblyAiSpeechModel: process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english'
+  };
+});
+
+// Save settings to .env file and apply them
+ipcMain.handle('save-settings', async (event, settings) => {
+  console.log('IPC: save-settings called');
+  try {
+    // Build new .env content
+    const envContent = [
+      '# API Keys',
+      '# Get Gemini key at: https://makersuite.google.com/app/apikey',
+      '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
+      `GEMINI_API_KEY=${settings.geminiApiKey || ''}`,
+      `ASSEMBLY_AI_API_KEY=${settings.assemblyAiApiKey || ''}`,
+      '',
+      '# Model selection',
+      '# Gemini models: gemini-2.5-flash-lite, gemini-2.0-flash, gemini-1.5-pro, etc.',
+      `GEMINI_MODEL=${settings.geminiModel || 'gemini-2.5-flash-lite'}`,
+      '# AssemblyAI speech models: universal-streaming-english, universal-streaming-multilingual',
+      `ASSEMBLY_AI_SPEECH_MODEL=${settings.assemblyAiSpeechModel || 'universal-streaming-english'}`,
+      '',
+      '# Optional: Adjust screenshot settings',
+      `MAX_SCREENSHOTS=${process.env.MAX_SCREENSHOTS || '5'}`,
+      `SCREENSHOT_DELAY=${process.env.SCREENSHOT_DELAY || '300'}`,
+      '',
+      '# Optional: Development settings',
+      `NODE_ENV=${process.env.NODE_ENV || 'production'}`,
+      `NODE_OPTIONS=${process.env.NODE_OPTIONS || '--max-old-space-size=4096'}`,
+      ''
+    ].join('\n');
+
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    console.log('Settings saved to:', envPath);
+
+    // Apply to current process
+    process.env.GEMINI_API_KEY = settings.geminiApiKey || '';
+    process.env.ASSEMBLY_AI_API_KEY = settings.assemblyAiApiKey || '';
+    process.env.GEMINI_MODEL = settings.geminiModel || 'gemini-2.5-flash-lite';
+    process.env.ASSEMBLY_AI_SPEECH_MODEL = settings.assemblyAiSpeechModel || 'universal-streaming-english';
+
+    // Re-initialize Gemini service with new key/model
+    if (settings.geminiApiKey) {
+      const model = settings.geminiModel || 'gemini-2.5-flash-lite';
+      geminiService = new GeminiService(settings.geminiApiKey, model);
+      console.log('Gemini service re-initialized with model:', model);
+    } else {
+      geminiService = null;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving settings:', error);
     return { success: false, error: error.message };
   }
 });

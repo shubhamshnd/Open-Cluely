@@ -1,5 +1,5 @@
-// Renderer with Vosk Live Transcription - Real-time & Accurate!
-// Uses Vosk model vosk-model-en-us-0.22 for offline, accurate transcription
+// Renderer with AssemblyAI Streaming Transcription - Real-time & Accurate!
+// Uses AssemblyAI WebSocket API for live speech-to-text
 
 let screenshotsCount = 0;
 let isAnalyzing = false;
@@ -9,6 +9,11 @@ let isRecording = false;
 let chatMessagesArray = [];
 let currentPartialText = '';
 let lastPartialMessageDiv = null;
+
+// Audio capture state
+let audioContext = null;
+let mediaStream = null;
+let scriptProcessor = null;
 
 // DOM elements
 const statusText = document.getElementById('status-text');
@@ -33,6 +38,16 @@ const closeAppBtn = document.getElementById('close-app-btn');
 const suggestBtn = document.getElementById('suggest-btn');
 const notesBtn = document.getElementById('notes-btn');
 const insightsBtn = document.getElementById('insights-btn');
+
+// Settings elements
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const closeSettingsBtn = document.getElementById('close-settings');
+const saveSettingsBtn = document.getElementById('save-settings-btn');
+const settingGeminiKey = document.getElementById('setting-gemini-key');
+const settingGeminiModel = document.getElementById('setting-gemini-model');
+const settingAssemblyKey = document.getElementById('setting-assembly-key');
+const settingAssemblyModel = document.getElementById('setting-assembly-model');
 
 // Timer
 let startTime = Date.now();
@@ -64,10 +79,10 @@ async function init() {
     }
 
     console.log('Renderer initialized - Ready for live transcription!');
-    showFeedback('Vosk ready - click microphone to start real-time transcription', 'success');
+    showFeedback('Ready - click microphone to start real-time transcription', 'success');
 }
 
-// Start Vosk voice recognition
+// Start AssemblyAI voice recognition with browser audio capture
 async function startVoiceRecording() {
     if (isRecording) {
         console.log('Already recording');
@@ -75,36 +90,92 @@ async function startVoiceRecording() {
     }
 
     try {
-        console.log('Starting Vosk live transcription...');
+        console.log('Starting AssemblyAI live transcription...');
 
-        // Call main process to start Vosk Python process
+        // Step 1: Tell main process to open AssemblyAI WebSocket
         const result = await window.electronAPI.startVoiceRecognition();
 
         if (result && result.error) {
             throw new Error(result.error);
         }
 
+        // Step 2: Capture microphone audio in the browser
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                channelCount: 1,
+                sampleRate: 16000,
+                echoCancellation: true,
+                noiseSuppression: true
+            }
+        });
+
+        audioContext = new AudioContext({ sampleRate: 16000 });
+        const source = audioContext.createMediaStreamSource(mediaStream);
+
+        // Use ScriptProcessorNode to get raw PCM data
+        // Buffer size 4096 at 16kHz = ~256ms chunks (within AssemblyAI's 50-1000ms range)
+        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        scriptProcessor.onaudioprocess = (e) => {
+            if (!isRecording) return;
+            const float32Data = e.inputBuffer.getChannelData(0);
+
+            // Convert float32 [-1, 1] to int16 [-32768, 32767] (PCM16 little-endian)
+            const int16Data = new Int16Array(float32Data.length);
+            for (let i = 0; i < float32Data.length; i++) {
+                const s = Math.max(-1, Math.min(1, float32Data[i]));
+                int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+
+            // Send raw PCM16 bytes to main process → AssemblyAI WebSocket
+            window.electronAPI.sendAudioChunk(int16Data.buffer);
+        };
+
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+
         isRecording = true;
         updateVoiceUI();
 
         addChatMessage('system', 'Live transcription started - speak now!');
-        showFeedback('Listening with Vosk...', 'success');
+        showFeedback('Listening with AssemblyAI...', 'success');
 
     } catch (error) {
-        console.error('Failed to start Vosk:', error);
+        console.error('Failed to start transcription:', error);
         showFeedback(`Failed to start: ${error.message}`, 'error');
+        stopAudioCapture();
         isRecording = false;
         updateVoiceUI();
     }
 }
 
-// Stop Vosk voice recognition
+// Clean up audio capture resources
+function stopAudioCapture() {
+    if (scriptProcessor) {
+        scriptProcessor.disconnect();
+        scriptProcessor = null;
+    }
+    if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+    }
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+}
+
+// Stop AssemblyAI voice recognition
 async function stopVoiceRecording() {
     if (!isRecording) return;
 
     try {
-        console.log('Pausing Vosk transcription (model stays loaded)...');
+        console.log('Stopping AssemblyAI transcription...');
 
+        // Stop audio capture first
+        stopAudioCapture();
+
+        // Tell main process to close WebSocket
         await window.electronAPI.stopVoiceRecognition();
 
         isRecording = false;
@@ -117,12 +188,12 @@ async function stopVoiceRecording() {
         }
         currentPartialText = '';
 
-        addChatMessage('system', 'Paused - Click mic to resume');
-        showFeedback('Paused (model ready)', 'info');
+        addChatMessage('system', 'Stopped - Click mic to resume');
+        showFeedback('Stopped', 'info');
 
     } catch (error) {
-        console.error('Failed to pause Vosk:', error);
-        showFeedback('Pause failed', 'error');
+        console.error('Failed to stop transcription:', error);
+        showFeedback('Stop failed', 'error');
     }
 }
 
@@ -367,6 +438,53 @@ async function getConversationInsights() {
     }
 }
 
+// SETTINGS FUNCTIONS
+
+async function openSettings() {
+    if (!settingsPanel) return;
+
+    try {
+        const settings = await window.electronAPI.getSettings();
+        if (settings && !settings.error) {
+            if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
+            if (settingGeminiModel) settingGeminiModel.value = settings.geminiModel || 'gemini-2.5-flash-lite';
+            if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
+            if (settingAssemblyModel) settingAssemblyModel.value = settings.assemblyAiSpeechModel || 'universal-streaming-english';
+        }
+    } catch (error) {
+        console.error('Failed to load settings:', error);
+    }
+
+    settingsPanel.classList.remove('hidden');
+}
+
+function closeSettings() {
+    if (settingsPanel) settingsPanel.classList.add('hidden');
+}
+
+async function saveSettings() {
+    try {
+        const settings = {
+            geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
+            assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
+            geminiModel: settingGeminiModel ? settingGeminiModel.value : 'gemini-2.5-flash-lite',
+            assemblyAiSpeechModel: settingAssemblyModel ? settingAssemblyModel.value : 'universal-streaming-english'
+        };
+
+        const result = await window.electronAPI.saveSettings(settings);
+
+        if (result.success) {
+            showFeedback('Settings saved! Restart voice to apply.', 'success');
+            closeSettings();
+        } else {
+            showFeedback(`Failed to save: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Failed to save settings:', error);
+        showFeedback('Failed to save settings', 'error');
+    }
+}
+
 // UI Helper functions
 function setAnalyzing(analyzing) {
     isAnalyzing = analyzing;
@@ -545,6 +663,11 @@ function setupEventListeners() {
     if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
     if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
 
+    // Settings buttons
+    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
+    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.altKey && e.shiftKey) {
@@ -624,35 +747,18 @@ function setupIpcListeners() {
         showFeedback(message, 'error');
     });
 
-    // Vosk live transcription event listeners
+    // AssemblyAI streaming transcription event listeners
     window.electronAPI.onVoskStatus((data) => {
-        console.log('Vosk status:', data.status, '-', data.message);
+        console.log('STT status:', data.status, '-', data.message);
 
         switch (data.status) {
-            case 'downloading':
-                showLoadingOverlay(`Downloading Vosk model...<br><small>${data.message}</small>`);
-                showFeedback(`Downloading model... ${data.message}`, 'info');
-                break;
-            case 'extracting':
-                showLoadingOverlay('Extracting model...<br><small>Almost ready!</small>');
-                showFeedback('Extracting model...', 'info');
-                break;
             case 'loading':
-                showLoadingOverlay('Loading Vosk AI model...<br><small>This may take 10-30 seconds</small>');
-                showFeedback('Loading Vosk model...', 'info');
-                break;
-            case 'ready':
-                hideLoadingOverlay();
-                showFeedback('✓ Model loaded! Click mic again to start speaking', 'success');
-                // Keep button in "ready to record" state
-                if (voiceToggle) {
-                    voiceToggle.classList.remove('active');
-                    voiceToggle.style.background = 'rgba(52, 199, 89, 0.2)';
-                }
+                showLoadingOverlay('Connecting to AssemblyAI...<br><small>Setting up live transcription</small>');
+                showFeedback('Connecting to AssemblyAI...', 'info');
                 break;
             case 'listening':
                 hideLoadingOverlay();
-                showFeedback('🎤 Listening... Speak now!', 'success');
+                showFeedback('Listening... Speak now!', 'success');
                 if (voiceToggle) {
                     voiceToggle.classList.add('active');
                     voiceToggle.style.background = 'rgba(255, 59, 48, 0.3)';
@@ -678,11 +784,12 @@ function setupIpcListeners() {
     });
 
     window.electronAPI.onVoskError((data) => {
-        console.error('Vosk error:', data.error);
-        showFeedback(`Vosk error: ${data.error}`, 'error');
-        addChatMessage('system', `Vosk error: ${data.error}`);
+        console.error('STT error:', data.error);
+        showFeedback(`STT error: ${data.error}`, 'error');
+        addChatMessage('system', `Transcription error: ${data.error}`);
 
         // Stop recording on error
+        stopAudioCapture();
         if (isRecording) {
             isRecording = false;
             updateVoiceUI();
@@ -693,7 +800,8 @@ function setupIpcListeners() {
     });
 
     window.electronAPI.onVoskStopped(() => {
-        console.log('Vosk stopped');
+        console.log('STT stopped');
+        stopAudioCapture();
         if (isRecording) {
             isRecording = false;
             updateVoiceUI();

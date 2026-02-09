@@ -13,10 +13,11 @@
     "@google/generative-ai": "^0.2.1",
     "dotenv": "^16.3.1",
     "node-window-manager": "^2.2.4",
-    "screenshot-desktop": "^1.15.0"
+    "screenshot-desktop": "^1.15.0",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
+    "electron": "^28.3.3",
     "electron-builder": "^24.0.0",
     "esbuild": "^0.25.6"
   },
@@ -32,9 +33,7 @@
       "node_modules/**/*",
       "!node_modules/.cache/**/*",
       "!.git/**/*",
-      "!dist/**/*",
-      "vosk_live.py",
-      "transcribe.py"
+      "!dist/**/*"
     ],
     "asarUnpack": [
       "node_modules/screenshot-desktop/**/*",
@@ -44,16 +43,6 @@
       {
         "from": ".env",
         "to": ".env"
-      },
-      {
-        "from": "vosk_live.py",
-        "to": "vosk_live.py",
-        "filter": ["**/*"]
-      },
-      {
-        "from": "transcribe.py",
-        "to": "transcribe.py",
-        "filter": ["**/*"]
       }
     ],
     "mac": {
@@ -64,7 +53,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/chrome.ico",

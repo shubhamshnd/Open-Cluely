@@ -61,6 +61,12 @@
             </svg>
           </button>
 
+          <button id="settings-btn" class="action-btn settings-btn" title="Settings">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
+            </svg>
+          </button>
+
           <button id="hide-btn" class="action-btn hide-btn" title="Emergency Hide (Ctrl+Alt+Shift+X)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
@@ -110,6 +116,46 @@
       </div>
     </div>
     
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="settings-panel hidden">
+      <div class="settings-header">
+        <span class="settings-title">Settings</span>
+        <button id="close-settings" class="close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-group">
+          <label class="settings-label">Gemini API Key</label>
+          <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key..." />
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">Gemini Model</label>
+          <select id="setting-gemini-model" class="settings-input">
+            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+          </select>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">AssemblyAI API Key</label>
+          <input type="password" id="setting-assembly-key" class="settings-input" placeholder="Enter AssemblyAI API key..." />
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">AssemblyAI Speech Model</label>
+          <select id="setting-assembly-model" class="settings-input">
+            <option value="universal-streaming-english">English (universal-streaming-english)</option>
+            <option value="universal-streaming-multilingual">Multilingual (universal-streaming-multilingual)</option>
+          </select>
+        </div>
+        <button id="save-settings-btn" class="save-settings-btn">Save Settings</button>
+      </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay hidden">
       <div class="loading-content">

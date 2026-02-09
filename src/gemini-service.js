@@ -325,8 +325,9 @@ Include:
 // ============================================================================
 
 class GeminiService {
-    constructor(apiKey) {
+    constructor(apiKey, modelName) {
         this.genAI = new GoogleGenerativeAI(apiKey);
+        this.modelName = modelName || 'gemini-2.5-flash-lite';
 
         // Initialize the model (try fallback if needed)
         this._initializeModel();
@@ -354,13 +355,14 @@ class GeminiService {
 
     _initializeModel() {
         try {
+            console.log('Initializing Gemini model:', this.modelName);
             this.model = this.genAI.getGenerativeModel({
-                model: "gemini-2.5-flash-lite"
+                model: this.modelName
             });
         } catch (error) {
-            console.warn('Primary model failed, using fallback:', error);
+            console.warn('Primary model failed, using fallback gemini-2.5-flash-lite:', error);
             this.model = this.genAI.getGenerativeModel({
-                model: "gemini-2.5-flash-lite"
+                model: 'gemini-2.5-flash-lite'
             });
         }
     }
