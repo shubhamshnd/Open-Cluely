@@ -72,6 +72,7 @@ let geminiService = null;
 let activeGeminiModel = DEFAULT_GEMINI_MODEL;
 let activeAssemblyAiSpeechModel = DEFAULT_ASSEMBLY_AI_SPEECH_MODEL;
 let appState = null;
+let isShuttingDown = false;
 
 function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
   activeGeminiModel = resolveGeminiModel(modelName);
@@ -115,6 +116,51 @@ function loadPersistedAppState() {
   console.log('Loaded app state from:', getAppStatePath(app));
   console.log('Restored Gemini model from app state:', activeGeminiModel);
   console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
+}
+
+function cleanupTransientResources() {
+  if (assemblyWs) {
+    try {
+      if (assemblyWs.readyState === WebSocket.OPEN) {
+        assemblyWs.send(JSON.stringify({ type: 'Terminate' }));
+      }
+
+      assemblyWs.terminate();
+    } catch (error) {
+      console.error('Error cleaning up AssemblyAI WebSocket:', error);
+    }
+
+    assemblyWs = null;
+  }
+
+  isStreamingSTT = false;
+  globalShortcut.unregisterAll();
+
+  screenshots.forEach((screenshotPath) => {
+    if (fs.existsSync(screenshotPath)) {
+      fs.unlinkSync(screenshotPath);
+    }
+  });
+
+  screenshots = [];
+}
+
+function quitApplication() {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  cleanupTransientResources();
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setClosable(true);
+    mainWindow.destroy();
+  }
+
+  setTimeout(() => {
+    app.exit(0);
+  }, 50);
 }
 
 function clamp(value, min, max) {
@@ -699,7 +745,9 @@ ipcMain.handle('clear-stealth', () => {
 
 ipcMain.handle('close-app', () => {
   console.log('IPC: close-app called');
-  app.quit();
+  setTimeout(() => {
+    quitApplication();
+  }, 0);
   return { success: true };
 });
 
@@ -1205,11 +1253,7 @@ app.on('activate', () => {
 });
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-  
-  screenshots.forEach(path => {
-    if (fs.existsSync(path)) fs.unlinkSync(path);
-  });
+  cleanupTransientResources();
 });
 
 app.on('web-contents-created', (event, contents) => {
