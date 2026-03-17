@@ -35,6 +35,9 @@ const hideBtn = document.getElementById('hide-btn');
 const copyBtn = document.getElementById('copy-btn');
 const closeResultsBtn = document.getElementById('close-results');
 const closeAppBtn = document.getElementById('close-app-btn');
+const closeConfirmationDialog = document.getElementById('close-confirmation-dialog');
+const cancelCloseBtn = document.getElementById('cancel-close-btn');
+const confirmCloseBtn = document.getElementById('confirm-close-btn');
 
 // New Cluely-style buttons
 const suggestBtn = document.getElementById('suggest-btn');
@@ -62,6 +65,7 @@ let activeWindowResize = null;
 let pendingWindowBounds = null;
 let windowResizeFrame = null;
 let activeChatResize = null;
+let isCloseConfirmationOpen = false;
 
 // Initialize
 async function init() {
@@ -565,6 +569,27 @@ async function emergencyHide() {
     }
 }
 
+function openCloseConfirmation() {
+    if (!closeConfirmationDialog) {
+        closeApplication();
+        return;
+    }
+
+    isCloseConfirmationOpen = true;
+    closeConfirmationDialog.classList.remove('hidden');
+    confirmCloseBtn?.focus();
+}
+
+function closeCloseConfirmation() {
+    if (!closeConfirmationDialog) {
+        return;
+    }
+
+    isCloseConfirmationOpen = false;
+    closeConfirmationDialog.classList.add('hidden');
+    closeAppBtn?.focus();
+}
+
 async function closeApplication() {
     try {
         console.log('Closing application...');
@@ -940,7 +965,16 @@ function setupEventListeners() {
     if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
     if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
     if (voiceToggle) voiceToggle.addEventListener('click', toggleVoiceRecognition);
-    if (closeAppBtn) closeAppBtn.addEventListener('click', closeApplication);
+    if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
+    if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
+    if (closeConfirmationDialog) {
+        closeConfirmationDialog.addEventListener('click', (event) => {
+            if (event.target === closeConfirmationDialog) {
+                closeCloseConfirmation();
+            }
+        });
+    }
 
     // New feature buttons
     if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
@@ -954,6 +988,20 @@ function setupEventListeners() {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
+        if (isCloseConfirmationOpen) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeCloseConfirmation();
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                closeApplication();
+                return;
+            }
+        }
+
         if (e.ctrlKey && e.altKey && e.shiftKey) {
             switch (e.key.toLowerCase()) {
                 case 'h':

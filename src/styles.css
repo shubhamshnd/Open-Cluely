@@ -1044,6 +1044,92 @@ body.chat-resizing * {
   display: none;
 }
 
+.close-confirmation {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(18px);
+  border-radius: 12px;
+  z-index: 260;
+}
+
+.close-confirmation.hidden {
+  display: none;
+}
+
+.close-confirmation-card {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(24px);
+}
+
+.close-confirmation-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.86);
+}
+
+.close-confirmation-text {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.72);
+}
+
+.close-confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.close-confirmation-btn {
+  min-width: 88px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.close-confirmation-btn-secondary {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: rgba(0, 0, 0, 0.76);
+}
+
+.close-confirmation-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.close-confirmation-btn-danger {
+  background: rgba(255, 59, 48, 0.84);
+  border-color: rgba(255, 59, 48, 0.92);
+  color: #fff;
+}
+
+.close-confirmation-btn-danger:hover {
+  background: rgba(220, 38, 38, 0.92);
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.24);
+}
+
+.close-confirmation-btn:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline-offset: 2px;
+}
+
 .settings-header {
   display: flex;
   justify-content: space-between;
