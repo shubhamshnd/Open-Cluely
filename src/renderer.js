@@ -24,7 +24,9 @@ const loadingOverlay = document.getElementById('loading-overlay');
 const emergencyOverlay = document.getElementById('emergency-overlay');
 const chatContainer = document.getElementById('chat-container');
 const chatMessagesElement = document.getElementById('chat-messages');
+const chatResizeHandle = document.getElementById('chat-resize-handle');
 const voiceToggle = document.getElementById('voice-toggle');
+const windowResizeHandles = document.querySelectorAll('[data-resize-handle]');
 
 const screenshotBtn = document.getElementById('screenshot-btn');
 const analyzeBtn = document.getElementById('analyze-btn');
@@ -52,6 +54,14 @@ const settingAssemblyModel = document.getElementById('setting-assembly-model');
 // Timer
 let startTime = Date.now();
 let timerInterval;
+const MIN_WINDOW_WIDTH = 600;
+const MIN_WINDOW_HEIGHT = 250;
+const MIN_CHAT_HEIGHT = 150;
+
+let activeWindowResize = null;
+let pendingWindowBounds = null;
+let windowResizeFrame = null;
+let activeChatResize = null;
 
 // Initialize
 async function init() {
@@ -66,6 +76,7 @@ async function init() {
 
     setupEventListeners();
     setupIpcListeners();
+    setupWindowAdjustments();
     updateUI();
     startTimer();
     stealthModeActive = false;
@@ -80,6 +91,220 @@ async function init() {
 
     console.log('Renderer initialized - Ready for live transcription!');
     showFeedback('Ready - click microphone to start real-time transcription', 'success');
+}
+
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function setupWindowAdjustments() {
+    setupWindowResizeHandles();
+    setupChatResizeHandle();
+}
+
+function setupWindowResizeHandles() {
+    if (!window.electronAPI || !windowResizeHandles.length) {
+        return;
+    }
+
+    windowResizeHandles.forEach((handle) => {
+        handle.addEventListener('pointerdown', startWindowResize);
+    });
+}
+
+async function startWindowResize(event) {
+    if (!window.electronAPI?.getWindowBounds || !window.electronAPI?.setWindowBounds) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handleElement = event.currentTarget;
+    if (!handleElement) {
+        return;
+    }
+
+    const direction = handleElement.dataset.resizeHandle;
+    const pointerId = event.pointerId;
+    const startScreenX = event.screenX;
+    const startScreenY = event.screenY;
+    const startBounds = await window.electronAPI.getWindowBounds();
+    if (!startBounds || startBounds.error) {
+        console.error('Failed to get initial window bounds:', startBounds?.error);
+        return;
+    }
+
+    activeWindowResize = {
+        direction,
+        pointerId,
+        startScreenX,
+        startScreenY,
+        startBounds,
+        handleElement
+    };
+
+    document.body.classList.add('window-resizing');
+    handleElement.setPointerCapture?.(pointerId);
+
+    document.addEventListener('pointermove', onWindowResizeMove);
+    document.addEventListener('pointerup', stopWindowResize);
+    document.addEventListener('pointercancel', stopWindowResize);
+}
+
+function onWindowResizeMove(event) {
+    if (!activeWindowResize || event.pointerId !== activeWindowResize.pointerId) {
+        return;
+    }
+
+    event.preventDefault();
+
+    const deltaX = event.screenX - activeWindowResize.startScreenX;
+    const deltaY = event.screenY - activeWindowResize.startScreenY;
+    const nextBounds = calculateWindowResizeBounds(
+        activeWindowResize.startBounds,
+        activeWindowResize.direction,
+        deltaX,
+        deltaY
+    );
+
+    scheduleWindowResize(nextBounds);
+}
+
+function calculateWindowResizeBounds(startBounds, direction, deltaX, deltaY) {
+    let { x, y, width, height } = startBounds;
+
+    if (direction.includes('e')) {
+        width = Math.max(MIN_WINDOW_WIDTH, startBounds.width + deltaX);
+    }
+
+    if (direction.includes('s')) {
+        height = Math.max(MIN_WINDOW_HEIGHT, startBounds.height + deltaY);
+    }
+
+    if (direction.includes('w')) {
+        const nextWidth = Math.max(MIN_WINDOW_WIDTH, startBounds.width - deltaX);
+        x = startBounds.x + (startBounds.width - nextWidth);
+        width = nextWidth;
+    }
+
+    if (direction.includes('n')) {
+        const nextHeight = Math.max(MIN_WINDOW_HEIGHT, startBounds.height - deltaY);
+        y = startBounds.y + (startBounds.height - nextHeight);
+        height = nextHeight;
+    }
+
+    return {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height)
+    };
+}
+
+function scheduleWindowResize(bounds) {
+    pendingWindowBounds = bounds;
+    if (windowResizeFrame) {
+        return;
+    }
+
+    windowResizeFrame = window.requestAnimationFrame(async () => {
+        windowResizeFrame = null;
+        const nextBounds = pendingWindowBounds;
+        pendingWindowBounds = null;
+
+        if (!nextBounds) {
+            return;
+        }
+
+        const result = await window.electronAPI.setWindowBounds(nextBounds);
+        if (result && result.error) {
+            console.error('Failed to set window bounds:', result.error);
+        }
+    });
+}
+
+function stopWindowResize(event) {
+    if (!activeWindowResize) {
+        return;
+    }
+
+    if (event.pointerId && event.pointerId !== activeWindowResize.pointerId) {
+        return;
+    }
+
+    activeWindowResize.handleElement?.releasePointerCapture?.(activeWindowResize.pointerId);
+    activeWindowResize = null;
+    pendingWindowBounds = null;
+
+    if (windowResizeFrame) {
+        window.cancelAnimationFrame(windowResizeFrame);
+        windowResizeFrame = null;
+    }
+
+    document.body.classList.remove('window-resizing');
+    document.removeEventListener('pointermove', onWindowResizeMove);
+    document.removeEventListener('pointerup', stopWindowResize);
+    document.removeEventListener('pointercancel', stopWindowResize);
+}
+
+function setupChatResizeHandle() {
+    if (!chatContainer || !chatResizeHandle) {
+        return;
+    }
+
+    chatResizeHandle.addEventListener('pointerdown', startChatResize);
+}
+
+function startChatResize(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    activeChatResize = {
+        pointerId: event.pointerId,
+        startClientY: event.clientY,
+        startHeight: chatContainer.getBoundingClientRect().height
+    };
+
+    document.body.classList.add('chat-resizing');
+    chatResizeHandle.setPointerCapture?.(event.pointerId);
+
+    document.addEventListener('pointermove', onChatResizeMove);
+    document.addEventListener('pointerup', stopChatResize);
+    document.addEventListener('pointercancel', stopChatResize);
+}
+
+function onChatResizeMove(event) {
+    if (!activeChatResize || event.pointerId !== activeChatResize.pointerId) {
+        return;
+    }
+
+    event.preventDefault();
+
+    const deltaY = event.clientY - activeChatResize.startClientY;
+    const mainInterface = document.querySelector('.main-interface');
+    const reservedHeight = (mainInterface?.getBoundingClientRect().height || 0) + 56;
+    const maxChatHeight = Math.max(MIN_CHAT_HEIGHT, window.innerHeight - reservedHeight);
+    const nextHeight = clamp(activeChatResize.startHeight + deltaY, MIN_CHAT_HEIGHT, maxChatHeight);
+
+    chatContainer.style.height = `${Math.round(nextHeight)}px`;
+}
+
+function stopChatResize(event) {
+    if (!activeChatResize) {
+        return;
+    }
+
+    if (event.pointerId && event.pointerId !== activeChatResize.pointerId) {
+        return;
+    }
+
+    chatResizeHandle.releasePointerCapture?.(activeChatResize.pointerId);
+    activeChatResize = null;
+    document.body.classList.remove('chat-resizing');
+    document.removeEventListener('pointermove', onChatResizeMove);
+    document.removeEventListener('pointerup', stopChatResize);
+    document.removeEventListener('pointercancel', stopChatResize);
 }
 
 // Start AssemblyAI voice recognition with browser audio capture

@@ -61,6 +61,21 @@ try {
         return 0;
       });
     },
+
+    getWindowBounds: () => {
+      console.log('PreloadAPI: getWindowBounds called');
+      return ipcRenderer.invoke('get-window-bounds').catch(err => {
+        console.error('PreloadAPI: getWindowBounds error:', err);
+        return { error: err.message };
+      });
+    },
+
+    setWindowBounds: (bounds) => {
+      return ipcRenderer.invoke('set-window-bounds', bounds).catch(err => {
+        console.error('PreloadAPI: setWindowBounds error:', err);
+        return { error: err.message };
+      });
+    },
     
     // Voice functionality
     startVoiceRecognition: () => {

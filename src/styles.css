@@ -97,39 +97,93 @@ body {
   transform: scale(0.95);
 }
 
-/* RESIZE HANDLES - Visual indicators for resizing */
-.glass-container::after {
-  content: '';
+/* WINDOW RESIZE HANDLES */
+.window-resize-handle {
   position: absolute;
+  z-index: 25;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.resize-handle-n,
+.resize-handle-s {
+  left: 16px;
+  right: 16px;
+  height: 8px;
+}
+
+.resize-handle-e,
+.resize-handle-w {
+  top: 16px;
+  bottom: 16px;
+  width: 8px;
+}
+
+.resize-handle-n {
+  top: 0;
+  cursor: ns-resize;
+}
+
+.resize-handle-s {
   bottom: 0;
+  cursor: ns-resize;
+}
+
+.resize-handle-e {
   right: 0;
-  width: 20px;
-  height: 20px;
-  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.5) 50%);
-  border-radius: 0 0 12px 0;
-  cursor: nwse-resize;
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
+  cursor: ew-resize;
 }
 
-.glass-container::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
+.resize-handle-w {
   left: 0;
-  width: 20px;
-  height: 20px;
-  background: linear-gradient(225deg, transparent 50%, rgba(59, 130, 246, 0.5) 50%);
-  border-radius: 0 0 0 12px;
-  cursor: nesw-resize;
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
+  cursor: ew-resize;
 }
 
-/* Additional resize hint on hover */
-.glass-container:hover::after,
-.glass-container:hover::before {
-  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.8) 50%);
+.resize-handle-ne,
+.resize-handle-se,
+.resize-handle-sw,
+.resize-handle-nw {
+  width: 18px;
+  height: 18px;
+}
+
+.resize-handle-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+  background: linear-gradient(225deg, transparent 50%, rgba(59, 130, 246, 0.45) 50%);
+  border-radius: 0 12px 0 0;
+}
+
+.resize-handle-se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.45) 50%);
+  border-radius: 0 0 12px 0;
+}
+
+.resize-handle-sw {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+  background: linear-gradient(225deg, rgba(59, 130, 246, 0.45) 50%, transparent 50%);
+  border-radius: 0 0 0 12px;
+}
+
+.resize-handle-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.45) 50%, transparent 50%);
+  border-radius: 12px 0 0 0;
+}
+
+.glass-container:hover .resize-handle-ne,
+.glass-container:hover .resize-handle-se,
+.glass-container:hover .resize-handle-sw,
+.glass-container:hover .resize-handle-nw {
+  filter: brightness(1.25);
 }
 
 /* COMPACT LAYOUT - HORIZONTAL */
@@ -349,14 +403,11 @@ body {
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
-  overflow: visible;
+  overflow: hidden;
   position: relative;
-  resize: vertical;
 }
 
-/* Visual resize handle at bottom of chat */
-.chat-container::after {
-  content: '';
+.chat-resize-handle {
   position: absolute;
   bottom: 0;
   left: 50%;
@@ -370,9 +421,39 @@ body {
   z-index: 100;
 }
 
-.chat-container:hover::after {
+.chat-container:hover .chat-resize-handle {
   background: rgba(59, 130, 246, 0.7);
   height: 10px;
+}
+
+body.window-resizing,
+body.window-resizing * {
+  cursor: default !important;
+}
+
+body.window-resizing .resize-handle-n,
+body.window-resizing .resize-handle-s {
+  cursor: ns-resize !important;
+}
+
+body.window-resizing .resize-handle-e,
+body.window-resizing .resize-handle-w {
+  cursor: ew-resize !important;
+}
+
+body.window-resizing .resize-handle-ne,
+body.window-resizing .resize-handle-sw {
+  cursor: nesw-resize !important;
+}
+
+body.window-resizing .resize-handle-nw,
+body.window-resizing .resize-handle-se {
+  cursor: nwse-resize !important;
+}
+
+body.chat-resizing,
+body.chat-resizing * {
+  cursor: ns-resize !important;
 }
 
 .chat-header {

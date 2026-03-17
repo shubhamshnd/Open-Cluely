@@ -44,6 +44,10 @@ let mainWindow;
 let screenshots = [];
 let chatContext = [];
 const MAX_SCREENSHOTS = 3;
+const WINDOW_DEFAULT_WIDTH = 900;
+const WINDOW_DEFAULT_HEIGHT = 400;
+const WINDOW_MIN_WIDTH = 600;
+const WINDOW_MIN_HEIGHT = 250;
 
 // AssemblyAI streaming transcription
 let assemblyWs = null;
@@ -66,13 +70,63 @@ try {
   console.error('Failed to initialize Gemini AI Service:', error);
 }
 
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function parseBooleanEnv(name, defaultValue) {
+  const rawValue = process.env[name];
+
+  if (rawValue == null || rawValue === '') {
+    return defaultValue;
+  }
+
+  const normalized = String(rawValue).trim().toLowerCase();
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
+function getSafeWindowBounds(nextBounds = {}) {
+  const currentBounds = mainWindow ? mainWindow.getBounds() : {
+    x: 0,
+    y: 0,
+    width: WINDOW_DEFAULT_WIDTH,
+    height: WINDOW_DEFAULT_HEIGHT
+  };
+
+  const rawBounds = {
+    x: Number.isFinite(nextBounds.x) ? Math.round(nextBounds.x) : currentBounds.x,
+    y: Number.isFinite(nextBounds.y) ? Math.round(nextBounds.y) : currentBounds.y,
+    width: Number.isFinite(nextBounds.width) ? Math.round(nextBounds.width) : currentBounds.width,
+    height: Number.isFinite(nextBounds.height) ? Math.round(nextBounds.height) : currentBounds.height
+  };
+
+  const display = screen.getDisplayMatching(rawBounds);
+  const workArea = display && display.workArea ? display.workArea : screen.getPrimaryDisplay().workArea;
+
+  const width = clamp(rawBounds.width, WINDOW_MIN_WIDTH, workArea.width);
+  const height = clamp(rawBounds.height, WINDOW_MIN_HEIGHT, workArea.height);
+  const x = clamp(rawBounds.x, workArea.x, workArea.x + workArea.width - width);
+  const y = clamp(rawBounds.y, workArea.y, workArea.y + workArea.height - height);
+
+  return { x, y, width, height };
+}
+
 function createStealthWindow() {
   console.log('Creating stealth window...');
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   // Short and wide window dimensions (resizable)
-  const windowWidth = 900;
-  const windowHeight = 400;
+  const windowWidth = WINDOW_DEFAULT_WIDTH;
+  const windowHeight = WINDOW_DEFAULT_HEIGHT;
   const x = Math.floor((width - windowWidth) / 2);
   const y = 40;
 
@@ -81,8 +135,8 @@ function createStealthWindow() {
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
-    minWidth: 600,
-    minHeight: 250,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     maxWidth: width,
     maxHeight: height,
     x: x,
@@ -173,9 +227,10 @@ function createStealthWindow() {
       relaunchDisplayName: ''
     });
   }
-  
-  mainWindow.setContentProtection(true);
-  console.log('Content protection enabled for stealth');
+
+  const hideFromScreenCapture = parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true);
+  mainWindow.setContentProtection(hideFromScreenCapture);
+  console.log(`Content protection ${hideFromScreenCapture ? 'enabled' : 'disabled'} (HIDE_FROM_SCREEN_CAPTURE=${hideFromScreenCapture})`);
   
   mainWindow.setIgnoreMouseEvents(false);
   
@@ -536,6 +591,24 @@ async function analyzeForMeeting() {
 ipcMain.handle('get-screenshots-count', () => {
   console.log('IPC: get-screenshots-count called, returning:', screenshots.length);
   return screenshots.length;
+});
+
+ipcMain.handle('get-window-bounds', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { error: 'Main window not available' };
+  }
+
+  return mainWindow.getBounds();
+});
+
+ipcMain.handle('set-window-bounds', (event, nextBounds) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { error: 'Main window not available' };
+  }
+
+  const safeBounds = getSafeWindowBounds(nextBounds);
+  mainWindow.setBounds(safeBounds, false);
+  return mainWindow.getBounds();
 });
 
 ipcMain.handle('toggle-stealth', () => {
@@ -980,7 +1053,8 @@ ipcMain.handle('get-settings', () => {
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     assemblyAiApiKey: process.env.ASSEMBLY_AI_API_KEY || '',
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
-    assemblyAiSpeechModel: process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english'
+    assemblyAiSpeechModel: process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english',
+    hideFromScreenCapture: parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true)
   };
 });
 
@@ -1001,6 +1075,11 @@ ipcMain.handle('save-settings', async (event, settings) => {
       `GEMINI_MODEL=${settings.geminiModel || 'gemini-2.5-flash-lite'}`,
       '# AssemblyAI speech models: universal-streaming-english, universal-streaming-multilingual',
       `ASSEMBLY_AI_SPEECH_MODEL=${settings.assemblyAiSpeechModel || 'universal-streaming-english'}`,
+      '',
+      '# Capture behavior',
+      '# true = hide this app from screen sharing/screen capture',
+      '# false = allow this app to appear in screen sharing/screen capture',
+      `HIDE_FROM_SCREEN_CAPTURE=${parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true)}`,
       '',
       '# Optional: Adjust screenshot settings',
       `MAX_SCREENSHOTS=${process.env.MAX_SCREENSHOTS || '5'}`,
