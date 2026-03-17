@@ -101,6 +101,9 @@ const loadingOverlay = document.getElementById('loading-overlay');
 const emergencyOverlay = document.getElementById('emergency-overlay');
 const chatContainer = document.getElementById('chat-container');
 const chatMessagesElement = document.getElementById('chat-messages');
+const chatComposer = document.getElementById('chat-composer');
+const chatManualInput = document.getElementById('chat-manual-input');
+const chatManualSend = document.getElementById('chat-manual-send');
 const chatResizeHandle = document.getElementById('chat-resize-handle');
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
@@ -149,6 +152,7 @@ let timerInterval;
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 250;
 const MIN_CHAT_HEIGHT = 150;
+const MAX_CHAT_INPUT_HEIGHT = 88;
 
 let activeWindowResize = null;
 let pendingWindowBounds = null;
@@ -216,6 +220,9 @@ function updateWindowOpacityValueLabel(value) {
 function setupWindowAdjustments() {
     setupWindowResizeHandles();
     setupChatResizeHandle();
+    window.addEventListener('resize', () => {
+        autoResizeManualInput();
+    });
 }
 
 function setupWindowResizeHandles() {
@@ -1560,6 +1567,60 @@ function addChatMessage(type, content, options = {}) {
     return record;
 }
 
+function updateChatComposerHeight() {
+    if (!chatContainer || !chatComposer) {
+        return;
+    }
+
+    const composerHeight = Math.max(0, Math.round(chatComposer.getBoundingClientRect().height));
+    if (composerHeight > 0) {
+        chatContainer.style.setProperty('--chat-composer-height', `${composerHeight}px`);
+    }
+}
+
+function autoResizeManualInput() {
+    if (!chatManualInput) {
+        return;
+    }
+
+    chatManualInput.style.height = 'auto';
+    const nextHeight = Math.min(chatManualInput.scrollHeight, MAX_CHAT_INPUT_HEIGHT);
+    chatManualInput.style.height = `${Math.max(24, nextHeight)}px`;
+    chatManualInput.style.overflowY = chatManualInput.scrollHeight > MAX_CHAT_INPUT_HEIGHT ? 'auto' : 'hidden';
+    updateChatComposerHeight();
+}
+
+function updateManualComposerState() {
+    if (!chatManualInput || !chatManualSend) {
+        return;
+    }
+
+    chatManualSend.disabled = String(chatManualInput.value || '').trim().length === 0;
+}
+
+function submitManualContextMessage() {
+    if (!chatManualInput) {
+        return;
+    }
+
+    const text = String(chatManualInput.value || '').trim();
+    if (!text) {
+        showFeedback('Type a message first', 'error');
+        return;
+    }
+
+    addChatMessage('voice-mic', text);
+    addMonitorLog('info', 'manual-context-added', 'Manual context message added', 'mic', {
+        chars: text.length
+    });
+    showFeedback('Manual context added', 'success');
+
+    chatManualInput.value = '';
+    autoResizeManualInput();
+    updateManualComposerState();
+    chatManualInput.focus();
+}
+
 // Timer
 function startTimer() {
     const timerElement = document.querySelector('.timer');
@@ -1581,6 +1642,25 @@ function setupEventListeners() {
     if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
     if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
     if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
+    if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
+    if (chatManualInput) {
+        chatManualInput.addEventListener('input', () => {
+            autoResizeManualInput();
+            updateManualComposerState();
+        });
+        chatManualInput.addEventListener('keydown', (event) => {
+            if (event.isComposing) {
+                return;
+            }
+
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitManualContextMessage();
+            }
+        });
+        autoResizeManualInput();
+        updateManualComposerState();
+    }
     if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
     if (transcriptionToggle) {
         transcriptionToggle.addEventListener('click', () => {

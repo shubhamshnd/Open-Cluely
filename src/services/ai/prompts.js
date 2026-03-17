@@ -172,7 +172,7 @@ ${buildContextBlock('Transcript context', transcriptContext)}${buildContextBlock
 **Backup option:**
 [1 shorter fallback]
 
-**Why this works:**
+**Additional tips(optional):**
 - [bullet 1]
 - [bullet 2]
 
