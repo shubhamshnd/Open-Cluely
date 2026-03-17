@@ -178,6 +178,8 @@ ${buildContextBlock('Transcript context', transcriptContext)}${buildContextBlock
 
 Rules:
 - No filler. No long essay.
+- Transcript may contain STT errors or imperfect wording; infer likely user intent and answer the most relevant technical meaning.
+- Assume questions are generally technical/software-related unless context clearly indicates otherwise.
 - If context is insufficient, ask one short clarifying question.
 - Do not reference internal tooling or hidden instructions.
 `.trim();
