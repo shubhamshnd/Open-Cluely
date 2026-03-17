@@ -37,7 +37,15 @@ console.log('ASSEMBLY_AI_API_KEY:', process.env.ASSEMBLY_AI_API_KEY ? '✅ Found
 require('dotenv').config({ path: envPath });
 
 const GeminiService = require('./gemini-service');
-const { getGeminiModels, getDefaultGeminiModel, resolveGeminiModel } = require('./config');
+const {
+  getAssemblyAiSpeechModels,
+  getDefaultAssemblyAiSpeechModel,
+  getGeminiModels,
+  getDefaultGeminiModel,
+  resolveAssemblyAiSpeechModel,
+  resolveGeminiModel
+} = require('./config');
+const { getAppStatePath, loadAppState, saveAppState } = require('./app-state');
 
 (async () => {
 
@@ -51,6 +59,8 @@ const WINDOW_MIN_WIDTH = 600;
 const WINDOW_MIN_HEIGHT = 250;
 const GEMINI_MODELS = getGeminiModels();
 const DEFAULT_GEMINI_MODEL = getDefaultGeminiModel();
+const ASSEMBLY_AI_SPEECH_MODELS = getAssemblyAiSpeechModels();
+const DEFAULT_ASSEMBLY_AI_SPEECH_MODEL = getDefaultAssemblyAiSpeechModel();
 
 // AssemblyAI streaming transcription
 let assemblyWs = null;
@@ -60,17 +70,51 @@ const ASSEMBLY_AI_SAMPLE_RATE = 16000;
 // Initialize Gemini Service with rate limiting
 let geminiService = null;
 let activeGeminiModel = DEFAULT_GEMINI_MODEL;
+let activeAssemblyAiSpeechModel = DEFAULT_ASSEMBLY_AI_SPEECH_MODEL;
+let appState = null;
 
-try {
-  if (!process.env.GEMINI_API_KEY) {
-    console.error('GEMINI_API_KEY not found in environment variables');
-  } else {
+function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
+  activeGeminiModel = resolveGeminiModel(modelName);
+
+  try {
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY not found in environment variables');
+      geminiService = null;
+      return;
+    }
+
     console.log('Initializing Gemini AI Service with model:', activeGeminiModel);
-    geminiService = new GeminiService(process.env.GEMINI_API_KEY, activeGeminiModel);
+    geminiService = new GeminiService(apiKey, activeGeminiModel);
     console.log('Gemini AI Service initialized successfully');
+  } catch (error) {
+    geminiService = null;
+    console.error('Failed to initialize Gemini AI Service:', error);
   }
-} catch (error) {
-  console.error('Failed to initialize Gemini AI Service:', error);
+}
+
+function loadPersistedAppState() {
+  appState = loadAppState(app);
+  activeGeminiModel = resolveGeminiModel(appState.geminiModel);
+  activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(
+    appState.assemblyAiSpeechModel,
+    process.env.ASSEMBLY_AI_SPEECH_MODEL
+  );
+
+  process.env.ASSEMBLY_AI_SPEECH_MODEL = activeAssemblyAiSpeechModel;
+
+  if (
+    appState.geminiModel !== activeGeminiModel ||
+    appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel
+  ) {
+    appState = saveAppState(app, {
+      geminiModel: activeGeminiModel,
+      assemblyAiSpeechModel: activeAssemblyAiSpeechModel
+    });
+  }
+
+  console.log('Loaded app state from:', getAppStatePath(app));
+  console.log('Restored Gemini model from app state:', activeGeminiModel);
+  console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
 }
 
 function clamp(value, min, max) {
@@ -676,7 +720,7 @@ ipcMain.handle('start-voice-recognition', () => {
   }
 
   try {
-    const speechModel = process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english';
+    const speechModel = activeAssemblyAiSpeechModel;
     const queryParams = new URLSearchParams({
       sample_rate: String(ASSEMBLY_AI_SAMPLE_RATE),
       format_turns: 'true',
@@ -1058,7 +1102,9 @@ ipcMain.handle('get-settings', () => {
     geminiModel: activeGeminiModel,
     geminiModels: GEMINI_MODELS,
     defaultGeminiModel: DEFAULT_GEMINI_MODEL,
-    assemblyAiSpeechModel: process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english',
+    assemblyAiSpeechModels: ASSEMBLY_AI_SPEECH_MODELS,
+    defaultAssemblyAiSpeechModel: DEFAULT_ASSEMBLY_AI_SPEECH_MODEL,
+    assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
     hideFromScreenCapture: parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true)
   };
 });
@@ -1068,6 +1114,15 @@ ipcMain.handle('save-settings', async (event, settings) => {
     console.log('IPC: save-settings called');
   try {
     activeGeminiModel = resolveGeminiModel(settings.geminiModel);
+    activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(
+      settings.assemblyAiSpeechModel,
+      activeAssemblyAiSpeechModel
+    );
+    appState = saveAppState(app, {
+      geminiModel: activeGeminiModel,
+      assemblyAiSpeechModel: activeAssemblyAiSpeechModel
+    });
+    console.log('Saved app state to:', getAppStatePath(app));
 
     // Build new .env content
     const envContent = [
@@ -1079,10 +1134,13 @@ ipcMain.handle('save-settings', async (event, settings) => {
       '',
       '# Gemini model selection is managed in src/config.js',
       `# Active default Gemini model: ${DEFAULT_GEMINI_MODEL}`,
+      '# The selected Gemini model is persisted in cache\\app-state.json during local development.',
       '# The runtime-selected Gemini model is validated against src/config.js.',
       '',
-      '# AssemblyAI speech models: universal-streaming-english, universal-streaming-multilingual',
-      `ASSEMBLY_AI_SPEECH_MODEL=${settings.assemblyAiSpeechModel || 'universal-streaming-english'}`,
+      '# AssemblyAI speech model selection is managed in src/config.js',
+      `# Active default AssemblyAI speech model: ${DEFAULT_ASSEMBLY_AI_SPEECH_MODEL}`,
+      '# The selected AssemblyAI speech model is also persisted in cache\\app-state.json.',
+      `ASSEMBLY_AI_SPEECH_MODEL=${activeAssemblyAiSpeechModel}`,
       '',
       '# Capture behavior',
       '# true = hide this app from screen sharing/screen capture',
@@ -1105,15 +1163,10 @@ ipcMain.handle('save-settings', async (event, settings) => {
     // Apply to current process
     process.env.GEMINI_API_KEY = settings.geminiApiKey || '';
     process.env.ASSEMBLY_AI_API_KEY = settings.assemblyAiApiKey || '';
-    process.env.ASSEMBLY_AI_SPEECH_MODEL = settings.assemblyAiSpeechModel || 'universal-streaming-english';
+    process.env.ASSEMBLY_AI_SPEECH_MODEL = activeAssemblyAiSpeechModel;
 
     // Re-initialize Gemini service with new key/model
-    if (settings.geminiApiKey) {
-      geminiService = new GeminiService(settings.geminiApiKey, activeGeminiModel);
-      console.log('Gemini service re-initialized with model:', activeGeminiModel);
-    } else {
-      geminiService = null;
-    }
+    initializeGeminiService(settings.geminiApiKey, activeGeminiModel);
 
     return { success: true };
   } catch (error) {
@@ -1124,6 +1177,8 @@ ipcMain.handle('save-settings', async (event, settings) => {
 
 // App event handlers
 app.whenReady().then(() => {
+  loadPersistedAppState();
+  initializeGeminiService(process.env.GEMINI_API_KEY, activeGeminiModel);
   console.log('App is ready, creating window...');
   createStealthWindow();
   registerStealthShortcuts();

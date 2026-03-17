@@ -674,7 +674,10 @@ async function openSettings() {
             if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
             populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
             if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
-            if (settingAssemblyModel) settingAssemblyModel.value = settings.assemblyAiSpeechModel || 'universal-streaming-english';
+            populateAssemblyAiSpeechModelOptions(
+                settings.assemblyAiSpeechModels,
+                settings.assemblyAiSpeechModel || settings.defaultAssemblyAiSpeechModel
+            );
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
@@ -711,17 +714,45 @@ function populateGeminiModelOptions(models, selectedModel) {
         : configuredModels[0];
 }
 
+function populateAssemblyAiSpeechModelOptions(models, selectedModel) {
+    if (!settingAssemblyModel) {
+        return;
+    }
+
+    settingAssemblyModel.innerHTML = '';
+
+    const configuredModels = Array.isArray(models) ? models : [];
+    if (configuredModels.length === 0) {
+        throw new Error('AssemblyAI speech models are not configured.');
+    }
+
+    configuredModels.forEach((modelName) => {
+        const option = document.createElement('option');
+        option.value = modelName;
+        option.textContent = modelName;
+        settingAssemblyModel.appendChild(option);
+    });
+
+    settingAssemblyModel.value = configuredModels.includes(selectedModel)
+        ? selectedModel
+        : configuredModels[0];
+}
+
 async function saveSettings() {
     try {
         if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
             throw new Error('Gemini models are not configured.');
         }
 
+        if (!settingAssemblyModel || settingAssemblyModel.options.length === 0) {
+            throw new Error('AssemblyAI speech models are not configured.');
+        }
+
         const settings = {
             geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
             assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
             geminiModel: settingGeminiModel.value,
-            assemblyAiSpeechModel: settingAssemblyModel ? settingAssemblyModel.value : 'universal-streaming-english'
+            assemblyAiSpeechModel: settingAssemblyModel.value
         };
 
         const result = await window.electronAPI.saveSettings(settings);
