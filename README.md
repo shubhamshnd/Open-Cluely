@@ -1,5 +1,5 @@
 # Open-Cluely
-
+Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview Assistant 😉.
 Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
 
 ## Features
@@ -64,7 +64,7 @@ This filtering is applied consistently across:
 - `src/windows/legacy/` - old or backup window/transcription experiments kept for reference
 - `src/services/ai/` - AI service integrations such as Gemini
 - `src/services/state/` - local persisted state helpers such as `cache/app-state.json` handling
-- `src/config.js` - source of truth for Gemini and AssemblyAI speech model lists/defaults
+- `src/config.js` - source of truth for Gemini/AssemblyAI model lists and keyboard shortcuts
 
 ## Setup
 
@@ -125,11 +125,18 @@ npm run dev
 
 ### `src/config.js`
 
-This file is the source of truth for model lists:
+This file is the source of truth for model lists and keyboard shortcuts:
 
 - `GEMINI_MODELS`: Gemini models shown in settings
 - `ASSEMBLY_AI_SPEECH_MODELS`: AssemblyAI speech models shown in settings
-- The first item in each list is the default
+- `KEYBOARD_SHORTCUTS`: all app shortcuts shown in settings and used at runtime
+- For model lists, the first item is the default used by the app
+
+Shortcut customization:
+
+- Edit `KEYBOARD_SHORTCUTS` in `src/config.js`
+- Use Electron accelerator format (example: `CommandOrControl+Alt+Shift+S`)
+- Shortcuts are visible in the Settings panel but are read-only there
 
 Current defaults:
 
@@ -223,6 +230,12 @@ npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/*
 | `Ctrl+Alt+Shift+A` | Ask AI (full session context) |
 | `Ctrl+Alt+Shift+X` | Emergency hide |
 | `Ctrl+Alt+Shift+H` | Toggle opacity |
+| `Ctrl+Alt+Shift+Left` | Move window left |
+| `Ctrl+Alt+Shift+Right` | Move window right |
+| `Ctrl+Alt+Shift+Up` | Move window top |
+| `Ctrl+Alt+Shift+Down` | Move window bottom |
+
+These values come from `src/config.js`.
 
 ## Note
 

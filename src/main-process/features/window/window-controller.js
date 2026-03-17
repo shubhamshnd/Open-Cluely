@@ -8,6 +8,7 @@
   DEFAULT_WINDOW_OPACITY_LEVEL,
   STEALTH_OPACITY_LEVEL_DELTA
 } = require('./window-constants');
+const { getKeyboardShortcutAccelerator } = require('../../../config');
 
 function createWindowController({
   app,
@@ -318,17 +319,25 @@ function createWindowController({
   }
 
   function registerShortcuts() {
-    globalShortcut.register('CommandOrControl+Alt+Shift+H', () => {
+    const registerShortcut = (shortcutId, handler) => {
+      const accelerator = getKeyboardShortcutAccelerator(shortcutId);
+      const isRegistered = globalShortcut.register(accelerator, handler);
+      if (!isRegistered) {
+        console.warn(`Failed to register shortcut "${shortcutId}" (${accelerator})`);
+      }
+    };
+
+    registerShortcut('toggleStealth', () => {
       toggleStealthMode();
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+S', async () => {
+    registerShortcut('takeScreenshot', async () => {
       if (typeof onTakeStealthScreenshot === 'function') {
         await onTakeStealthScreenshot();
       }
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+A', async () => {
+    registerShortcut('askAi', async () => {
       if (typeof emitSttDebug === 'function') {
         emitSttDebug({
           event: 'shortcut-ask-ai',
@@ -338,11 +347,11 @@ function createWindowController({
       sendToRenderer('trigger-ask-ai');
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+X', () => {
+    registerShortcut('emergencyHide', () => {
       emergencyHide();
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+V', () => {
+    registerShortcut('toggleTranscription', () => {
       if (typeof emitSttDebug === 'function') {
         emitSttDebug({
           event: 'shortcut-toggle',
@@ -352,19 +361,19 @@ function createWindowController({
       sendToRenderer('toggle-voice-recognition');
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+Left', () => {
+    registerShortcut('moveWindowLeft', () => {
       moveToPosition('left');
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+Right', () => {
+    registerShortcut('moveWindowRight', () => {
       moveToPosition('right');
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+Up', () => {
+    registerShortcut('moveWindowUp', () => {
       moveToPosition('top');
     });
 
-    globalShortcut.register('CommandOrControl+Alt+Shift+Down', () => {
+    registerShortcut('moveWindowDown', () => {
       moveToPosition('bottom');
     });
   }

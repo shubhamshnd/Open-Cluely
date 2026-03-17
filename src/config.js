@@ -28,6 +28,65 @@ const PROGRAMMING_LANGUAGES = [
   'Kotlin'
 ];
 
+// Keyboard shortcuts configuration.
+// Edit accelerators here to customize app shortcuts in one place.
+const KEYBOARD_SHORTCUTS = [
+  {
+    id: 'toggleTranscription',
+    buttonLabel: 'Transcription',
+    description: 'Toggle transcription master control',
+    accelerator: 'CommandOrControl+Alt+Shift+V'
+  },
+  {
+    id: 'takeScreenshot',
+    buttonLabel: 'Screenshot',
+    description: 'Capture screenshot',
+    accelerator: 'CommandOrControl+Alt+Shift+S'
+  },
+  {
+    id: 'askAi',
+    buttonLabel: 'Ask AI',
+    description: 'Ask AI with session context',
+    accelerator: 'CommandOrControl+Alt+Shift+A'
+  },
+  {
+    id: 'emergencyHide',
+    buttonLabel: 'Hide',
+    description: 'Emergency hide',
+    accelerator: 'CommandOrControl+Alt+Shift+X'
+  },
+  {
+    id: 'toggleStealth',
+    buttonLabel: 'Toggle Opacity',
+    description: 'Toggle stealth opacity mode',
+    accelerator: 'CommandOrControl+Alt+Shift+H'
+  },
+  {
+    id: 'moveWindowLeft',
+    buttonLabel: 'Move Window Left',
+    description: 'Move window to left side',
+    accelerator: 'CommandOrControl+Alt+Shift+Left'
+  },
+  {
+    id: 'moveWindowRight',
+    buttonLabel: 'Move Window Right',
+    description: 'Move window to right side',
+    accelerator: 'CommandOrControl+Alt+Shift+Right'
+  },
+  {
+    id: 'moveWindowUp',
+    buttonLabel: 'Move Window Up',
+    description: 'Move window to top',
+    accelerator: 'CommandOrControl+Alt+Shift+Up'
+  },
+  {
+    id: 'moveWindowDown',
+    buttonLabel: 'Move Window Down',
+    description: 'Move window to bottom',
+    accelerator: 'CommandOrControl+Alt+Shift+Down'
+  }
+];
+
 // Gemini model configuration functions
 function getGeminiModels() {
   if (!Array.isArray(GEMINI_MODELS) || GEMINI_MODELS.length === 0) {
@@ -101,11 +160,46 @@ function resolveAssemblyAiSpeechModel(modelName, fallbackModel = getDefaultAssem
   return getDefaultAssemblyAiSpeechModel();
 }
 
+function getKeyboardShortcuts() {
+  if (!Array.isArray(KEYBOARD_SHORTCUTS) || KEYBOARD_SHORTCUTS.length === 0) {
+    throw new Error('Keyboard shortcuts are not configured. Add at least one shortcut to src/config.js.');
+  }
+
+  return KEYBOARD_SHORTCUTS.map((shortcut) => ({ ...shortcut }));
+}
+
+function getKeyboardShortcutById(shortcutId) {
+  const normalizedId = String(shortcutId || '').trim();
+  if (!normalizedId) {
+    throw new Error('Shortcut id is required.');
+  }
+
+  const shortcut = getKeyboardShortcuts().find((entry) => entry.id === normalizedId);
+  if (!shortcut) {
+    throw new Error(`Shortcut "${normalizedId}" is not configured in src/config.js.`);
+  }
+
+  return shortcut;
+}
+
+function getKeyboardShortcutAccelerator(shortcutId) {
+  const shortcut = getKeyboardShortcutById(shortcutId);
+  const accelerator = String(shortcut.accelerator || '').trim();
+  if (!accelerator) {
+    throw new Error(`Shortcut "${shortcutId}" is missing an accelerator in src/config.js.`);
+  }
+
+  return accelerator;
+}
+
 module.exports = {
   getAssemblyAiSpeechModels,
   getDefaultAssemblyAiSpeechModel,
   getGeminiModels,
   getDefaultGeminiModel,
+  getKeyboardShortcutAccelerator,
+  getKeyboardShortcutById,
+  getKeyboardShortcuts,
   getDefaultProgrammingLanguage,
   getProgrammingLanguages,
   isConfiguredAssemblyAiSpeechModel,

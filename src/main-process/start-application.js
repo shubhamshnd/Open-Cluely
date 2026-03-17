@@ -15,6 +15,7 @@ const {
 const {
   getAssemblyAiSpeechModels,
   getDefaultAssemblyAiSpeechModel,
+  getKeyboardShortcuts,
   resolveAssemblyAiSpeechModel
 } = require('../config');
 const {
@@ -43,6 +44,7 @@ async function startApplication() {
 
   const assemblyAiSpeechModels = getAssemblyAiSpeechModels();
   const defaultAssemblyAiSpeechModel = getDefaultAssemblyAiSpeechModel();
+  const keyboardShortcuts = getKeyboardShortcuts();
   let activeAssemblyAiSpeechModel = defaultAssemblyAiSpeechModel;
 
   let screenshotManager = null;
@@ -177,6 +179,7 @@ async function startApplication() {
       activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(nextModel, activeAssemblyAiSpeechModel);
       return activeAssemblyAiSpeechModel;
     },
+    keyboardShortcuts,
     assemblyAiSpeechModels,
     defaultAssemblyAiSpeechModel
   });

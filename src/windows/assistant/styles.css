@@ -1628,6 +1628,60 @@ select.settings-input {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
 }
 
+.settings-shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+}
+
+.settings-shortcut-button {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.76);
+}
+
+.settings-shortcut-key {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.84);
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.settings-shortcuts-empty {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.58);
+  padding: 4px 0;
+}
+
+.settings-helper-text {
+  font-size: 9px;
+  color: rgba(0, 0, 0, 0.6);
+  line-height: 1.35;
+}
+
+.settings-helper-text code {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
 .save-settings-btn {
   background: rgba(59, 130, 246, 0.8);
   border: 1px solid rgba(59, 130, 246, 0.9);

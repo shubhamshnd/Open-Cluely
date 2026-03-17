@@ -12,6 +12,7 @@
   windowController,
   getAssemblyAiSpeechModel,
   setAssemblyAiSpeechModel,
+  keyboardShortcuts,
   assemblyAiSpeechModels,
   defaultAssemblyAiSpeechModel
 }) {
@@ -30,6 +31,7 @@
       assemblyAiSpeechModels,
       defaultAssemblyAiSpeechModel,
       assemblyAiSpeechModel: getAssemblyAiSpeechModel(),
+      keyboardShortcuts,
       hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
       windowOpacityLevel: windowController.getWindowOpacityLevel()
     };
