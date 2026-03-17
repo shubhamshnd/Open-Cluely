@@ -1,13 +1,32 @@
-﻿// Renderer with AssemblyAI Streaming Transcription - Real-time & Accurate!
+﻿import {
+    canToggleAiForMessageType as canToggleAiForMessageTypeRule,
+    defaultIncludeInAiForMessageType as defaultIncludeInAiForMessageTypeRule,
+    isAiResponseMessageType as isAiResponseMessageTypeRule,
+    isScreenshotMessageType as isScreenshotMessageTypeRule,
+    isSystemMessageType as isSystemMessageTypeRule,
+    isTranscriptMessageType as isTranscriptMessageTypeRule
+} from './renderer/features/ai-context/message-types.js';
+import { createMessageStore } from './renderer/features/ai-context/message-store.js';
+import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
+import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/features/ai-context/toggle-ui.js';
+import {
+    createTranscriptionSourceState,
+    normalizeSource as normalizeAssemblySource,
+    sourceLabel as resolveSourceLabel
+} from './renderer/features/assembly-ai/source-state.js';
+import { createAudioPipeline } from './renderer/features/assembly-ai/audio-pipeline.js';
+import { createTranscriptBufferManager } from './renderer/features/assembly-ai/transcript-buffer.js';
+// Renderer with AssemblyAI Streaming Transcription - Real-time & Accurate!
 // Uses AssemblyAI WebSocket API for live speech-to-text
 
 let screenshotsCount = 0;
 let isAnalyzing = false;
 let stealthModeActive = false;
 let stealthHideTimeout = null;
-let chatMessagesArray = [];
-let chatMessageSequence = 0;
 const AI_CONTEXT_CHAR_BUDGET = 12000;
+const messageStore = createMessageStore();
+let chatMessagesArray = messageStore.getMessages();
+const transcriptionSourceState = createTranscriptionSourceState();
 
 // Mic audio capture state
 let micAudioContext = null;
@@ -22,16 +41,10 @@ let systemScriptProcessor = null;
 let isSystemActive = false;
 
 // Source selection state (default: host/system on, mic off)
-const selectedSources = {
-    system: true,
-    mic: false
-};
+const selectedSources = transcriptionSourceState.selectedSources;
 
 // Runtime source status state
-const sourceStatuses = {
-    system: 'off',
-    mic: 'off'
-};
+const sourceStatuses = transcriptionSourceState.sourceStatuses;
 
 // Partial transcription tracking per source
 let micPartialText = '';
@@ -46,22 +59,38 @@ const monitorLastText = {
 
 const MAX_MONITOR_LOG_ENTRIES = 80;
 const monitorLogEntries = [];
-const TARGET_SAMPLE_RATE = 16000;
-const TARGET_FRAME_MS = 100;
-const MIN_FRAME_MS = 50;
-const TARGET_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * TARGET_FRAME_MS) / 1000);
-const MIN_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * MIN_FRAME_MS) / 1000);
-const WORKLET_MODULE_PATH = 'pcm-capture-worklet.js';
-const workletLoadedContexts = new WeakSet();
-const sourceSampleQueues = {
-    mic: { chunks: [], length: 0 },
-    system: { chunks: [], length: 0 }
-};
-const FINAL_TRANSCRIPT_MERGE_WINDOW_MS = 2400;
-const finalTranscriptBuffers = {
-    mic: { text: '', segments: 0, timer: null },
-    system: { text: '', segments: 0, timer: null }
-};
+
+const audioPipeline = createAudioPipeline({
+    sendAudioChunk: (source, audioBuffer) => {
+        window.electronAPI.sendAudioChunk(source, audioBuffer);
+    },
+    addMonitorLog: (...args) => addMonitorLog(...args)
+});
+
+const transcriptBufferManager = createTranscriptBufferManager({
+    mergeWindowMs: 2400,
+    onBuffer: ({ source, text, segments }) => {
+        addMonitorLog('info', 'final-buffer', 'Buffered transcript segment', source, {
+            segments,
+            chars: text.length
+        });
+    },
+    onFlush: ({ source, text, reason, segments }) => {
+        if (source === 'system') {
+            addChatMessage('voice-system', text);
+        } else {
+            addChatMessage('voice-mic', text);
+        }
+
+        addMonitorLog('info', 'final-flush', 'Merged transcript committed', source, {
+            reason,
+            segments,
+            chars: text.length
+        });
+        showFeedback('Captured', 'success');
+    }
+});
+
 
 // DOM elements
 const statusText = document.getElementById('status-text');
@@ -398,50 +427,32 @@ function stopChatResize(event) {
     document.removeEventListener('pointercancel', stopChatResize);
 }
 
-// Shared PCM16 helper
-const audioChunkCounters = { mic: 0, system: 0 };
-
-function convertToPCM16(float32Data) {
-    const int16Data = new Int16Array(float32Data.length);
-    for (let i = 0; i < float32Data.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32Data[i]));
-        int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    return int16Data;
-}
-
 function sourceLabel(source) {
-    return source === 'system' ? 'Host' : 'Mic';
-}
-
-function nextChatMessageId() {
-    chatMessageSequence += 1;
-    return `msg-${chatMessageSequence}`;
+    return resolveSourceLabel(source);
 }
 
 function isTranscriptMessageType(type) {
-    return type === 'voice' || type === 'voice-mic' || type === 'voice-system';
+    return isTranscriptMessageTypeRule(type);
 }
 
 function isScreenshotMessageType(type) {
-    return type === 'screenshot';
+    return isScreenshotMessageTypeRule(type);
 }
 
 function isSystemMessageType(type) {
-    return type === 'system';
+    return isSystemMessageTypeRule(type);
 }
 
 function isAiResponseMessageType(type) {
-    return type === 'ai-response';
+    return isAiResponseMessageTypeRule(type);
 }
 
 function canToggleAiForMessageType(type) {
-    return isTranscriptMessageType(type) || isScreenshotMessageType(type);
+    return canToggleAiForMessageTypeRule(type);
 }
 
 function defaultIncludeInAiForMessageType(type) {
-    if (isSystemMessageType(type)) return false;
-    return true;
+    return defaultIncludeInAiForMessageTypeRule(type);
 }
 
 function escapeHtml(value) {
@@ -454,134 +465,38 @@ function escapeHtml(value) {
 }
 
 function isMessageIncludedForAi(message) {
-    if (!message || isSystemMessageType(message.type)) {
-        return false;
-    }
-    if (message.canToggleAi) {
-        return !!message.includeInAi;
-    }
-    return message.includeInAi !== false;
-}
-
-function contextLineForMessage(message) {
-    const content = String(message?.content || '').trim();
-    if (!content) return '';
-
-    if (message.type === 'voice-system') return `Host: ${content}`;
-    if (message.type === 'voice' || message.type === 'voice-mic') return `You: ${content}`;
-    if (message.type === 'screenshot') {
-        return message.screenshotId
-            ? `Screenshot(${message.screenshotId}): ${content}`
-            : `Screenshot: ${content}`;
-    }
-    if (message.type === 'ai-response') return `AI: ${content}`;
-    return '';
-}
-
-function summaryLineForMessage(message) {
-    const content = String(message?.content || '').trim().replace(/\s+/g, ' ');
-    if (!content) return '';
-
-    if (message.type === 'voice-system') return `Host said: ${content}`;
-    if (message.type === 'voice' || message.type === 'voice-mic') return `You said: ${content}`;
-    if (message.type === 'screenshot') return `Screenshot: ${content}`;
-    if (message.type === 'ai-response') return `AI response: ${content}`;
-    return '';
+    return messageStore.isIncludedForAi(message);
 }
 
 function buildFilteredAiContextBundle({ charBudget = AI_CONTEXT_CHAR_BUDGET, emitTruncationLog = true } = {}) {
-    const candidates = chatMessagesArray
-        .filter(isMessageIncludedForAi)
-        .map((message) => ({
-            message,
-            contextLine: contextLineForMessage(message),
-            summaryLine: summaryLineForMessage(message)
-        }))
-        .filter((entry) => entry.contextLine.length > 0);
-
-    const selectedReversed = [];
-    let currentChars = 0;
-    let dropped = 0;
-
-    for (let i = candidates.length - 1; i >= 0; i -= 1) {
-        const entry = candidates[i];
-        const nextCost = entry.contextLine.length + 1;
-        if (currentChars + nextCost > charBudget) {
-            dropped += 1;
-            continue;
+    return buildAiContextBundle({
+        messages: chatMessagesArray,
+        isMessageIncludedForAi,
+        charBudget,
+        emitTruncationLog,
+        onTruncationLog: (dropped, budget) => {
+            addMonitorLog(
+                'info',
+                'context-cap',
+                `Trimmed ${dropped} older context message(s) to stay within ${budget} chars`
+            );
         }
-        selectedReversed.push(entry);
-        currentChars += nextCost;
-    }
-
-    const selected = selectedReversed.reverse();
-    if (emitTruncationLog && dropped > 0) {
-        addMonitorLog(
-            'info',
-            'context-cap',
-            `Trimmed ${dropped} older context message(s) to stay within ${charBudget} chars`
-        );
-    }
-
-    const transcriptContext = selected
-        .filter((entry) => isTranscriptMessageType(entry.message.type))
-        .map((entry) => entry.contextLine)
-        .join('\n');
-
-    const sessionSummary = selected
-        .filter((entry) => !isSystemMessageType(entry.message.type))
-        .map((entry) => entry.summaryLine)
-        .filter((line) => line.length > 0)
-        .slice(-16)
-        .join('\n');
-
-    const enabledScreenshotIds = Array.from(
-        new Set(
-            selected
-                .filter((entry) => isScreenshotMessageType(entry.message.type))
-                .map((entry) => entry.message.screenshotId)
-                .filter((value) => typeof value === 'string' && value.trim().length > 0)
-        )
-    );
-
-    return {
-        contextString: selected.map((entry) => entry.contextLine).join('\n'),
-        transcriptContext,
-        sessionSummary,
-        enabledScreenshotIds,
-        droppedMessages: dropped,
-        selectedMessages: selected.length,
-        charBudget
-    };
+    });
 }
 
 function findChatMessageById(messageId) {
-    return chatMessagesArray.find((message) => message.id === messageId);
+    return messageStore.findById(messageId);
 }
 
 function updateMessageAiToggleUi(message) {
-    if (!message || !message.id || !chatMessagesElement) return;
-    const container = chatMessagesElement.querySelector(`.chat-message[data-message-id="${message.id}"]`);
-    if (!container) return;
-
-    container.classList.toggle('ai-excluded', message.canToggleAi && !message.includeInAi);
-    container.classList.toggle('ai-included', message.canToggleAi && !!message.includeInAi);
-
-    const toggle = container.querySelector('.ai-include-toggle');
-    if (toggle) {
-        toggle.classList.toggle('included', !!message.includeInAi);
-        toggle.classList.toggle('excluded', !message.includeInAi);
-        toggle.textContent = message.includeInAi ? 'AI' : 'Off';
-        toggle.title = message.includeInAi ? 'Exclude from AI context' : 'Include in AI context';
-        toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
-    }
+    syncMessageAiToggleUi(chatMessagesElement, message);
 }
 
 function toggleChatMessageInclusion(messageId) {
-    const message = findChatMessageById(messageId);
-    if (!message || !message.canToggleAi) return;
+    const message = messageStore.toggleInclusion(messageId);
+    if (!message) return;
 
-    message.includeInAi = !message.includeInAi;
+    chatMessagesArray = messageStore.getMessages();
     updateMessageAiToggleUi(message);
     updateUI();
 
@@ -593,11 +508,21 @@ function toggleChatMessageInclusion(messageId) {
 }
 
 function normalizeSource(source) {
-    return source === 'system' ? 'system' : 'mic';
+    return normalizeAssemblySource(source);
 }
 
 function isSourceActive(source) {
     return source === 'system' ? isSystemActive : isMicActive;
+}
+
+function setMicActive(active) {
+    isMicActive = !!active;
+    transcriptionSourceState.setSourceActive('mic', isMicActive);
+}
+
+function setSystemActive(active) {
+    isSystemActive = !!active;
+    transcriptionSourceState.setSourceActive('system', isSystemActive);
 }
 
 function isAnyTranscriptionActive() {
@@ -605,13 +530,12 @@ function isAnyTranscriptionActive() {
 }
 
 function isAnySourceConnecting() {
-    return sourceStatuses.system === 'connecting' || sourceStatuses.mic === 'connecting';
+    return transcriptionSourceState.isAnySourceConnecting();
 }
 
 function setSourceStatus(source, status, liveText) {
     const resolvedSource = normalizeSource(source);
-    const allowedStatuses = new Set(['off', 'connecting', 'listening', 'error']);
-    sourceStatuses[resolvedSource] = allowedStatuses.has(status) ? status : 'off';
+    transcriptionSourceState.setSourceStatus(resolvedSource, status);
 
     if (typeof liveText === 'string' && liveText.trim().length > 0) {
         monitorLastText[resolvedSource] = liveText.trim();
@@ -731,120 +655,25 @@ function addMonitorLog(level, event, message, source = null, meta = null, timest
     }
 }
 
-function normalizeTranscriptForMerge(text) {
-    return String(text || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function mergeTranscriptText(existingText, incomingText) {
-    const current = String(existingText || '').trim();
-    const incoming = String(incomingText || '').trim();
-
-    if (!current) return incoming;
-    if (!incoming) return current;
-
-    const currentNorm = normalizeTranscriptForMerge(current);
-    const incomingNorm = normalizeTranscriptForMerge(incoming);
-
-    if (!incomingNorm) return current;
-    if (!currentNorm) return incoming;
-
-    if (currentNorm === incomingNorm) {
-        return incoming.length >= current.length ? incoming : current;
-    }
-
-    if (incomingNorm.includes(currentNorm)) {
-        return incoming;
-    }
-
-    if (currentNorm.includes(incomingNorm)) {
-        return current;
-    }
-
-    const currentWords = current.split(/\s+/);
-    const incomingWords = incoming.split(/\s+/);
-    const maxOverlap = Math.min(12, currentWords.length, incomingWords.length);
-    let overlap = 0;
-
-    for (let size = maxOverlap; size > 0; size -= 1) {
-        const currentTail = currentWords.slice(-size).join(' ').toLowerCase();
-        const incomingHead = incomingWords.slice(0, size).join(' ').toLowerCase();
-        if (currentTail === incomingHead) {
-            overlap = size;
-            break;
-        }
-    }
-
-    if (overlap > 0) {
-        const remainder = incomingWords.slice(overlap).join(' ');
-        if (!remainder) return current;
-        return `${current} ${remainder}`.replace(/\s+/g, ' ').trim();
-    }
-
-    return `${current} ${incoming}`.replace(/\s+/g, ' ').trim();
-}
-
-function clearFinalTranscriptTimer(source) {
-    const resolvedSource = normalizeSource(source);
-    const timer = finalTranscriptBuffers[resolvedSource].timer;
-    if (timer) {
-        clearTimeout(timer);
-        finalTranscriptBuffers[resolvedSource].timer = null;
-    }
-}
-
 function resetFinalTranscriptBuffer(source) {
-    const resolvedSource = normalizeSource(source);
-    clearFinalTranscriptTimer(resolvedSource);
-    finalTranscriptBuffers[resolvedSource].text = '';
-    finalTranscriptBuffers[resolvedSource].segments = 0;
+    transcriptBufferManager.resetFinalTranscriptBuffer(source);
 }
 
 function flushFinalTranscript(source, reason = 'pause-timeout') {
-    const resolvedSource = normalizeSource(source);
-    const buffer = finalTranscriptBuffers[resolvedSource];
-    const finalText = String(buffer.text || '').trim();
-    const segmentCount = buffer.segments;
-
-    clearFinalTranscriptTimer(resolvedSource);
-    buffer.text = '';
-    buffer.segments = 0;
-
-    if (!finalText) {
-        return;
-    }
-
-    addChatMessage(resolvedSource === 'system' ? 'voice-system' : 'voice-mic', finalText);
-    addMonitorLog('info', 'final-flush', 'Merged transcript committed', resolvedSource, {
-        reason,
-        chars: finalText.length,
-        segments: segmentCount
-    });
-    showFeedback('Captured', 'success');
+    transcriptBufferManager.flushFinalTranscript(source, reason);
 }
 
 function queueFinalTranscript(source, text) {
-    const resolvedSource = normalizeSource(source);
-    const buffer = finalTranscriptBuffers[resolvedSource];
-    buffer.text = mergeTranscriptText(buffer.text, text);
-    buffer.segments += 1;
-    clearFinalTranscriptTimer(resolvedSource);
-    buffer.timer = setTimeout(() => {
-        flushFinalTranscript(resolvedSource, 'pause-timeout');
-    }, FINAL_TRANSCRIPT_MERGE_WINDOW_MS);
+    transcriptBufferManager.queueFinalTranscript(source, text);
 }
 
 function flushAllFinalTranscripts(reason = 'flush-all') {
-    flushFinalTranscript('mic', reason);
-    flushFinalTranscript('system', reason);
+    transcriptBufferManager.flushAllFinalTranscripts(reason);
 }
 
 function setSourceSelected(source, enabled) {
     const resolvedSource = normalizeSource(source);
-    selectedSources[resolvedSource] = !!enabled;
+    transcriptionSourceState.setSourceSelected(resolvedSource, enabled);
     addMonitorLog('info', 'source-toggle', `${sourceLabel(resolvedSource)} ${enabled ? 'enabled' : 'disabled'}`, resolvedSource);
     updateTranscriptionUI();
 
@@ -909,196 +738,28 @@ async function toggleMasterTranscription() {
     updateTranscriptionUI();
 }
 
-function downsampleFloat32Buffer(input, inputSampleRate, outputSampleRate = TARGET_SAMPLE_RATE) {
-    if (inputSampleRate <= 0 || outputSampleRate <= 0 || input.length === 0) {
-        return input;
-    }
-    if (inputSampleRate === outputSampleRate) {
-        return input;
-    }
-
-    const sampleRateRatio = inputSampleRate / outputSampleRate;
-    const newLength = Math.max(1, Math.round(input.length / sampleRateRatio));
-    const result = new Float32Array(newLength);
-    let offsetResult = 0;
-    let offsetInput = 0;
-
-    while (offsetResult < result.length) {
-        const nextOffsetInput = Math.min(input.length, Math.round((offsetResult + 1) * sampleRateRatio));
-        let accum = 0;
-        let count = 0;
-
-        for (let i = offsetInput; i < nextOffsetInput; i++) {
-            accum += input[i];
-            count++;
-        }
-
-        result[offsetResult] = count > 0 ? accum / count : 0;
-        offsetResult++;
-        offsetInput = nextOffsetInput;
-    }
-
-    return result;
-}
-
-async function ensureWorkletModule(context) {
-    if (workletLoadedContexts.has(context)) {
-        return;
-    }
-
-    await context.audioWorklet.addModule(WORKLET_MODULE_PATH);
-    workletLoadedContexts.add(context);
-}
-
 function isLikelyCameraTrack(trackLabel) {
-    const label = String(trackLabel || '').toLowerCase();
-    return label.includes('camera') || label.includes('webcam');
+    return audioPipeline.isLikelyCameraTrack(trackLabel);
 }
 
 async function getSystemAudioStream(sourceId) {
-    const mandatoryConstraints = {
-        audio: {
-            mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: sourceId
-            }
-        },
-        video: {
-            mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: sourceId
-            }
-        }
-    };
-
-    const flatConstraints = {
-        audio: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId },
-        video: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId }
-    };
-
-    try {
-        return await navigator.mediaDevices.getUserMedia(mandatoryConstraints);
-    } catch (mandatoryError) {
-        addMonitorLog('info', 'desktop-constraints-fallback', 'Mandatory desktop constraints failed; trying flat syntax', 'system');
-        return navigator.mediaDevices.getUserMedia(flatConstraints);
-    }
+    return audioPipeline.getSystemAudioStream(sourceId);
 }
 
 function resetSourceSampleQueue(source) {
-    const resolvedSource = normalizeSource(source);
-    sourceSampleQueues[resolvedSource] = { chunks: [], length: 0 };
-}
-
-function appendSourceSamples(source, samples) {
-    if (!samples || samples.length === 0) return;
-    const resolvedSource = normalizeSource(source);
-    sourceSampleQueues[resolvedSource].chunks.push(samples);
-    sourceSampleQueues[resolvedSource].length += samples.length;
-}
-
-function pullSourceSamples(source, count) {
-    const resolvedSource = normalizeSource(source);
-    const queue = sourceSampleQueues[resolvedSource];
-    const output = new Float32Array(count);
-    let written = 0;
-
-    while (written < count && queue.chunks.length > 0) {
-        const first = queue.chunks[0];
-        const take = Math.min(first.length, count - written);
-        output.set(first.subarray(0, take), written);
-        written += take;
-
-        if (take === first.length) {
-            queue.chunks.shift();
-        } else {
-            queue.chunks[0] = first.subarray(take);
-        }
-        queue.length -= take;
-    }
-
-    if (written === count) {
-        return output;
-    }
-
-    return output.subarray(0, written);
-}
-
-function sendPcmFrame(source, floatSamples) {
-    if (!floatSamples || floatSamples.length < MIN_FRAME_SAMPLES) {
-        return;
-    }
-
-    const pcm = convertToPCM16(floatSamples);
-    window.electronAPI.sendAudioChunk(source, pcm.buffer);
-    audioChunkCounters[source] += 1;
-
-    if (audioChunkCounters[source] % 50 === 0) {
-        addMonitorLog('info', 'chunk-heartbeat', `Chunks sent: ${audioChunkCounters[source]}`, source, {
-            chunks: audioChunkCounters[source],
-            frameSamples: floatSamples.length
-        });
-    }
+    audioPipeline.resetSourceSampleQueue(source);
 }
 
 function drainSourceSampleQueue(source, { flushPartial = false } = {}) {
-    const resolvedSource = normalizeSource(source);
-    const queue = sourceSampleQueues[resolvedSource];
-
-    while (queue.length >= TARGET_FRAME_SAMPLES) {
-        const frame = pullSourceSamples(resolvedSource, TARGET_FRAME_SAMPLES);
-        sendPcmFrame(resolvedSource, frame);
-    }
-
-    if (flushPartial && queue.length >= MIN_FRAME_SAMPLES) {
-        const tailFrame = pullSourceSamples(resolvedSource, queue.length);
-        sendPcmFrame(resolvedSource, tailFrame);
-    }
+    audioPipeline.drainSourceSampleQueue(source, { flushPartial });
 }
 
 async function buildAudioProcessor(context, stream, source, activeCheck) {
-    await ensureWorkletModule(context);
-
-    const src = context.createMediaStreamSource(stream);
-    const node = new AudioWorkletNode(context, 'pcm-capture-processor', {
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [1]
-    });
-
-    // Keep graph alive while muting all playback to avoid feedback.
-    const silentGain = context.createGain();
-    silentGain.gain.value = 0;
-
-    node.port.onmessage = (event) => {
-        if (!activeCheck()) return;
-        try {
-            const chunk = event.data instanceof Float32Array ? event.data : new Float32Array(event.data || []);
-            const normalizedChunk = downsampleFloat32Buffer(chunk, context.sampleRate, TARGET_SAMPLE_RATE);
-            appendSourceSamples(source, normalizedChunk);
-            drainSourceSampleQueue(source);
-        } catch (error) {
-            addMonitorLog('error', 'audio-process-failed', error.message || 'Audio processing failed', source);
-        }
-    };
-
-    src.connect(node);
-    node.connect(silentGain);
-    silentGain.connect(context.destination);
-
-    return {
-        disconnect: () => {
-            try { node.port.onmessage = null; } catch (_) {}
-            try { src.disconnect(); } catch (_) {}
-            try { node.disconnect(); } catch (_) {}
-            try { silentGain.disconnect(); } catch (_) {}
-        }
-    };
+    return audioPipeline.buildAudioProcessor(context, stream, source, activeCheck);
 }
 
 function stopAudioResources(ctx, stream, processor) {
-    try { processor?.disconnect(); } catch (_) {}
-    try { ctx?.close(); } catch (_) {}
-    stream?.getTracks().forEach(t => t.stop());
+    audioPipeline.stopAudioResources(ctx, stream, processor);
 }
 
 async function startMicRecording() {
@@ -1119,7 +780,7 @@ async function startMicRecording() {
         resetSourceSampleQueue('mic');
         micScriptProcessor = await buildAudioProcessor(micAudioContext, micMediaStream, 'mic', () => isMicActive);
 
-        isMicActive = true;
+        setMicActive(true);
         addChatMessage('system', 'Mic listening...');
         showFeedback('Mic on', 'success');
         addMonitorLog('info', 'source-active', 'Mic source active', 'mic');
@@ -1129,7 +790,7 @@ async function startMicRecording() {
         addMonitorLog('error', 'source-failed', error.message, 'mic');
         stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
         micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-        isMicActive = false;
+        setMicActive(false);
         resetSourceSampleQueue('mic');
         setSourceStatus('mic', 'error', `Mic error: ${error.message}`);
         try {
@@ -1153,9 +814,9 @@ async function stopMicRecording() {
     } catch (error) {
         addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop mic source', 'mic');
     }
-    isMicActive = false;
+    setMicActive(false);
     resetSourceSampleQueue('mic');
-    audioChunkCounters.mic = 0;
+    audioPipeline.resetChunkCounter('mic');
     setSourceStatus('mic', 'off', 'Mic stopped');
     addMonitorLog('info', 'source-stopped', 'Mic source stopped', 'mic');
     showFeedback('Mic off', 'info');
@@ -1190,7 +851,7 @@ async function startSystemAudioRecording() {
         resetSourceSampleQueue('system');
         systemScriptProcessor = await buildAudioProcessor(systemAudioContext, systemMediaStream, 'system', () => isSystemActive);
 
-        isSystemActive = true;
+        setSystemActive(true);
         addChatMessage('system', 'Listening to host audio...');
         showFeedback('System audio on', 'success');
         addMonitorLog('info', 'source-active', 'Host source active', 'system');
@@ -1200,7 +861,7 @@ async function startSystemAudioRecording() {
         addMonitorLog('error', 'source-failed', error.message, 'system');
         stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
         systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-        isSystemActive = false;
+        setSystemActive(false);
         resetSourceSampleQueue('system');
         setSourceStatus('system', 'error', `Host error: ${error.message}`);
         try {
@@ -1224,9 +885,9 @@ async function stopSystemAudioRecording() {
     } catch (error) {
         addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
     }
-    isSystemActive = false;
+    setSystemActive(false);
     resetSourceSampleQueue('system');
-    audioChunkCounters.system = 0;
+    audioPipeline.resetChunkCounter('system');
     setSourceStatus('system', 'off', 'Host source stopped');
     addMonitorLog('info', 'source-stopped', 'Host source stopped', 'system');
     showFeedback('System audio off', 'info');
@@ -1396,8 +1057,8 @@ async function clearStealthData() {
             await window.electronAPI.clearConversationHistory();
         }
         screenshotsCount = 0;
-        chatMessagesArray = [];
-        chatMessageSequence = 0;
+        messageStore.clear();
+        chatMessagesArray = messageStore.getMessages();
         chatMessagesElement.innerHTML = '';
         updateUI();
         showFeedback('Cleared', 'success');
@@ -1814,19 +1475,13 @@ function addChatMessage(type, content, options = {}) {
     if (!chatMessagesElement) return;
 
     const timestampDate = new Date();
-    const record = {
-        id: options.id || nextChatMessageId(),
-        type,
-        content,
+    const record = messageStore.add(type, content, {
+        id: options.id,
         timestamp: timestampDate,
-        canToggleAi: typeof options.canToggleAi === 'boolean'
-            ? options.canToggleAi
-            : canToggleAiForMessageType(type),
-        includeInAi: typeof options.includeInAi === 'boolean'
-            ? options.includeInAi
-            : defaultIncludeInAiForMessageType(type),
-        screenshotId: typeof options.screenshotId === 'string' ? options.screenshotId : null
-    };
+        canToggleAi: options.canToggleAi,
+        includeInAi: options.includeInAi,
+        screenshotId: options.screenshotId
+    });
 
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${type}-message`;
@@ -1897,7 +1552,7 @@ function addChatMessage(type, content, options = {}) {
 
     chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
 
-    chatMessagesArray.push(record);
+    chatMessagesArray = messageStore.getMessages();
 
     // Update UI to enable/disable buttons based on content
     updateUI();
@@ -2122,7 +1777,7 @@ function setupIpcListeners() {
             systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
             if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
             systemPartialText = '';
-            isSystemActive = false;
+            setSystemActive(false);
             resetSourceSampleQueue('system');
             resetFinalTranscriptBuffer('system');
         } else {
@@ -2130,7 +1785,7 @@ function setupIpcListeners() {
             micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
             if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
             micPartialText = '';
-            isMicActive = false;
+            setMicActive(false);
             resetSourceSampleQueue('mic');
             resetFinalTranscriptBuffer('mic');
         }
@@ -2148,7 +1803,7 @@ function setupIpcListeners() {
             systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
             if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
             systemPartialText = '';
-            isSystemActive = false;
+            setSystemActive(false);
             resetSourceSampleQueue('system');
             resetFinalTranscriptBuffer('system');
         } else {
@@ -2156,7 +1811,7 @@ function setupIpcListeners() {
             micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
             if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
             micPartialText = '';
-            isMicActive = false;
+            setMicActive(false);
             resetSourceSampleQueue('mic');
             resetFinalTranscriptBuffer('mic');
         }
@@ -2217,4 +1872,8 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
+
+
+
 

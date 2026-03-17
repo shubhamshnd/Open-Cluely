@@ -2,6 +2,60 @@
 
 Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
 
+## Features
+
+- Live transcription with a single master control button and per-source toggles:
+  - `Host audio` (system output)
+  - `Mic` (microphone input)
+- Real-time Transcription Monitor:
+  - Per-source status (`Off`, `Connecting`, `Listening`, `Error`)
+  - Live partial/final preview and rolling debug log
+- `Ask AI` now uses full session context:
+  - Transcript context (Host + You)
+  - Current session screenshots (when enabled)
+  - Works even when screenshot count is zero (text-only fallback)
+- New `Screen AI` button for screenshot-only analysis flow
+- Selective AI context controls in chat:
+  - Toggle transcript/screenshot messages `AI` / `Off` per message
+  - Disabled chunks stay visible but are excluded from AI prompts
+- Automatic context cap for long meetings:
+  - Keeps newest enabled context
+  - Trims oldest enabled chunks first when budget is exceeded
+
+## Ask AI vs Screen AI
+
+- `Ask AI`:
+  - Primary assistant action
+  - Uses filtered session context from chat (transcript + enabled screenshots)
+  - Best for "what should I say/do next?"
+- `Screen AI`:
+  - Screenshot-focused analysis
+  - Uses only enabled screenshot items
+- `Screenshot`:
+  - Capture only (does not analyze by itself)
+
+## Selective AI Context Controls
+
+In chat, transcript and screenshot messages have an `AI`/`Off` toggle.
+
+- `AI`: message is included in context sent to AI
+- `Off`: message is excluded from context, but still shown in UI
+- Excluded messages appear dimmed with an `Excluded from AI context` marker
+
+Default behavior:
+
+- Toggleable: transcript (`You` / `Host`) and screenshot messages
+- Always excluded: system status/error messages
+- Included by default: AI output messages
+
+This filtering is applied consistently across:
+
+- `Ask AI`
+- `Screen AI`
+- `What should I say`
+- `Generate Meeting Notes`
+- `Get Insights`
+
 ## Project Structure
 
 - `src/main.js` - main Electron process entry and runtime orchestration
@@ -146,9 +200,9 @@ If build fails with a symlink privilege error, enable Windows Developer Mode or 
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Alt+Shift+V` | Toggle voice transcription |
+| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
 | `Ctrl+Alt+Shift+S` | Capture screenshot |
-| `Ctrl+Alt+Shift+A` | Analyze with AI |
+| `Ctrl+Alt+Shift+A` | Ask AI (full session context) |
 | `Ctrl+Alt+Shift+X` | Emergency hide |
 | `Ctrl+Alt+Shift+H` | Toggle opacity |
 
