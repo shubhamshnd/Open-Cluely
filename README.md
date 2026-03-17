@@ -196,6 +196,20 @@ If build fails with a symlink privilege error, enable Windows Developer Mode or 
 - `npm run dev` - run with logs
 - `npm run build -- --config.win.signAndEditExecutable=false` - build Windows executable
 
+## Repomix
+
+To recreate the merged single-file codebase snapshot (`repomix-output.txt`), run:
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt
+```
+
+Optional (avoid packing the output file itself when experimenting with other output names):
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
+```
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
