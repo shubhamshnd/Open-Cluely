@@ -255,8 +255,10 @@ class GeminiService {
     });
   }
 
-  async analyzeScreenshots(imageParts, additionalContext = '') {
-    const contextString = this.getContextString();
+  async analyzeScreenshots(imageParts, additionalContext = '', options = {}) {
+    const contextString = typeof options.contextStringOverride === 'string'
+      ? options.contextStringOverride
+      : this.getContextString();
     const prompt = buildScreenshotAnalysisPrompt({
       contextString,
       additionalContext,
@@ -287,7 +289,9 @@ class GeminiService {
   }
 
   async askAiWithSessionContext(options = {}) {
-    const contextString = this.getContextString();
+    const contextString = typeof options.contextString === 'string'
+      ? options.contextString
+      : this.getContextString();
     const prompt = buildAskAiSessionPrompt({
       contextString,
       transcriptContext: options.transcriptContext || '',
@@ -302,7 +306,9 @@ class GeminiService {
   }
 
   async askAiWithSessionContextAndScreenshots(imageParts, options = {}) {
-    const contextString = this.getContextString();
+    const contextString = typeof options.contextString === 'string'
+      ? options.contextString
+      : this.getContextString();
     const prompt = buildAskAiSessionPrompt({
       contextString,
       transcriptContext: options.transcriptContext || '',
@@ -320,8 +326,10 @@ class GeminiService {
     return result;
   }
 
-  async suggestResponse(context) {
-    const contextString = this.getContextString();
+  async suggestResponse(context, options = {}) {
+    const contextString = typeof options.contextString === 'string'
+      ? options.contextString
+      : this.getContextString();
     const prompt = buildSuggestResponsePrompt({
       contextString,
       context
@@ -330,12 +338,13 @@ class GeminiService {
     return this.generateText(prompt);
   }
 
-  async generateMeetingNotes() {
-    if (this.conversationHistory.length === 0) {
+  async generateMeetingNotes(options = {}) {
+    const contextString = typeof options.contextString === 'string'
+      ? options.contextString
+      : this.getContextString();
+    if (!contextString.trim()) {
       return 'No conversation history to summarize.';
     }
-
-    const contextString = this.getContextString();
     const prompt = buildMeetingNotesPrompt({ contextString });
     return this.generateText(prompt);
   }
@@ -364,12 +373,13 @@ class GeminiService {
     return result;
   }
 
-  async getConversationInsights() {
-    if (this.conversationHistory.length === 0) {
+  async getConversationInsights(options = {}) {
+    const contextString = typeof options.contextString === 'string'
+      ? options.contextString
+      : this.getContextString();
+    if (!contextString.trim()) {
       return 'Not enough conversation data for insights.';
     }
-
-    const contextString = this.getContextString();
     const prompt = buildInsightsPrompt({ contextString });
     return this.generateText(prompt);
   }

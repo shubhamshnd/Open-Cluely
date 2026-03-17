@@ -143,9 +143,9 @@ try {
       });
     },
 
-    generateMeetingNotes: () => {
+    generateMeetingNotes: (payload = {}) => {
       console.log('PreloadAPI: generateMeetingNotes called');
-      return ipcRenderer.invoke('generate-meeting-notes').catch(err => {
+      return ipcRenderer.invoke('generate-meeting-notes', payload).catch(err => {
         console.error('PreloadAPI: generateMeetingNotes error:', err);
         return { error: err.message };
       });
@@ -167,9 +167,9 @@ try {
       });
     },
 
-    getConversationInsights: () => {
+    getConversationInsights: (payload = {}) => {
       console.log('PreloadAPI: getConversationInsights called');
-      return ipcRenderer.invoke('get-conversation-insights').catch(err => {
+      return ipcRenderer.invoke('get-conversation-insights', payload).catch(err => {
         console.error('PreloadAPI: getConversationInsights error:', err);
         return { error: err.message };
       });
@@ -193,10 +193,10 @@ try {
     
     // Event listeners with cleanup functions and error handling
     onScreenshotTakenStealth: (callback) => {
-      const handler = (event, count) => {
-        console.log('PreloadAPI: onScreenshotTakenStealth event received, count:', count);
+      const handler = (event, payload) => {
+        console.log('PreloadAPI: onScreenshotTakenStealth event received:', payload);
         try {
-          callback(count);
+          callback(payload);
         } catch (err) {
           console.error('PreloadAPI: onScreenshotTakenStealth callback error:', err);
         }

@@ -6,6 +6,8 @@ let isAnalyzing = false;
 let stealthModeActive = false;
 let stealthHideTimeout = null;
 let chatMessagesArray = [];
+let chatMessageSequence = 0;
+const AI_CONTEXT_CHAR_BUDGET = 12000;
 
 // Mic audio capture state
 let micAudioContext = null;
@@ -410,6 +412,184 @@ function convertToPCM16(float32Data) {
 
 function sourceLabel(source) {
     return source === 'system' ? 'Host' : 'Mic';
+}
+
+function nextChatMessageId() {
+    chatMessageSequence += 1;
+    return `msg-${chatMessageSequence}`;
+}
+
+function isTranscriptMessageType(type) {
+    return type === 'voice' || type === 'voice-mic' || type === 'voice-system';
+}
+
+function isScreenshotMessageType(type) {
+    return type === 'screenshot';
+}
+
+function isSystemMessageType(type) {
+    return type === 'system';
+}
+
+function isAiResponseMessageType(type) {
+    return type === 'ai-response';
+}
+
+function canToggleAiForMessageType(type) {
+    return isTranscriptMessageType(type) || isScreenshotMessageType(type);
+}
+
+function defaultIncludeInAiForMessageType(type) {
+    if (isSystemMessageType(type)) return false;
+    return true;
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function isMessageIncludedForAi(message) {
+    if (!message || isSystemMessageType(message.type)) {
+        return false;
+    }
+    if (message.canToggleAi) {
+        return !!message.includeInAi;
+    }
+    return message.includeInAi !== false;
+}
+
+function contextLineForMessage(message) {
+    const content = String(message?.content || '').trim();
+    if (!content) return '';
+
+    if (message.type === 'voice-system') return `Host: ${content}`;
+    if (message.type === 'voice' || message.type === 'voice-mic') return `You: ${content}`;
+    if (message.type === 'screenshot') {
+        return message.screenshotId
+            ? `Screenshot(${message.screenshotId}): ${content}`
+            : `Screenshot: ${content}`;
+    }
+    if (message.type === 'ai-response') return `AI: ${content}`;
+    return '';
+}
+
+function summaryLineForMessage(message) {
+    const content = String(message?.content || '').trim().replace(/\s+/g, ' ');
+    if (!content) return '';
+
+    if (message.type === 'voice-system') return `Host said: ${content}`;
+    if (message.type === 'voice' || message.type === 'voice-mic') return `You said: ${content}`;
+    if (message.type === 'screenshot') return `Screenshot: ${content}`;
+    if (message.type === 'ai-response') return `AI response: ${content}`;
+    return '';
+}
+
+function buildFilteredAiContextBundle({ charBudget = AI_CONTEXT_CHAR_BUDGET, emitTruncationLog = true } = {}) {
+    const candidates = chatMessagesArray
+        .filter(isMessageIncludedForAi)
+        .map((message) => ({
+            message,
+            contextLine: contextLineForMessage(message),
+            summaryLine: summaryLineForMessage(message)
+        }))
+        .filter((entry) => entry.contextLine.length > 0);
+
+    const selectedReversed = [];
+    let currentChars = 0;
+    let dropped = 0;
+
+    for (let i = candidates.length - 1; i >= 0; i -= 1) {
+        const entry = candidates[i];
+        const nextCost = entry.contextLine.length + 1;
+        if (currentChars + nextCost > charBudget) {
+            dropped += 1;
+            continue;
+        }
+        selectedReversed.push(entry);
+        currentChars += nextCost;
+    }
+
+    const selected = selectedReversed.reverse();
+    if (emitTruncationLog && dropped > 0) {
+        addMonitorLog(
+            'info',
+            'context-cap',
+            `Trimmed ${dropped} older context message(s) to stay within ${charBudget} chars`
+        );
+    }
+
+    const transcriptContext = selected
+        .filter((entry) => isTranscriptMessageType(entry.message.type))
+        .map((entry) => entry.contextLine)
+        .join('\n');
+
+    const sessionSummary = selected
+        .filter((entry) => !isSystemMessageType(entry.message.type))
+        .map((entry) => entry.summaryLine)
+        .filter((line) => line.length > 0)
+        .slice(-16)
+        .join('\n');
+
+    const enabledScreenshotIds = Array.from(
+        new Set(
+            selected
+                .filter((entry) => isScreenshotMessageType(entry.message.type))
+                .map((entry) => entry.message.screenshotId)
+                .filter((value) => typeof value === 'string' && value.trim().length > 0)
+        )
+    );
+
+    return {
+        contextString: selected.map((entry) => entry.contextLine).join('\n'),
+        transcriptContext,
+        sessionSummary,
+        enabledScreenshotIds,
+        droppedMessages: dropped,
+        selectedMessages: selected.length,
+        charBudget
+    };
+}
+
+function findChatMessageById(messageId) {
+    return chatMessagesArray.find((message) => message.id === messageId);
+}
+
+function updateMessageAiToggleUi(message) {
+    if (!message || !message.id || !chatMessagesElement) return;
+    const container = chatMessagesElement.querySelector(`.chat-message[data-message-id="${message.id}"]`);
+    if (!container) return;
+
+    container.classList.toggle('ai-excluded', message.canToggleAi && !message.includeInAi);
+    container.classList.toggle('ai-included', message.canToggleAi && !!message.includeInAi);
+
+    const toggle = container.querySelector('.ai-include-toggle');
+    if (toggle) {
+        toggle.classList.toggle('included', !!message.includeInAi);
+        toggle.classList.toggle('excluded', !message.includeInAi);
+        toggle.textContent = message.includeInAi ? 'AI' : 'Off';
+        toggle.title = message.includeInAi ? 'Exclude from AI context' : 'Include in AI context';
+        toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
+    }
+}
+
+function toggleChatMessageInclusion(messageId) {
+    const message = findChatMessageById(messageId);
+    if (!message || !message.canToggleAi) return;
+
+    message.includeInAi = !message.includeInAi;
+    updateMessageAiToggleUi(message);
+    updateUI();
+
+    const stateText = message.includeInAi ? 'included in' : 'excluded from';
+    addMonitorLog('info', 'ai-context-toggle', `Message ${stateText} AI context`, null, {
+        id: message.id,
+        type: message.type
+    });
 }
 
 function normalizeSource(source) {
@@ -1138,29 +1318,14 @@ function getTranscriptMessages() {
 }
 
 function buildAskAiContextPayload() {
-    const transcriptContext = getTranscriptMessages()
-        .slice(-24)
-        .map((message) => {
-            if (message.type === 'voice-system') return `Host: ${message.content}`;
-            return `You: ${message.content}`;
-        })
-        .join('\n');
-
-    const sessionSummary = chatMessagesArray
-        .filter((message) =>
-            message.type === 'system' ||
-            message.type === 'ai-response' ||
-            message.type === 'screenshot'
-        )
-        .slice(-8)
-        .map((message) => `${message.type}: ${String(message.content || '').replace(/\s+/g, ' ').trim()}`)
-        .join('\n');
-
+    const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
     return {
         mode: 'best-next-answer',
-        transcriptContext,
-        sessionSummary,
-        screenshotCount: screenshotsCount
+        contextString: bundle.contextString,
+        transcriptContext: bundle.transcriptContext,
+        sessionSummary: bundle.sessionSummary,
+        enabledScreenshotIds: bundle.enabledScreenshotIds,
+        screenshotCount: bundle.enabledScreenshotIds.length
     };
 }
 
@@ -1171,7 +1336,7 @@ async function askAiWithSessionContext() {
     }
 
     const payload = buildAskAiContextPayload();
-    if (!payload.transcriptContext && screenshotsCount === 0) {
+    if (!payload.contextString && payload.enabledScreenshotIds.length === 0) {
         showFeedback('No transcript or screenshots available yet', 'error');
         return;
     }
@@ -1202,8 +1367,9 @@ async function askAiWithSessionContext() {
 }
 
 async function analyzeScreenshotsOnly() {
-    if (screenshotsCount === 0) {
-        showFeedback('No screenshots to analyze', 'error');
+    const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+    if (bundle.enabledScreenshotIds.length === 0) {
+        showFeedback('No enabled screenshots to analyze', 'error');
         return;
     }
 
@@ -1211,11 +1377,10 @@ async function analyzeScreenshotsOnly() {
         setAnalyzing(true);
         showLoadingOverlay('Analyzing screenshots...');
 
-        const context = chatMessagesArray
-            .map(msg => `${msg.type}: ${msg.content}`)
-            .join('\n\n');
-
-        await window.electronAPI.analyzeStealthWithContext(context);
+        await window.electronAPI.analyzeStealthWithContext({
+            contextString: bundle.contextString,
+            enabledScreenshotIds: bundle.enabledScreenshotIds
+        });
     } catch (error) {
         console.error('Analysis error:', error);
         showFeedback('Analysis failed', 'error');
@@ -1232,6 +1397,7 @@ async function clearStealthData() {
         }
         screenshotsCount = 0;
         chatMessagesArray = [];
+        chatMessageSequence = 0;
         chatMessagesElement.innerHTML = '';
         updateUI();
         showFeedback('Cleared', 'success');
@@ -1291,15 +1457,16 @@ async function getResponseSuggestions() {
 
     try {
         showFeedback('Generating suggestions...', 'info');
+        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+        if (!bundle.contextString) {
+            showFeedback('No enabled context available for suggestions', 'error');
+            return;
+        }
 
-        const recentMessages = chatMessagesArray
-            .slice(-5)
-            .map(m => `${m.type}: ${m.content}`)
-            .join('\n');
-
-        const context = recentMessages || 'Current meeting conversation';
-
-        const result = await window.electronAPI.suggestResponse(context);
+        const result = await window.electronAPI.suggestResponse({
+            context: bundle.sessionSummary || 'Current meeting conversation',
+            contextString: bundle.contextString
+        });
 
         if (result.success && result.suggestions) {
             addChatMessage('ai-response', `\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
@@ -1323,8 +1490,16 @@ async function generateMeetingNotes() {
     try {
         showFeedback('Generating meeting notes...', 'info');
         setAnalyzing(true);
+        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+        if (!bundle.contextString) {
+            setAnalyzing(false);
+            showFeedback('No enabled context available for notes', 'error');
+            return;
+        }
 
-        const result = await window.electronAPI.generateMeetingNotes();
+        const result = await window.electronAPI.generateMeetingNotes({
+            contextString: bundle.contextString
+        });
 
         setAnalyzing(false);
 
@@ -1351,8 +1526,16 @@ async function getConversationInsights() {
     try {
         showFeedback('Analyzing conversation...', 'info');
         setAnalyzing(true);
+        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+        if (!bundle.contextString) {
+            setAnalyzing(false);
+            showFeedback('No enabled context available for insights', 'error');
+            return;
+        }
 
-        const result = await window.electronAPI.getConversationInsights();
+        const result = await window.electronAPI.getConversationInsights({
+            contextString: bundle.contextString
+        });
 
         setAnalyzing(false);
 
@@ -1525,15 +1708,20 @@ function updateUI() {
         screenshotCount.textContent = screenshotsCount;
     }
 
-    const hasTranscriptContext = getTranscriptMessages().length > 0;
+    const aiBundle = buildFilteredAiContextBundle({
+        charBudget: AI_CONTEXT_CHAR_BUDGET,
+        emitTruncationLog: false
+    });
+    const hasTranscriptContext = aiBundle.transcriptContext.length > 0;
+    const hasEnabledScreenshots = aiBundle.enabledScreenshotIds.length > 0;
 
     if (analyzeBtn) {
-        const hasContent = screenshotsCount > 0 || hasTranscriptContext;
+        const hasContent = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
         analyzeBtn.disabled = isAnalyzing || !hasContent;
     }
 
     if (screenAiBtn) {
-        screenAiBtn.disabled = isAnalyzing || screenshotsCount === 0;
+        screenAiBtn.disabled = isAnalyzing || !hasEnabledScreenshots;
     }
 }
 
@@ -1622,55 +1810,99 @@ function formatResponse(text) {
     return formatted;
 }
 
-function addChatMessage(type, content) {
+function addChatMessage(type, content, options = {}) {
     if (!chatMessagesElement) return;
+
+    const timestampDate = new Date();
+    const record = {
+        id: options.id || nextChatMessageId(),
+        type,
+        content,
+        timestamp: timestampDate,
+        canToggleAi: typeof options.canToggleAi === 'boolean'
+            ? options.canToggleAi
+            : canToggleAiForMessageType(type),
+        includeInAi: typeof options.includeInAi === 'boolean'
+            ? options.includeInAi
+            : defaultIncludeInAiForMessageType(type),
+        screenshotId: typeof options.screenshotId === 'string' ? options.screenshotId : null
+    };
 
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${type}-message`;
+    messageDiv.dataset.messageId = record.id;
+    if (record.canToggleAi) {
+        messageDiv.classList.add('ai-toggleable');
+        messageDiv.classList.add(record.includeInAi ? 'ai-included' : 'ai-excluded');
+    }
 
-    const timestamp = new Date().toLocaleTimeString('en-US', {
+    const timestamp = timestampDate.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit'
     });
 
-    let messageContent = '';
+    let icon = '\u2139\uFE0F';
+    let label = '';
+    let contentClass = 'message-content';
+    let safeContent = escapeHtml(content);
 
     switch (type) {
         case 'voice':
         case 'voice-mic':
-            messageContent = `<div class="message-header"><span class="message-icon">\u{1F3A4}</span><span class="message-label">You</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            icon = '\u{1F3A4}';
+            label = 'You';
             break;
 
         case 'voice-system':
-            messageContent = `<div class="message-header"><span class="message-icon">\u{1F50A}</span><span class="message-label">Host</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            icon = '\u{1F50A}';
+            label = 'Host';
             break;
 
         case 'screenshot':
-            messageContent = `<div class="message-header"><span class="message-icon">\u{1F4F8}</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            icon = '\u{1F4F8}';
             break;
 
         case 'ai-response':
-            messageContent = `<div class="message-header"><span class="message-icon">\u{1F916}</span><span class="message-time">${timestamp}</span></div><div class="message-content ai-response">${formatResponse(content)}</div>`;
+            icon = '\u{1F916}';
+            contentClass = 'message-content ai-response';
+            safeContent = formatResponse(content);
             break;
 
         case 'system':
-            messageContent = `<div class="message-header"><span class="message-icon">\u2139\uFE0F</span><span class="message-time">${timestamp}</span></div><div class="message-content system-message">${content}</div>`;
+            icon = '\u2139\uFE0F';
+            contentClass = 'message-content system-message';
             break;
     }
+
+    const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
+    const toggleHtml = record.canToggleAi
+        ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}" title="${record.includeInAi ? 'Exclude from AI context' : 'Include in AI context'}">${record.includeInAi ? 'AI' : 'Off'}</button>`
+        : '';
+    const exclusionHtml = record.canToggleAi
+        ? '<div class="ai-excluded-note">Excluded from AI context</div>'
+        : '';
+
+    const messageContent = `
+        <div class="message-header">
+            <span class="message-icon">${icon}</span>
+            ${labelHtml}
+            ${toggleHtml}
+            <span class="message-time">${timestamp}</span>
+        </div>
+        <div class="${contentClass}">${exclusionHtml}${safeContent}</div>
+    `;
 
     messageDiv.innerHTML = messageContent;
     chatMessagesElement.appendChild(messageDiv);
 
     chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
 
-    chatMessagesArray.push({
-        type,
-        content,
-        timestamp: new Date()
-    });
+    chatMessagesArray.push(record);
 
     // Update UI to enable/disable buttons based on content
     updateUI();
+
+    return record;
 }
 
 // Timer
@@ -1721,6 +1953,17 @@ function setupEventListeners() {
             if (event.target === closeConfirmationDialog) {
                 closeCloseConfirmation();
             }
+        });
+    }
+
+    if (chatMessagesElement) {
+        chatMessagesElement.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('.ai-include-toggle');
+            if (!button) return;
+            event.preventDefault();
+            const messageId = button.dataset.messageId;
+            if (!messageId) return;
+            toggleChatMessageInclusion(messageId);
         });
     }
 
@@ -1794,9 +2037,12 @@ function setupIpcListeners() {
     }
 
     window.electronAPI.onScreenshotTakenStealth((count) => {
-        screenshotsCount = count;
+        const payload = typeof count === 'object' && count !== null ? count : { count };
+        screenshotsCount = Number(payload.count || 0);
         updateUI();
-        addChatMessage('screenshot', 'Screenshot captured');
+        addChatMessage('screenshot', 'Screenshot captured', {
+            screenshotId: typeof payload.screenshotId === 'string' ? payload.screenshotId : null
+        });
         showFeedback('Screenshot captured', 'success');
     });
 

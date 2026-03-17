@@ -832,7 +832,6 @@ body.chat-resizing * {
 
 .message-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 6px;
   margin-bottom: 2px;
@@ -848,6 +847,7 @@ body.chat-resizing * {
   font-size: 9px;
   color: rgba(0, 0, 0, 0.6);
   font-family: 'SF Mono', Monaco, Consolas, monospace;
+  margin-left: auto;
 }
 
 .message-label {
@@ -872,6 +872,52 @@ body.chat-resizing * {
   border-radius: 6px;
   font-weight: 500;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.ai-include-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(16, 185, 129, 0.26);
+  color: rgba(0, 0, 0, 0.84);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-include-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.ai-include-toggle.excluded {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.chat-message.ai-excluded {
+  opacity: 0.68;
+  filter: grayscale(0.2);
+}
+
+.chat-message.ai-excluded .message-content {
+  border: 1px dashed rgba(244, 63, 94, 0.35);
+}
+
+.ai-excluded-note {
+  display: none;
+  margin-bottom: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(190, 24, 93, 0.85);
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.chat-message.ai-excluded .ai-excluded-note {
+  display: inline-flex;
 }
 
 .message-content.interim-content {

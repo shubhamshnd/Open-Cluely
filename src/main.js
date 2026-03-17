@@ -27,6 +27,7 @@ const { createAssistantWindow } = require('./windows/assistant/window');
 
 let mainWindow;
 let screenshots = [];
+let screenshotSequence = 0;
 let chatContext = [];
 const WINDOW_DEFAULT_WIDTH = 900;
 const WINDOW_DEFAULT_HEIGHT = 400;
@@ -71,6 +72,30 @@ const sttHistoryBuffers = {
 let isRecoveryReloadInProgress = false;
 let lastRecoveryReloadAt = 0;
 const RECOVERY_RELOAD_COOLDOWN_MS = 5000;
+
+function nextScreenshotId() {
+  screenshotSequence += 1;
+  return `ss-${Date.now()}-${screenshotSequence}`;
+}
+
+function normalizeScreenshotEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === 'string') {
+    return {
+      id: null,
+      path: entry,
+      timestamp: null
+    };
+  }
+  if (typeof entry.path === 'string') {
+    return {
+      id: typeof entry.id === 'string' ? entry.id : null,
+      path: entry.path,
+      timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : null
+    };
+  }
+  return null;
+}
 
 function initializeGeminiService(
   apiKey,
@@ -187,13 +212,15 @@ function cleanupTransientResources() {
   resetSttHistoryBuffer('system');
   globalShortcut.unregisterAll();
 
-  screenshots.forEach((screenshotPath) => {
-    if (fs.existsSync(screenshotPath)) {
-      fs.unlinkSync(screenshotPath);
+  screenshots.forEach((entry) => {
+    const normalizedEntry = normalizeScreenshotEntry(entry);
+    if (normalizedEntry && fs.existsSync(normalizedEntry.path)) {
+      fs.unlinkSync(normalizedEntry.path);
     }
   });
 
   screenshots = [];
+  screenshotSequence = 0;
 }
 
 function quitApplication() {
@@ -520,12 +547,18 @@ async function takeStealthScreenshot() {
     
     const screenshotPath = path.join(screenshotsDir, `stealth-${Date.now()}.png`);
     await screenshot({ filename: screenshotPath });
-    
-    screenshots.push(screenshotPath);
+
+    const screenshotEntry = {
+      id: nextScreenshotId(),
+      path: screenshotPath,
+      timestamp: new Date().toISOString()
+    };
+
+    screenshots.push(screenshotEntry);
     if (screenshots.length > appEnvironment.maxScreenshots) {
-      const oldPath = screenshots.shift();
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
+      const oldEntry = normalizeScreenshotEntry(screenshots.shift());
+      if (oldEntry && fs.existsSync(oldEntry.path)) {
+        fs.unlinkSync(oldEntry.path);
       }
     }
     
@@ -534,7 +567,11 @@ async function takeStealthScreenshot() {
     console.log(`Screenshot saved: ${screenshotPath}`);
     console.log(`Total screenshots: ${screenshots.length}`);
     
-    sendToRenderer('screenshot-taken-stealth', screenshots.length);
+    sendToRenderer('screenshot-taken-stealth', {
+      count: screenshots.length,
+      screenshotId: screenshotEntry.id,
+      timestamp: screenshotEntry.timestamp
+    });
     
     return screenshotPath;
   } catch (error) {
@@ -544,23 +581,32 @@ async function takeStealthScreenshot() {
   }
 }
 
-async function buildImagePartsFromScreenshots({ strict = true } = {}) {
-  const usableScreenshotPaths = [];
+async function buildImagePartsFromScreenshots({ strict = true, includeIds = null } = {}) {
+  const includeIdSet = Array.isArray(includeIds)
+    ? new Set(includeIds.filter((id) => typeof id === 'string' && id.trim().length > 0))
+    : null;
+  const usableEntries = [];
 
-  for (const screenshotPath of screenshots) {
-    if (fs.existsSync(screenshotPath)) {
-      usableScreenshotPaths.push(screenshotPath);
+  for (const entry of screenshots) {
+    const normalizedEntry = normalizeScreenshotEntry(entry);
+    if (!normalizedEntry) continue;
+    if (includeIdSet && (!normalizedEntry.id || !includeIdSet.has(normalizedEntry.id))) {
       continue;
     }
 
-    console.error(`Screenshot file not found: ${screenshotPath}`);
+    if (fs.existsSync(normalizedEntry.path)) {
+      usableEntries.push(normalizedEntry);
+      continue;
+    }
+
+    console.error(`Screenshot file not found: ${normalizedEntry.path}`);
     if (strict) {
-      throw new Error(`Screenshot file not found: ${screenshotPath}`);
+      throw new Error(`Screenshot file not found: ${normalizedEntry.path}`);
     }
   }
 
-  return usableScreenshotPaths.map((screenshotPath) => {
-    const imageData = fs.readFileSync(screenshotPath);
+  const imageParts = usableEntries.map((entry) => {
+    const imageData = fs.readFileSync(entry.path);
     return {
       inlineData: {
         data: imageData.toString('base64'),
@@ -568,11 +614,22 @@ async function buildImagePartsFromScreenshots({ strict = true } = {}) {
       }
     };
   });
+
+  return {
+    imageParts,
+    entries: usableEntries
+  };
 }
 
-async function analyzeForMeetingWithContext(context = '') {
+async function analyzeForMeetingWithContext(contextInput = '') {
+  const payload = typeof contextInput === 'object' && contextInput !== null
+    ? contextInput
+    : { contextString: String(contextInput || '') };
+  const contextString = typeof payload.contextString === 'string' ? payload.contextString : '';
+  const enabledScreenshotIds = Array.isArray(payload.enabledScreenshotIds) ? payload.enabledScreenshotIds : null;
+
   console.log('Starting context-aware analysis...');
-  console.log('Context length:', context.length);
+  console.log('Context length:', contextString.length);
   console.log('API Key exists:', !!appEnvironment.geminiApiKey);
   console.log('Model initialized:', !!(geminiService && geminiService.model));
   console.log('Programming language preference:', activeProgrammingLanguage);
@@ -607,7 +664,16 @@ async function analyzeForMeetingWithContext(context = '') {
     sendToRenderer('analysis-start');
     
     console.log('Processing screenshots...');
-    const imageParts = await buildImagePartsFromScreenshots({ strict: true });
+    const { imageParts } = await buildImagePartsFromScreenshots({
+      strict: true,
+      includeIds: enabledScreenshotIds
+    });
+    if (imageParts.length === 0) {
+      sendToRenderer('analysis-result', {
+        error: 'No enabled screenshots selected for analysis.'
+      });
+      return;
+    }
 
     console.log(`Prepared ${imageParts.length} image parts for analysis`);
     /*
@@ -618,7 +684,11 @@ async function analyzeForMeetingWithContext(context = '') {
 
     */
     console.log('Sending request to Gemini with rate limiting...');
-    const text = await geminiService.analyzeScreenshots(imageParts, context);
+    const text = await geminiService.analyzeScreenshots(
+      imageParts,
+      '',
+      { contextStringOverride: contextString }
+    );
     console.log('Received response from Gemini');
     
     console.log('Generated text length:', text.length);
@@ -628,7 +698,7 @@ async function analyzeForMeetingWithContext(context = '') {
       type: 'analysis',
       content: text,
       timestamp: new Date().toISOString(),
-      screenshotCount: screenshots.length
+      screenshotCount: imageParts.length
     });
 
     sendToRenderer('analysis-result', { text });
@@ -708,7 +778,10 @@ ipcMain.handle('analyze-stealth', async () => {
 });
 
 ipcMain.handle('analyze-stealth-with-context', async (event, context) => {
-  console.log('IPC: analyze-stealth-with-context called with context length:', context.length);
+  const contextLength = typeof context === 'string'
+    ? context.length
+    : (typeof context?.contextString === 'string' ? context.contextString.length : 0);
+  console.log('IPC: analyze-stealth-with-context called with context length:', contextLength);
   return await analyzeForMeetingWithContext(context);
 });
 
@@ -733,8 +806,14 @@ ipcMain.handle('ask-ai-with-session-context', async (event, payload = {}) => {
     const sessionSummary = typeof payload?.sessionSummary === 'string'
       ? payload.sessionSummary.trim()
       : '';
+    const contextString = typeof payload?.contextString === 'string'
+      ? payload.contextString.trim()
+      : '';
+    const enabledScreenshotIds = Array.isArray(payload?.enabledScreenshotIds)
+      ? payload.enabledScreenshotIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
+      : null;
 
-    if (!transcriptContext && screenshots.length === 0) {
+    if (!transcriptContext && !contextString && screenshots.length === 0) {
       return {
         success: false,
         error: 'No transcript or screenshots available yet. Start transcription or capture a screenshot first.',
@@ -744,13 +823,19 @@ ipcMain.handle('ask-ai-with-session-context', async (event, payload = {}) => {
     }
 
     let usedScreenshots = false;
+    let usedScreenshotCount = 0;
     let text = '';
 
     if (screenshots.length > 0) {
-      const imageParts = await buildImagePartsFromScreenshots({ strict: false });
+      const { imageParts } = await buildImagePartsFromScreenshots({
+        strict: false,
+        includeIds: enabledScreenshotIds
+      });
       if (imageParts.length > 0) {
         usedScreenshots = true;
+        usedScreenshotCount = imageParts.length;
         text = await geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
+          contextString,
           transcriptContext,
           sessionSummary,
           screenshotCount: imageParts.length,
@@ -761,9 +846,10 @@ ipcMain.handle('ask-ai-with-session-context', async (event, payload = {}) => {
 
     if (!text) {
       text = await geminiService.askAiWithSessionContext({
+        contextString,
         transcriptContext,
         sessionSummary,
-        screenshotCount: usedScreenshots ? screenshots.length : 0,
+        screenshotCount: usedScreenshots ? usedScreenshotCount : 0,
         mode
       });
     }
@@ -772,7 +858,7 @@ ipcMain.handle('ask-ai-with-session-context', async (event, payload = {}) => {
       type: 'ask-ai',
       content: text,
       timestamp: new Date().toISOString(),
-      screenshotCount: usedScreenshots ? screenshots.length : 0
+      screenshotCount: usedScreenshots ? usedScreenshotCount : 0
     });
 
     return { success: true, text, mode, usedScreenshots };
@@ -789,13 +875,15 @@ ipcMain.handle('ask-ai-with-session-context', async (event, payload = {}) => {
 
 ipcMain.handle('clear-stealth', () => {
   console.log('IPC: clear-stealth called');
-  screenshots.forEach(path => {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-      console.log(`Deleted screenshot: ${path}`);
+  screenshots.forEach(entry => {
+    const normalizedEntry = normalizeScreenshotEntry(entry);
+    if (normalizedEntry && fs.existsSync(normalizedEntry.path)) {
+      fs.unlinkSync(normalizedEntry.path);
+      console.log(`Deleted screenshot: ${normalizedEntry.path}`);
     }
   });
   screenshots = [];
+  screenshotSequence = 0;
   chatContext = [];
   console.log('All screenshots and context cleared');
   return { success: true };
@@ -1435,7 +1523,18 @@ ipcMain.handle('suggest-response', async (event, context) => {
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
-    const suggestions = await geminiService.suggestResponse(context);
+    const payload = typeof context === 'object' && context !== null
+      ? context
+      : { context };
+    const contextPrompt = typeof payload.context === 'string'
+      ? payload.context
+      : 'Current meeting conversation';
+    const contextStringOverride = typeof payload.contextString === 'string'
+      ? payload.contextString
+      : '';
+    const suggestions = await geminiService.suggestResponse(contextPrompt, {
+      contextString: contextStringOverride
+    });
     return { success: true, suggestions };
   } catch (error) {
     console.error('Error generating suggestions:', error);
@@ -1444,14 +1543,19 @@ ipcMain.handle('suggest-response', async (event, context) => {
 });
 
 // Generate meeting notes
-ipcMain.handle('generate-meeting-notes', async () => {
+ipcMain.handle('generate-meeting-notes', async (event, payload = {}) => {
   console.log('IPC: generate-meeting-notes called');
   try {
     flushAllSttHistoryBuffers('pre-notes');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
-    const notes = await geminiService.generateMeetingNotes();
+    const contextStringOverride = typeof payload?.contextString === 'string'
+      ? payload.contextString
+      : '';
+    const notes = await geminiService.generateMeetingNotes({
+      contextString: contextStringOverride
+    });
     return { success: true, notes };
   } catch (error) {
     console.error('Error generating meeting notes:', error);
@@ -1492,14 +1596,19 @@ ipcMain.handle('answer-question', async (event, question) => {
 });
 
 // Get conversation insights
-ipcMain.handle('get-conversation-insights', async () => {
+ipcMain.handle('get-conversation-insights', async (event, payload = {}) => {
   console.log('IPC: get-conversation-insights called');
   try {
     flushAllSttHistoryBuffers('pre-insights');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
-    const insights = await geminiService.getConversationInsights();
+    const contextStringOverride = typeof payload?.contextString === 'string'
+      ? payload.contextString
+      : '';
+    const insights = await geminiService.getConversationInsights({
+      contextString: contextStringOverride
+    });
     return { success: true, insights };
   } catch (error) {
     console.error('Error getting insights:', error);
