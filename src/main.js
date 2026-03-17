@@ -1,42 +1,13 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
+const { app, dialog, globalShortcut, ipcMain, screen } = require('electron');
 const WebSocket = require('ws');
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
-
-// Helper function to check if running in dev mode
-function isDevelopment() {
-  return !app.isPackaged;
-}
-
-// Helper function to get the correct path based on environment
-function getAppPath() {
-  return isDevelopment() ? __dirname : path.join(process.resourcesPath, 'app.asar');
-}
-
-// Load .env from the correct location (handles both dev and production)
-// Do this after app is ready
-const isDev = !app.isPackaged;
-let envPath;
-
-if (isDev) {
-  envPath = path.join(__dirname, '..', '.env');
-} else {
-  envPath = path.join(process.resourcesPath, '.env');
-}
-
-require('dotenv').config({ path: envPath });
-
-console.log('Loaded .env from:', envPath);
-console.log('GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ Found' : '❌ Missing');
-console.log('ASSEMBLY_AI_API_KEY:', process.env.ASSEMBLY_AI_API_KEY ? '✅ Found' : '❌ Missing');
-
-
-require('dotenv').config({ path: envPath });
-
-const GeminiService = require('./gemini-service');
+const {
+  loadApplicationEnvironment,
+  saveApplicationEnvironment
+} = require('./bootstrap/environment');
 const {
   getAssemblyAiSpeechModels,
   getDefaultAssemblyAiSpeechModel,
@@ -45,14 +16,15 @@ const {
   resolveAssemblyAiSpeechModel,
   resolveGeminiModel
 } = require('./config');
-const { getAppStatePath, loadAppState, saveAppState } = require('./app-state');
+const GeminiService = require('./services/ai/gemini-service');
+const { getAppStatePath, loadAppState, saveAppState } = require('./services/state/app-state');
+const { createAssistantWindow } = require('./windows/assistant/window');
 
 (async () => {
 
 let mainWindow;
 let screenshots = [];
 let chatContext = [];
-const MAX_SCREENSHOTS = 3;
 const WINDOW_DEFAULT_WIDTH = 900;
 const WINDOW_DEFAULT_HEIGHT = 400;
 const WINDOW_MIN_WIDTH = 600;
@@ -72,6 +44,7 @@ let geminiService = null;
 let activeGeminiModel = DEFAULT_GEMINI_MODEL;
 let activeAssemblyAiSpeechModel = DEFAULT_ASSEMBLY_AI_SPEECH_MODEL;
 let appState = null;
+let appEnvironment = null;
 let isShuttingDown = false;
 
 function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
@@ -96,12 +69,7 @@ function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
 function loadPersistedAppState() {
   appState = loadAppState(app);
   activeGeminiModel = resolveGeminiModel(appState.geminiModel);
-  activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(
-    appState.assemblyAiSpeechModel,
-    process.env.ASSEMBLY_AI_SPEECH_MODEL
-  );
-
-  process.env.ASSEMBLY_AI_SPEECH_MODEL = activeAssemblyAiSpeechModel;
+  activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
 
   if (
     appState.geminiModel !== activeGeminiModel ||
@@ -116,6 +84,22 @@ function loadPersistedAppState() {
   console.log('Loaded app state from:', getAppStatePath(app));
   console.log('Restored Gemini model from app state:', activeGeminiModel);
   console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
+}
+
+function logStartupConfiguration() {
+  console.log('Loaded .env from:', appEnvironment.envPath);
+  console.log('Startup configuration:');
+  console.log(`  GEMINI_API_KEY: ${appEnvironment.geminiApiKey ? 'present' : 'missing'}`);
+  console.log(`  ASSEMBLY_AI_API_KEY: ${appEnvironment.assemblyAiApiKey ? 'present' : 'missing'}`);
+  console.log(`  HIDE_FROM_SCREEN_CAPTURE: ${appEnvironment.hideFromScreenCapture}`);
+  console.log(`  MAX_SCREENSHOTS: ${appEnvironment.maxScreenshots}`);
+  console.log(`  SCREENSHOT_DELAY: ${appEnvironment.screenshotDelay}`);
+  console.log(`  NODE_ENV: ${appEnvironment.nodeEnv}`);
+  console.log(`  NODE_OPTIONS: ${appEnvironment.nodeOptions}`);
+  console.log(`  Default Gemini model: ${DEFAULT_GEMINI_MODEL}`);
+  console.log(`  Gemini models: ${GEMINI_MODELS.join(', ')}`);
+  console.log(`  Default AssemblyAI speech model: ${DEFAULT_ASSEMBLY_AI_SPEECH_MODEL}`);
+  console.log(`  AssemblyAI speech models: ${ASSEMBLY_AI_SPEECH_MODELS.join(', ')}`);
 }
 
 function cleanupTransientResources() {
@@ -167,26 +151,6 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function parseBooleanEnv(name, defaultValue) {
-  const rawValue = process.env[name];
-
-  if (rawValue == null || rawValue === '') {
-    return defaultValue;
-  }
-
-  const normalized = String(rawValue).trim().toLowerCase();
-
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-    return true;
-  }
-
-  if (['0', 'false', 'no', 'off'].includes(normalized)) {
-    return false;
-  }
-
-  return defaultValue;
-}
-
 function getSafeWindowBounds(nextBounds = {}) {
   const currentBounds = mainWindow ? mainWindow.getBounds() : {
     x: 0,
@@ -214,172 +178,16 @@ function getSafeWindowBounds(nextBounds = {}) {
 }
 
 function createStealthWindow() {
-  console.log('Creating stealth window...');
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  // Short and wide window dimensions (resizable)
-  const windowWidth = WINDOW_DEFAULT_WIDTH;
-  const windowHeight = WINDOW_DEFAULT_HEIGHT;
-  const x = Math.floor((width - windowWidth) / 2);
-  const y = 40;
-
-  console.log(`Window position: ${x}, ${y}, size: ${windowWidth}x${windowHeight}`);
-
-  mainWindow = new BrowserWindow({
-    width: windowWidth,
-    height: windowHeight,
+  mainWindow = createAssistantWindow({
+    app,
+    screen,
+    defaultWidth: WINDOW_DEFAULT_WIDTH,
+    defaultHeight: WINDOW_DEFAULT_HEIGHT,
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    maxWidth: width,
-    maxHeight: height,
-    x: x,
-    y: y,
-    webPreferences: {
-      nodeIntegration: false,          // Disable for security
-      contextIsolation: true,          // Enable for security
-      preload: path.join(__dirname, 'preload.js'),
-      backgroundThrottling: false,
-      offscreen: false,
-      webSecurity: false,              // CHANGED: Disable for microphone access
-      allowRunningInsecureContent: true, // CHANGED: Allow for media access
-      experimentalFeatures: false,
-      enableRemoteModule: false,
-      sandbox: false                   // Keep disabled for dynamic imports
-    },
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: true,                   // CHANGED: Enable resizing
-    minimizable: false,
-    maximizable: false,
-    closable: false,
-    focusable: true,
-    show: false,
-    opacity: 1.0,
-    type: 'toolbar',
-    acceptFirstMouse: false,
-    disableAutoHideCursor: true,
-    enableLargerThanScreen: false,
-    hasShadow: false,
-    thickFrame: false,
-    titleBarStyle: 'hidden',
-    backgroundColor: '#00000000'
+    hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+    nodeEnv: appEnvironment.nodeEnv
   });
-
-  console.log('BrowserWindow created');
-  
-  const htmlPath = path.join(__dirname, 'renderer.html');
-  console.log('Loading HTML from:', htmlPath);
-  mainWindow.loadFile(htmlPath);
-  
-  // ADDED: Set up microphone permissions
-  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    console.log('Permission requested:', permission);
-    if (permission === 'microphone' || permission === 'media') {
-      console.log('Granting microphone permission');
-      callback(true);
-    } else {
-      console.log('Denying permission:', permission);
-      callback(false);
-    }
-  });
-
-  // ADDED: Set permissions policy for media access
-  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    console.log('Permission check:', permission, requestingOrigin);
-    if (permission === 'microphone' || permission === 'media') {
-      return true;
-    }
-    return false;
-  });
-
-  // ADDED: Override permissions for media devices
-  mainWindow.webContents.session.protocol.registerFileProtocol('file', (request, callback) => {
-    const pathname = decodeURI(request.url.replace('file:///', ''));
-    callback(pathname);
-  });
-  
-  // Apply stealth settings
-  if (process.platform === 'darwin') {
-    mainWindow.setVisibleOnAllWorkspaces(true, { 
-      visibleOnFullScreen: true,
-      skipTransformProcessType: true 
-    });
-    mainWindow.setAlwaysOnTop(true, 'pop-up-menu', 1);
-    app.dock.hide();
-    mainWindow.setHiddenInMissionControl(true);
-  } else if (process.platform === 'win32') {
-    console.log('Applying Windows stealth settings');
-    mainWindow.setSkipTaskbar(true);
-    mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
-    mainWindow.setAppDetails({
-      appId: 'SystemProcess',
-      appIconPath: '',
-      relaunchCommand: '',
-      relaunchDisplayName: ''
-    });
-  }
-
-  const hideFromScreenCapture = parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true);
-  mainWindow.setContentProtection(hideFromScreenCapture);
-  console.log(`Content protection ${hideFromScreenCapture ? 'enabled' : 'disabled'} (HIDE_FROM_SCREEN_CAPTURE=${hideFromScreenCapture})`);
-  
-  mainWindow.setIgnoreMouseEvents(false);
-  
-  mainWindow.webContents.on('dom-ready', () => {
-    console.log('DOM is ready');
-  });
-  
-  mainWindow.webContents.on('did-finish-load', () => {
-    console.log('HTML finished loading');
-    
-    mainWindow.webContents.executeJavaScript(`
-      console.log('Content check...');
-      console.log('Document title:', document.title);
-      console.log('Body exists:', !!document.body);
-      console.log('App element exists:', !!document.getElementById('app'));
-      console.log('Glass container exists:', !!document.querySelector('.glass-container'));
-      
-      document.body.style.background = 'transparent';
-      
-      if (document.body) {
-        document.body.style.visibility = 'visible';
-        document.body.style.display = 'block';
-        console.log('Body made visible');
-      }
-      
-      const app = document.getElementById('app');
-      if (app) {
-        app.style.visibility = 'visible';
-        app.style.display = 'block';
-        console.log('App container made visible');
-      }
-      
-      'Content visibility check complete';
-    `).then((result) => {
-      console.log('JavaScript result:', result);
-      mainWindow.show();
-      mainWindow.focus();
-      console.log('Window shown with transparent background');
-    }).catch((error) => {
-      console.log('JavaScript execution failed:', error);
-      mainWindow.show();
-    });
-  });
-  
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('Failed to load:', errorCode, errorDescription);
-  });
-  
-  // Handle console messages from renderer
-  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-    console.log(`Renderer console.${level}: ${message}`);
-  });
-  
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools();
-  }
 }
 
 function registerStealthShortcuts() {
@@ -494,15 +302,15 @@ async function takeStealthScreenshot() {
   try {
     console.log('Taking stealth screenshot...');
     const currentOpacity = mainWindow.getOpacity();
+    const screenshotDelay = appEnvironment?.screenshotDelay || 300;
     
     mainWindow.setOpacity(0.01);
     
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, screenshotDelay));
 
-    // Use app data directory for screenshots in production
-    const screenshotsDir = isDevelopment()
-      ? path.join(__dirname, '..', '.stealth_screenshots')
-      : path.join(app.getPath('userData'), '.stealth_screenshots');
+    const screenshotsDir = app.isPackaged
+      ? path.join(app.getPath('userData'), '.stealth_screenshots')
+      : path.join(__dirname, '..', '.stealth_screenshots');
 
     if (!fs.existsSync(screenshotsDir)) {
       fs.mkdirSync(screenshotsDir, { recursive: true });
@@ -512,7 +320,7 @@ async function takeStealthScreenshot() {
     await screenshot({ filename: screenshotPath });
     
     screenshots.push(screenshotPath);
-    if (screenshots.length > MAX_SCREENSHOTS) {
+    if (screenshots.length > appEnvironment.maxScreenshots) {
       const oldPath = screenshots.shift();
       if (fs.existsSync(oldPath)) {
         fs.unlinkSync(oldPath);
@@ -537,11 +345,11 @@ async function takeStealthScreenshot() {
 async function analyzeForMeetingWithContext(context = '') {
   console.log('Starting context-aware analysis...');
   console.log('Context length:', context.length);
-  console.log('API Key exists:', !!process.env.GEMINI_API_KEY);
+  console.log('API Key exists:', !!appEnvironment.geminiApiKey);
   console.log('Model initialized:', !!(geminiService && geminiService.model));
   console.log('Screenshots count:', screenshots.length);
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!appEnvironment.geminiApiKey) {
     console.error('No GEMINI_API_KEY found');
     mainWindow.webContents.send('analysis-result', {
       error: 'No API key configured. Please add GEMINI_API_KEY to your .env file.'
@@ -760,7 +568,7 @@ ipcMain.handle('start-voice-recognition', () => {
     return { success: true, message: 'Already running' };
   }
 
-  const apiKey = process.env.ASSEMBLY_AI_API_KEY;
+  const apiKey = appEnvironment.assemblyAiApiKey;
   if (!apiKey) {
     console.error('ASSEMBLY_AI_API_KEY not found');
     mainWindow.webContents.send('vosk-error', { error: 'ASSEMBLY_AI_API_KEY not configured in .env' });
@@ -903,7 +711,7 @@ ipcMain.handle('stop-voice-recognition', () => {
 ipcMain.handle('transcribe-audio', async (event, base64Audio) => {
   console.log('IPC: transcribe-audio called, size:', base64Audio.length);
 
-  const apiKey = process.env.ASSEMBLY_AI_API_KEY;
+  const apiKey = appEnvironment.assemblyAiApiKey;
   if (!apiKey) {
     return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured in .env' };
   }
@@ -1145,15 +953,15 @@ ipcMain.handle('get-conversation-history', async () => {
 // Get current settings (API keys + models)
 ipcMain.handle('get-settings', () => {
   return {
-    geminiApiKey: process.env.GEMINI_API_KEY || '',
-    assemblyAiApiKey: process.env.ASSEMBLY_AI_API_KEY || '',
+    geminiApiKey: appEnvironment.geminiApiKey,
+    assemblyAiApiKey: appEnvironment.assemblyAiApiKey,
     geminiModel: activeGeminiModel,
     geminiModels: GEMINI_MODELS,
     defaultGeminiModel: DEFAULT_GEMINI_MODEL,
     assemblyAiSpeechModels: ASSEMBLY_AI_SPEECH_MODELS,
     defaultAssemblyAiSpeechModel: DEFAULT_ASSEMBLY_AI_SPEECH_MODEL,
     assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
-    hideFromScreenCapture: parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true)
+    hideFromScreenCapture: appEnvironment.hideFromScreenCapture
   };
 });
 
@@ -1166,55 +974,24 @@ ipcMain.handle('save-settings', async (event, settings) => {
       settings.assemblyAiSpeechModel,
       activeAssemblyAiSpeechModel
     );
+    appEnvironment = saveApplicationEnvironment(app, {
+      geminiApiKey: settings.geminiApiKey || '',
+      assemblyAiApiKey: settings.assemblyAiApiKey || '',
+      hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+      maxScreenshots: appEnvironment.maxScreenshots,
+      screenshotDelay: appEnvironment.screenshotDelay,
+      nodeEnv: appEnvironment.nodeEnv,
+      nodeOptions: appEnvironment.nodeOptions
+    });
     appState = saveAppState(app, {
       geminiModel: activeGeminiModel,
       assemblyAiSpeechModel: activeAssemblyAiSpeechModel
     });
     console.log('Saved app state to:', getAppStatePath(app));
-
-    // Build new .env content
-    const envContent = [
-      '# API Keys',
-      '# Get Gemini key at: https://makersuite.google.com/app/apikey',
-      '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
-      `GEMINI_API_KEY=${settings.geminiApiKey || ''}`,
-      `ASSEMBLY_AI_API_KEY=${settings.assemblyAiApiKey || ''}`,
-      '',
-      '# Gemini model selection is managed in src/config.js',
-      `# Active default Gemini model: ${DEFAULT_GEMINI_MODEL}`,
-      '# The selected Gemini model is persisted in cache\\app-state.json during local development.',
-      '# The runtime-selected Gemini model is validated against src/config.js.',
-      '',
-      '# AssemblyAI speech model selection is managed in src/config.js',
-      `# Active default AssemblyAI speech model: ${DEFAULT_ASSEMBLY_AI_SPEECH_MODEL}`,
-      '# The selected AssemblyAI speech model is also persisted in cache\\app-state.json.',
-      `ASSEMBLY_AI_SPEECH_MODEL=${activeAssemblyAiSpeechModel}`,
-      '',
-      '# Capture behavior',
-      '# true = hide this app from screen sharing/screen capture',
-      '# false = allow this app to appear in screen sharing/screen capture',
-      `HIDE_FROM_SCREEN_CAPTURE=${parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true)}`,
-      '',
-      '# Optional: Adjust screenshot settings',
-      `MAX_SCREENSHOTS=${process.env.MAX_SCREENSHOTS || '5'}`,
-      `SCREENSHOT_DELAY=${process.env.SCREENSHOT_DELAY || '300'}`,
-      '',
-      '# Optional: Development settings',
-      `NODE_ENV=${process.env.NODE_ENV || 'production'}`,
-      `NODE_OPTIONS=${process.env.NODE_OPTIONS || '--max-old-space-size=4096'}`,
-      ''
-    ].join('\n');
-
-    fs.writeFileSync(envPath, envContent, 'utf8');
-    console.log('Settings saved to:', envPath);
-
-    // Apply to current process
-    process.env.GEMINI_API_KEY = settings.geminiApiKey || '';
-    process.env.ASSEMBLY_AI_API_KEY = settings.assemblyAiApiKey || '';
-    process.env.ASSEMBLY_AI_SPEECH_MODEL = activeAssemblyAiSpeechModel;
+    console.log('Settings saved to:', appEnvironment.envPath);
 
     // Re-initialize Gemini service with new key/model
-    initializeGeminiService(settings.geminiApiKey, activeGeminiModel);
+    initializeGeminiService(appEnvironment.geminiApiKey, activeGeminiModel);
 
     return { success: true };
   } catch (error) {
@@ -1225,8 +1002,18 @@ ipcMain.handle('save-settings', async (event, settings) => {
 
 // App event handlers
 app.whenReady().then(() => {
+  try {
+    appEnvironment = loadApplicationEnvironment(app);
+  } catch (error) {
+    console.error('Failed to load application environment:', error);
+    dialog.showErrorBox('Open-Cluely Configuration Error', error.message);
+    app.exit(1);
+    return;
+  }
+
+  logStartupConfiguration();
   loadPersistedAppState();
-  initializeGeminiService(process.env.GEMINI_API_KEY, activeGeminiModel);
+  initializeGeminiService(appEnvironment.geminiApiKey, activeGeminiModel);
   console.log('App is ready, creating window...');
   createStealthWindow();
   registerStealthShortcuts();
@@ -1247,7 +1034,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createStealthWindow();
   }
 });

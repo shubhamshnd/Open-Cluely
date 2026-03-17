@@ -2,6 +2,16 @@
 
 Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
 
+## Project Structure
+
+- `src/main.js` - main Electron process entry and runtime orchestration
+- `src/bootstrap/` - startup environment loading, validation, and `.env` persistence
+- `src/windows/assistant/` - active Electron window files (`window.js`, `preload.js`, `renderer.js`, `renderer.html`, `styles.css`)
+- `src/windows/legacy/` - old or backup window/transcription experiments kept for reference
+- `src/services/ai/` - AI service integrations such as Gemini
+- `src/services/state/` - local persisted state helpers such as `cache/app-state.json` handling
+- `src/config.js` - source of truth for Gemini and AssemblyAI speech model lists/defaults
+
 ## Setup
 
 ### Prerequisites

@@ -29,14 +29,14 @@ function sanitizeAppState(state) {
 
 function getAppStateBaseDir(app) {
   if (app && !app.isPackaged) {
-    return path.join(__dirname, '..');
+    return path.join(__dirname, '..', '..', '..');
   }
 
   if (app) {
     return path.dirname(app.getPath('exe'));
   }
 
-  return path.join(__dirname, '..');
+  return path.join(__dirname, '..', '..', '..');
 }
 
 function getAppStateDir(app) {

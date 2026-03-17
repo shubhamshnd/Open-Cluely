@@ -6,7 +6,7 @@
 // ============================================================================
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { getDefaultGeminiModel, resolveGeminiModel } = require('./config');
+const { getDefaultGeminiModel, resolveGeminiModel } = require('../../config');
 
 // ============================================================================
 // PROMPT TEMPLATES
