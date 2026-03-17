@@ -1,73 +1,136 @@
 # Open-Cluely
 
-Open-Cluely is a desktop meeting assistant built with Electron.
-
-This project is a clone-style implementation inspired by Cluely and Parakeet AI.
-
-## Current Status
-
-- Transcription uses AssemblyAI streaming.
-- Vosk has been replaced and is no longer part of the active transcription flow.
-
-## Features
-
-- Transparent always-on-top overlay UI
-- Live speech transcription
-- AI chat and response suggestions
-- Screenshot capture and analysis
-- Meeting notes and conversation insights
-- Keyboard shortcuts for quick actions
-
-## Requirements
-
-- Node.js
-- AssemblyAI API key
-- Gemini API key
-- Microphone permission
+Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
 
 ## Setup
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Configure `.env`:
-   ```bash
-   GEMINI_API_KEY=your_gemini_key
-   ASSEMBLY_AI_API_KEY=your_assemblyai_key
-   ASSEMBLY_AI_SPEECH_MODEL=universal-streaming-english
-   ```
-   Gemini model options and the default model are configured in `src/config.js`.
-3. Start the app:
-   ```bash
-   npm start
-   ```
+### Prerequisites
+
+- Windows 10/11
+- `nvm-windows` `1.2.2` or compatible
+- Node.js `20.20.1`
+- npm `10.8.2`
+- Gemini API key
+- AssemblyAI API key
+
+### Native Windows Dependencies
+
+This app uses native Windows modules. If `npm ci` fails with `node-gyp` / Visual Studio errors, install:
+
+- Visual Studio 2022 Build Tools or Visual Studio 2022
+- `Desktop development with C++` workload
+- MSVC C++ toolset
+- Windows 10/11 SDK
+- Python
+
+Install command:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+### Install
+
+```powershell
+winget install --id CoreyButler.NVMforWindows --exact --silent --accept-package-agreements --accept-source-agreements
+nvm install 20.20.1
+nvm use 20.20.1
+```
+
+Restart the terminal or VS Code/Cursor, then run:
+
+```powershell
+node -v
+npm -v
+npm ci
+```
+
+### Run
+
+```powershell
+npm start
+```
+
+For logs:
+
+```powershell
+npm run dev
+```
+
+## Configuration
+
+### `src/config.js`
+
+This file is the source of truth for model lists:
+
+- `GEMINI_MODELS`: Gemini models shown in settings
+- `ASSEMBLY_AI_SPEECH_MODELS`: AssemblyAI speech models shown in settings
+- The first item in each list is the default
+
+Current defaults:
+
+- Gemini: `gemini-2.5-flash-lite`
+- AssemblyAI speech: `universal-streaming-english`
+
+### `.env`
+
+Required:
+
+```env
+GEMINI_API_KEY=your_gemini_key
+ASSEMBLY_AI_API_KEY=your_assemblyai_key
+```
+
+Optional:
+
+```env
+HIDE_FROM_SCREEN_CAPTURE=true
+MAX_SCREENSHOTS=50
+SCREENSHOT_DELAY=300
+NODE_ENV=production
+NODE_OPTIONS=--max-old-space-size=4096
+```
+
+Notes:
+
+- `GEMINI_MODEL` is not read from `.env`
+- available AssemblyAI speech models are not controlled from `.env`
+- `HIDE_FROM_SCREEN_CAPTURE=false` allows the window to appear in screen share / screenshots
+
+### App State
+
+Runtime selections are persisted in:
+
+```text
+cache/app-state.json
+```
+
+Stored values:
+
+- selected Gemini model
+- selected AssemblyAI speech model
+
+## Build
+
+Use:
+
+```powershell
+npm run build -- --config.win.signAndEditExecutable=false
+```
+
+Output:
+
+```text
+dist/GoogleChrome.exe
+```
+
+If build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
 
 ## Scripts
 
 - `npm start` - run the app
 - `npm run dev` - run with logs
-- `npm run build` - build distributables
-
-## Build Windows EXE
-
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Create/update `.env` in the project root (required for runtime):
-   ```bash
-   GEMINI_API_KEY=your_gemini_key
-   ASSEMBLY_AI_API_KEY=your_assemblyai_key
-   ASSEMBLY_AI_SPEECH_MODEL=universal-streaming-english
-   ```
-   Gemini model options and the default model are configured in `src/config.js`.
-3. Build the app:
-   ```bash
-   npm run build
-   ```
-4. Find the Windows executable at:
-   - `dist/GoogleChrome.exe`
+- `npm run build -- --config.win.signAndEditExecutable=false` - build Windows executable
 
 ## Keyboard Shortcuts
 
@@ -81,4 +144,4 @@ This project is a clone-style implementation inspired by Cluely and Parakeet AI.
 
 ## Note
 
-Use this tool only in contexts where recording, transcription, and AI assistance are allowed by policy and law.
+Use this tool only where recording, transcription, and AI assistance are allowed.
