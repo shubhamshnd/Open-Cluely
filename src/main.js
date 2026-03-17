@@ -37,6 +37,7 @@ console.log('ASSEMBLY_AI_API_KEY:', process.env.ASSEMBLY_AI_API_KEY ? '✅ Found
 require('dotenv').config({ path: envPath });
 
 const GeminiService = require('./gemini-service');
+const { getGeminiModels, getDefaultGeminiModel, resolveGeminiModel } = require('./config');
 
 (async () => {
 
@@ -48,6 +49,8 @@ const WINDOW_DEFAULT_WIDTH = 900;
 const WINDOW_DEFAULT_HEIGHT = 400;
 const WINDOW_MIN_WIDTH = 600;
 const WINDOW_MIN_HEIGHT = 250;
+const GEMINI_MODELS = getGeminiModels();
+const DEFAULT_GEMINI_MODEL = getDefaultGeminiModel();
 
 // AssemblyAI streaming transcription
 let assemblyWs = null;
@@ -56,14 +59,14 @@ const ASSEMBLY_AI_SAMPLE_RATE = 16000;
 
 // Initialize Gemini Service with rate limiting
 let geminiService = null;
+let activeGeminiModel = DEFAULT_GEMINI_MODEL;
 
 try {
   if (!process.env.GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY not found in environment variables');
   } else {
-    const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
-    console.log('Initializing Gemini AI Service with model:', geminiModel);
-    geminiService = new GeminiService(process.env.GEMINI_API_KEY, geminiModel);
+    console.log('Initializing Gemini AI Service with model:', activeGeminiModel);
+    geminiService = new GeminiService(process.env.GEMINI_API_KEY, activeGeminiModel);
     console.log('Gemini AI Service initialized successfully');
   }
 } catch (error) {
@@ -1052,7 +1055,9 @@ ipcMain.handle('get-settings', () => {
   return {
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     assemblyAiApiKey: process.env.ASSEMBLY_AI_API_KEY || '',
-    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+    geminiModel: activeGeminiModel,
+    geminiModels: GEMINI_MODELS,
+    defaultGeminiModel: DEFAULT_GEMINI_MODEL,
     assemblyAiSpeechModel: process.env.ASSEMBLY_AI_SPEECH_MODEL || 'universal-streaming-english',
     hideFromScreenCapture: parseBooleanEnv('HIDE_FROM_SCREEN_CAPTURE', true)
   };
@@ -1060,8 +1065,10 @@ ipcMain.handle('get-settings', () => {
 
 // Save settings to .env file and apply them
 ipcMain.handle('save-settings', async (event, settings) => {
-  console.log('IPC: save-settings called');
+    console.log('IPC: save-settings called');
   try {
+    activeGeminiModel = resolveGeminiModel(settings.geminiModel);
+
     // Build new .env content
     const envContent = [
       '# API Keys',
@@ -1070,9 +1077,10 @@ ipcMain.handle('save-settings', async (event, settings) => {
       `GEMINI_API_KEY=${settings.geminiApiKey || ''}`,
       `ASSEMBLY_AI_API_KEY=${settings.assemblyAiApiKey || ''}`,
       '',
-      '# Model selection',
-      '# Gemini models: gemini-2.5-flash-lite, gemini-2.0-flash, gemini-1.5-pro, etc.',
-      `GEMINI_MODEL=${settings.geminiModel || 'gemini-2.5-flash-lite'}`,
+      '# Gemini model selection is managed in src/config.js',
+      `# Active default Gemini model: ${DEFAULT_GEMINI_MODEL}`,
+      '# The runtime-selected Gemini model is validated against src/config.js.',
+      '',
       '# AssemblyAI speech models: universal-streaming-english, universal-streaming-multilingual',
       `ASSEMBLY_AI_SPEECH_MODEL=${settings.assemblyAiSpeechModel || 'universal-streaming-english'}`,
       '',
@@ -1097,14 +1105,12 @@ ipcMain.handle('save-settings', async (event, settings) => {
     // Apply to current process
     process.env.GEMINI_API_KEY = settings.geminiApiKey || '';
     process.env.ASSEMBLY_AI_API_KEY = settings.assemblyAiApiKey || '';
-    process.env.GEMINI_MODEL = settings.geminiModel || 'gemini-2.5-flash-lite';
     process.env.ASSEMBLY_AI_SPEECH_MODEL = settings.assemblyAiSpeechModel || 'universal-streaming-english';
 
     // Re-initialize Gemini service with new key/model
     if (settings.geminiApiKey) {
-      const model = settings.geminiModel || 'gemini-2.5-flash-lite';
-      geminiService = new GeminiService(settings.geminiApiKey, model);
-      console.log('Gemini service re-initialized with model:', model);
+      geminiService = new GeminiService(settings.geminiApiKey, activeGeminiModel);
+      console.log('Gemini service re-initialized with model:', activeGeminiModel);
     } else {
       geminiService = null;
     }

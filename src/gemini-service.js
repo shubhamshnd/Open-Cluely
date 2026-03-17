@@ -6,6 +6,7 @@
 // ============================================================================
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { getDefaultGeminiModel, resolveGeminiModel } = require('./config');
 
 // ============================================================================
 // PROMPT TEMPLATES
@@ -327,7 +328,7 @@ Include:
 class GeminiService {
     constructor(apiKey, modelName) {
         this.genAI = new GoogleGenerativeAI(apiKey);
-        this.modelName = modelName || 'gemini-2.5-flash-lite';
+        this.modelName = resolveGeminiModel(modelName);
 
         // Initialize the model (try fallback if needed)
         this._initializeModel();
@@ -360,9 +361,10 @@ class GeminiService {
                 model: this.modelName
             });
         } catch (error) {
-            console.warn('Primary model failed, using fallback gemini-2.5-flash-lite:', error);
+            const fallbackModel = getDefaultGeminiModel();
+            console.warn(`Primary model failed, using fallback ${fallbackModel}:`, error);
             this.model = this.genAI.getGenerativeModel({
-                model: 'gemini-2.5-flash-lite'
+                model: fallbackModel
             });
         }
     }

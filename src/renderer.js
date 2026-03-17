@@ -672,7 +672,7 @@ async function openSettings() {
         const settings = await window.electronAPI.getSettings();
         if (settings && !settings.error) {
             if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
-            if (settingGeminiModel) settingGeminiModel.value = settings.geminiModel || 'gemini-2.5-flash-lite';
+            populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
             if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
             if (settingAssemblyModel) settingAssemblyModel.value = settings.assemblyAiSpeechModel || 'universal-streaming-english';
         }
@@ -687,12 +687,40 @@ function closeSettings() {
     if (settingsPanel) settingsPanel.classList.add('hidden');
 }
 
+function populateGeminiModelOptions(models, selectedModel) {
+    if (!settingGeminiModel) {
+        return;
+    }
+
+    settingGeminiModel.innerHTML = '';
+
+    const configuredModels = Array.isArray(models) ? models : [];
+    if (configuredModels.length === 0) {
+        throw new Error('Gemini models are not configured.');
+    }
+
+    configuredModels.forEach((modelName) => {
+        const option = document.createElement('option');
+        option.value = modelName;
+        option.textContent = modelName;
+        settingGeminiModel.appendChild(option);
+    });
+
+    settingGeminiModel.value = configuredModels.includes(selectedModel)
+        ? selectedModel
+        : configuredModels[0];
+}
+
 async function saveSettings() {
     try {
+        if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
+            throw new Error('Gemini models are not configured.');
+        }
+
         const settings = {
             geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
             assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
-            geminiModel: settingGeminiModel ? settingGeminiModel.value : 'gemini-2.5-flash-lite',
+            geminiModel: settingGeminiModel.value,
             assemblyAiSpeechModel: settingAssemblyModel ? settingAssemblyModel.value : 'universal-streaming-english'
         };
 

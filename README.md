@@ -35,9 +35,9 @@ This project is a clone-style implementation inspired by Cluely and Parakeet AI.
    ```bash
    GEMINI_API_KEY=your_gemini_key
    ASSEMBLY_AI_API_KEY=your_assemblyai_key
-   GEMINI_MODEL=gemini-2.5-flash-lite
    ASSEMBLY_AI_SPEECH_MODEL=universal-streaming-english
    ```
+   Gemini model options and the default model are configured in `src/config.js`.
 3. Start the app:
    ```bash
    npm start
@@ -59,9 +59,9 @@ This project is a clone-style implementation inspired by Cluely and Parakeet AI.
    ```bash
    GEMINI_API_KEY=your_gemini_key
    ASSEMBLY_AI_API_KEY=your_assemblyai_key
-   GEMINI_MODEL=gemini-2.5-flash-lite
    ASSEMBLY_AI_SPEECH_MODEL=universal-streaming-english
    ```
+   Gemini model options and the default model are configured in `src/config.js`.
 3. Build the app:
    ```bash
    npm run build
