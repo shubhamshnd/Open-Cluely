@@ -44,7 +44,7 @@ In chat, transcript and screenshot messages have an `AI`/`Off` toggle.
 
 Default behavior:
 
-- Toggleable: transcript (`You` / `Host`) and screenshot messages
+- Toggleable: transcript (`You` / `Host`), screenshot, and AI output messages
 - Always excluded: system status/error messages
 - Included by default: AI output messages
 

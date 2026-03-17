@@ -15,7 +15,7 @@ export function isAiResponseMessageType(type) {
 }
 
 export function canToggleAiForMessageType(type) {
-  return isTranscriptMessageType(type) || isScreenshotMessageType(type);
+  return isTranscriptMessageType(type) || isScreenshotMessageType(type) || isAiResponseMessageType(type);
 }
 
 export function defaultIncludeInAiForMessageType(type) {
