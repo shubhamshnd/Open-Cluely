@@ -55,6 +55,11 @@ const sourceSampleQueues = {
     mic: { chunks: [], length: 0 },
     system: { chunks: [], length: 0 }
 };
+const FINAL_TRANSCRIPT_MERGE_WINDOW_MS = 2400;
+const finalTranscriptBuffers = {
+    mic: { text: '', segments: 0, timer: null },
+    system: { text: '', segments: 0, timer: null }
+};
 
 // DOM elements
 const statusText = document.getElementById('status-text');
@@ -545,6 +550,117 @@ function addMonitorLog(level, event, message, source = null, meta = null, timest
     }
 }
 
+function normalizeTranscriptForMerge(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function mergeTranscriptText(existingText, incomingText) {
+    const current = String(existingText || '').trim();
+    const incoming = String(incomingText || '').trim();
+
+    if (!current) return incoming;
+    if (!incoming) return current;
+
+    const currentNorm = normalizeTranscriptForMerge(current);
+    const incomingNorm = normalizeTranscriptForMerge(incoming);
+
+    if (!incomingNorm) return current;
+    if (!currentNorm) return incoming;
+
+    if (currentNorm === incomingNorm) {
+        return incoming.length >= current.length ? incoming : current;
+    }
+
+    if (incomingNorm.includes(currentNorm)) {
+        return incoming;
+    }
+
+    if (currentNorm.includes(incomingNorm)) {
+        return current;
+    }
+
+    const currentWords = current.split(/\s+/);
+    const incomingWords = incoming.split(/\s+/);
+    const maxOverlap = Math.min(12, currentWords.length, incomingWords.length);
+    let overlap = 0;
+
+    for (let size = maxOverlap; size > 0; size -= 1) {
+        const currentTail = currentWords.slice(-size).join(' ').toLowerCase();
+        const incomingHead = incomingWords.slice(0, size).join(' ').toLowerCase();
+        if (currentTail === incomingHead) {
+            overlap = size;
+            break;
+        }
+    }
+
+    if (overlap > 0) {
+        const remainder = incomingWords.slice(overlap).join(' ');
+        if (!remainder) return current;
+        return `${current} ${remainder}`.replace(/\s+/g, ' ').trim();
+    }
+
+    return `${current} ${incoming}`.replace(/\s+/g, ' ').trim();
+}
+
+function clearFinalTranscriptTimer(source) {
+    const resolvedSource = normalizeSource(source);
+    const timer = finalTranscriptBuffers[resolvedSource].timer;
+    if (timer) {
+        clearTimeout(timer);
+        finalTranscriptBuffers[resolvedSource].timer = null;
+    }
+}
+
+function resetFinalTranscriptBuffer(source) {
+    const resolvedSource = normalizeSource(source);
+    clearFinalTranscriptTimer(resolvedSource);
+    finalTranscriptBuffers[resolvedSource].text = '';
+    finalTranscriptBuffers[resolvedSource].segments = 0;
+}
+
+function flushFinalTranscript(source, reason = 'pause-timeout') {
+    const resolvedSource = normalizeSource(source);
+    const buffer = finalTranscriptBuffers[resolvedSource];
+    const finalText = String(buffer.text || '').trim();
+    const segmentCount = buffer.segments;
+
+    clearFinalTranscriptTimer(resolvedSource);
+    buffer.text = '';
+    buffer.segments = 0;
+
+    if (!finalText) {
+        return;
+    }
+
+    addChatMessage(resolvedSource === 'system' ? 'voice-system' : 'voice-mic', finalText);
+    addMonitorLog('info', 'final-flush', 'Merged transcript committed', resolvedSource, {
+        reason,
+        chars: finalText.length,
+        segments: segmentCount
+    });
+    showFeedback('Captured', 'success');
+}
+
+function queueFinalTranscript(source, text) {
+    const resolvedSource = normalizeSource(source);
+    const buffer = finalTranscriptBuffers[resolvedSource];
+    buffer.text = mergeTranscriptText(buffer.text, text);
+    buffer.segments += 1;
+    clearFinalTranscriptTimer(resolvedSource);
+    buffer.timer = setTimeout(() => {
+        flushFinalTranscript(resolvedSource, 'pause-timeout');
+    }, FINAL_TRANSCRIPT_MERGE_WINDOW_MS);
+}
+
+function flushAllFinalTranscripts(reason = 'flush-all') {
+    flushFinalTranscript('mic', reason);
+    flushFinalTranscript('system', reason);
+}
+
 function setSourceSelected(source, enabled) {
     const resolvedSource = normalizeSource(source);
     selectedSources[resolvedSource] = !!enabled;
@@ -808,6 +924,7 @@ async function startMicRecording() {
     if (isMicActive || sourceStatuses.mic === 'connecting') return;
     setSourceStatus('mic', 'connecting', 'Connecting to mic...');
     addMonitorLog('info', 'start-request', 'Starting mic source', 'mic');
+    resetFinalTranscriptBuffer('mic');
 
     try {
         const result = await window.electronAPI.startVoiceRecognition('mic');
@@ -845,6 +962,7 @@ async function startMicRecording() {
 async function stopMicRecording() {
     if (!isMicActive && sourceStatuses.mic !== 'connecting') return;
     drainSourceSampleQueue('mic', { flushPartial: true });
+    flushFinalTranscript('mic', 'stop-request');
     stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
     micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
     if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
@@ -866,6 +984,7 @@ async function startSystemAudioRecording() {
     if (isSystemActive || sourceStatuses.system === 'connecting') return;
     setSourceStatus('system', 'connecting', 'Connecting to host audio...');
     addMonitorLog('info', 'start-request', 'Starting host audio source', 'system');
+    resetFinalTranscriptBuffer('system');
 
     try {
         const sources = await window.electronAPI.getDesktopSources();
@@ -914,6 +1033,7 @@ async function startSystemAudioRecording() {
 async function stopSystemAudioRecording() {
     if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
     drainSourceSampleQueue('system', { flushPartial: true });
+    flushFinalTranscript('system', 'stop-request');
     stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
     systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
     if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
@@ -979,7 +1099,6 @@ function handleVoskFinal(data) {
     const source = normalizeSource(data?.source);
     const text = data?.text;
     if (!text || text.trim().length === 0) return;
-    if (!isSourceActive(source)) return;
 
     const finalText = text.trim();
     monitorLastText[source] = `Final: ${finalText}`;
@@ -991,13 +1110,11 @@ function handleVoskFinal(data) {
     if (source === 'mic') {
         if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
         micPartialText = '';
-        addChatMessage('voice-mic', finalText);
     } else {
         if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
         systemPartialText = '';
-        addChatMessage('voice-system', finalText);
     }
-    showFeedback('Captured', 'success');
+    queueFinalTranscript(source, finalText);
 }
 
 // Screenshot functions
@@ -1081,6 +1198,7 @@ function closeCloseConfirmation() {
 async function closeApplication() {
     try {
         console.log('Closing application...');
+        flushAllFinalTranscripts('app-close');
         await window.electronAPI.closeApp();
     } catch (error) {
         console.error('Close application error:', error);
@@ -1669,6 +1787,7 @@ function setupIpcListeners() {
         showFeedback(`Error (${sourceLabel(source)}): ${error}`, 'error');
         addChatMessage('system', `Transcription error (${sourceLabel(source)}): ${error}`);
         addMonitorLog('error', 'status-error', error, source);
+        flushFinalTranscript(source, 'status-error');
 
         if (source === 'system') {
             stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
@@ -1677,6 +1796,7 @@ function setupIpcListeners() {
             systemPartialText = '';
             isSystemActive = false;
             resetSourceSampleQueue('system');
+            resetFinalTranscriptBuffer('system');
         } else {
             stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
             micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
@@ -1684,6 +1804,7 @@ function setupIpcListeners() {
             micPartialText = '';
             isMicActive = false;
             resetSourceSampleQueue('mic');
+            resetFinalTranscriptBuffer('mic');
         }
 
         setSourceStatus(source, 'error', `Error: ${error}`);
@@ -1693,6 +1814,7 @@ function setupIpcListeners() {
     window.electronAPI.onVoskStopped((data) => {
         const source = normalizeSource(data?.source);
         console.log(`STT stopped [${source}]`);
+        flushFinalTranscript(source, 'stopped-event');
         if (source === 'system') {
             stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
             systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
@@ -1700,6 +1822,7 @@ function setupIpcListeners() {
             systemPartialText = '';
             isSystemActive = false;
             resetSourceSampleQueue('system');
+            resetFinalTranscriptBuffer('system');
         } else {
             stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
             micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
@@ -1707,6 +1830,7 @@ function setupIpcListeners() {
             micPartialText = '';
             isMicActive = false;
             resetSourceSampleQueue('mic');
+            resetFinalTranscriptBuffer('mic');
         }
         setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
         addMonitorLog('info', 'stopped-event', 'Stop acknowledged by backend', source);

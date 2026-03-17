@@ -63,6 +63,11 @@ let isVisible = true;
 let autoHideTimer = null;
 const sttChunkCounters = { mic: 0, system: 0 };
 const sttDroppedChunkCounters = { mic: 0, system: 0 };
+const STT_HISTORY_MERGE_WINDOW_MS = 2400;
+const sttHistoryBuffers = {
+  mic: { text: '', segments: 0, timer: null },
+  system: { text: '', segments: 0, timer: null }
+};
 let isRecoveryReloadInProgress = false;
 let lastRecoveryReloadAt = 0;
 const RECOVERY_RELOAD_COOLDOWN_MS = 5000;
@@ -167,6 +172,7 @@ function cleanupAssemblyWs(ws) {
 }
 
 function cleanupTransientResources() {
+  flushAllSttHistoryBuffers('cleanup');
   cleanupAssemblyWs(assemblyWsMic);
   assemblyWsMic = null;
   cleanupAssemblyWs(assemblyWsSystem);
@@ -177,6 +183,8 @@ function cleanupTransientResources() {
   sttChunkCounters.system = 0;
   sttDroppedChunkCounters.mic = 0;
   sttDroppedChunkCounters.system = 0;
+  resetSttHistoryBuffer('mic');
+  resetSttHistoryBuffer('system');
   globalShortcut.unregisterAll();
 
   screenshots.forEach((screenshotPath) => {
@@ -754,6 +762,146 @@ function emitSttDebug({ source = null, level = 'info', event = 'event', message 
   sendToRenderer('stt-debug', payload);
 }
 
+function normalizeSttSource(source) {
+  return source === 'system' ? 'system' : 'mic';
+}
+
+function normalizeTranscriptForMerge(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mergeTranscriptText(existingText, incomingText) {
+  const current = String(existingText || '').trim();
+  const incoming = String(incomingText || '').trim();
+
+  if (!current) return incoming;
+  if (!incoming) return current;
+
+  const currentNorm = normalizeTranscriptForMerge(current);
+  const incomingNorm = normalizeTranscriptForMerge(incoming);
+
+  if (!incomingNorm) return current;
+  if (!currentNorm) return incoming;
+
+  if (currentNorm === incomingNorm) {
+    return incoming.length >= current.length ? incoming : current;
+  }
+
+  if (incomingNorm.includes(currentNorm)) {
+    return incoming;
+  }
+
+  if (currentNorm.includes(incomingNorm)) {
+    return current;
+  }
+
+  const currentWords = current.split(/\s+/);
+  const incomingWords = incoming.split(/\s+/);
+  const maxOverlap = Math.min(12, currentWords.length, incomingWords.length);
+  let overlap = 0;
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    const currentTail = currentWords.slice(-size).join(' ').toLowerCase();
+    const incomingHead = incomingWords.slice(0, size).join(' ').toLowerCase();
+    if (currentTail === incomingHead) {
+      overlap = size;
+      break;
+    }
+  }
+
+  if (overlap > 0) {
+    const remainder = incomingWords.slice(overlap).join(' ');
+    if (!remainder) return current;
+    return `${current} ${remainder}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return `${current} ${incoming}`.replace(/\s+/g, ' ').trim();
+}
+
+function clearSttHistoryTimer(source) {
+  const resolvedSource = normalizeSttSource(source);
+  const timer = sttHistoryBuffers[resolvedSource].timer;
+  if (timer) {
+    clearTimeout(timer);
+    sttHistoryBuffers[resolvedSource].timer = null;
+  }
+}
+
+function resetSttHistoryBuffer(source) {
+  const resolvedSource = normalizeSttSource(source);
+  clearSttHistoryTimer(resolvedSource);
+  sttHistoryBuffers[resolvedSource].text = '';
+  sttHistoryBuffers[resolvedSource].segments = 0;
+}
+
+function flushSttHistoryBuffer(source, reason = 'pause-timeout') {
+  const resolvedSource = normalizeSttSource(source);
+  const buffer = sttHistoryBuffers[resolvedSource];
+  const finalText = String(buffer.text || '').trim();
+  const segmentCount = buffer.segments;
+
+  clearSttHistoryTimer(resolvedSource);
+  buffer.text = '';
+  buffer.segments = 0;
+
+  if (!finalText || !geminiService) {
+    return;
+  }
+
+  try {
+    const label = resolvedSource === 'system' ? 'Host' : 'You';
+    geminiService.addToHistory('user', `${label}: ${finalText}`);
+    emitSttDebug({
+      source: resolvedSource,
+      event: 'history-flush',
+      message: 'Merged transcript added to Gemini history',
+      meta: {
+        reason,
+        chars: finalText.length,
+        segments: segmentCount
+      }
+    });
+  } catch (error) {
+    emitSttDebug({
+      source: resolvedSource,
+      level: 'error',
+      event: 'history-flush-failed',
+      message: error?.message || 'Failed to add merged transcript to history'
+    });
+  }
+}
+
+function flushAllSttHistoryBuffers(reason = 'flush-all') {
+  flushSttHistoryBuffer('mic', reason);
+  flushSttHistoryBuffer('system', reason);
+}
+
+function queueSttHistorySegment(source, transcriptText) {
+  const resolvedSource = normalizeSttSource(source);
+  const buffer = sttHistoryBuffers[resolvedSource];
+
+  buffer.text = mergeTranscriptText(buffer.text, transcriptText);
+  buffer.segments += 1;
+  emitSttDebug({
+    source: resolvedSource,
+    event: 'history-buffer',
+    message: 'Buffered final transcript segment',
+    meta: {
+      segments: buffer.segments,
+      chars: buffer.text.length
+    }
+  });
+  clearSttHistoryTimer(resolvedSource);
+
+  buffer.timer = setTimeout(() => {
+    flushSttHistoryBuffer(resolvedSource, 'pause-timeout');
+  }, STT_HISTORY_MERGE_WINDOW_MS);
+}
+
 // Shared helper: open an AssemblyAI WebSocket for a given audio source ('mic' | 'system')
 function startAssemblyAiStream(source) {
   const apiKey = appEnvironment.assemblyAiApiKey;
@@ -804,6 +952,7 @@ function startAssemblyAiStream(source) {
     });
     sttChunkCounters[source] = 0;
     sttDroppedChunkCounters[source] = 0;
+    resetSttHistoryBuffer(source);
     sendToRenderer('vosk-status', {
       source,
       status: 'loading',
@@ -857,10 +1006,7 @@ function startAssemblyAiStream(source) {
                   meta: { chars: msg.transcript.length }
                 });
                 sendToRenderer('vosk-final', { source, text: msg.transcript });
-                if (geminiService) {
-                  const label = source === 'system' ? 'Host' : 'You';
-                  geminiService.addToHistory('user', `${label}: ${msg.transcript}`);
-                }
+                queueSttHistorySegment(source, msg.transcript);
               } else {
                 sendToRenderer('vosk-partial', { source, text: msg.transcript });
               }
@@ -875,6 +1021,7 @@ function startAssemblyAiStream(source) {
               message: 'AssemblyAI stream terminated',
               meta: { durationSeconds: msg.audio_duration_seconds }
             });
+            flushSttHistoryBuffer(source, 'termination');
             if (source === 'mic') { isStreamingMic = false; assemblyWsMic = null; }
             else { isStreamingSystem = false; assemblyWsSystem = null; }
             sendToRenderer('vosk-stopped', { source });
@@ -902,6 +1049,7 @@ function startAssemblyAiStream(source) {
         event: 'ws-error',
         message: error.message
       });
+      flushSttHistoryBuffer(source, 'ws-error');
       sendToRenderer('vosk-error', { source, error: `Connection error (${source}): ${error.message}` });
       if (source === 'mic') { isStreamingMic = false; assemblyWsMic = null; }
       else { isStreamingSystem = false; assemblyWsSystem = null; }
@@ -917,6 +1065,7 @@ function startAssemblyAiStream(source) {
       });
       const stillActive = source === 'mic' ? isStreamingMic : isStreamingSystem;
       if (stillActive) {
+        flushSttHistoryBuffer(source, 'ws-close');
         if (source === 'mic') { isStreamingMic = false; assemblyWsMic = null; }
         else { isStreamingSystem = false; assemblyWsSystem = null; }
         sendToRenderer('vosk-stopped', { source });
@@ -998,6 +1147,7 @@ ipcMain.handle('stop-voice-recognition', (event, { source } = {}) => {
   const stopSource = (src) => {
     const ws = src === 'system' ? assemblyWsSystem : assemblyWsMic;
     if (!ws) {
+      flushSttHistoryBuffer(src, 'stop-noop');
       emitSttDebug({
         source: src,
         event: 'stop-noop',
@@ -1020,6 +1170,7 @@ ipcMain.handle('stop-voice-recognition', (event, { source } = {}) => {
         message: e.message
       });
     }
+    flushSttHistoryBuffer(src, 'stop-request');
     sendToRenderer('vosk-status', { source: src, status: 'stopped', message: 'Stopped' });
     if (src === 'mic') isStreamingMic = false;
     else isStreamingSystem = false;
@@ -1196,6 +1347,7 @@ ipcMain.handle('add-voice-transcript', async (event, transcript) => {
 ipcMain.handle('suggest-response', async (event, context) => {
   console.log('IPC: suggest-response called');
   try {
+    flushAllSttHistoryBuffers('pre-suggest');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
@@ -1211,6 +1363,7 @@ ipcMain.handle('suggest-response', async (event, context) => {
 ipcMain.handle('generate-meeting-notes', async () => {
   console.log('IPC: generate-meeting-notes called');
   try {
+    flushAllSttHistoryBuffers('pre-notes');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
@@ -1226,6 +1379,7 @@ ipcMain.handle('generate-meeting-notes', async () => {
 ipcMain.handle('generate-follow-up-email', async () => {
   console.log('IPC: generate-follow-up-email called');
   try {
+    flushAllSttHistoryBuffers('pre-followup');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
@@ -1241,6 +1395,7 @@ ipcMain.handle('generate-follow-up-email', async () => {
 ipcMain.handle('answer-question', async (event, question) => {
   console.log('IPC: answer-question called');
   try {
+    flushAllSttHistoryBuffers('pre-answer');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
@@ -1256,6 +1411,7 @@ ipcMain.handle('answer-question', async (event, question) => {
 ipcMain.handle('get-conversation-insights', async () => {
   console.log('IPC: get-conversation-insights called');
   try {
+    flushAllSttHistoryBuffers('pre-insights');
     if (!geminiService) {
       throw new Error('Gemini service not initialized');
     }
@@ -1271,6 +1427,8 @@ ipcMain.handle('get-conversation-insights', async () => {
 ipcMain.handle('clear-conversation-history', async () => {
   console.log('IPC: clear-conversation-history called');
   try {
+    resetSttHistoryBuffer('mic');
+    resetSttHistoryBuffer('system');
     if (geminiService) {
       geminiService.clearHistory();
     }
