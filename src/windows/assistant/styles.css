@@ -22,6 +22,10 @@
   user-select: none;
 }
 
+button {
+  cursor: default !important;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: transparent !important;
@@ -462,8 +466,10 @@ body {
 
 .action-btn:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
   transform: none;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 /* New Cluely-style feature buttons */

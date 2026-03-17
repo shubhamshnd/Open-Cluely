@@ -16,7 +16,6 @@
     toggle.classList.toggle('included', !!message.includeInAi);
     toggle.classList.toggle('excluded', !message.includeInAi);
     toggle.textContent = message.includeInAi ? 'AI' : 'Off';
-    toggle.title = message.includeInAi ? 'Exclude from AI context' : 'Include in AI context';
     toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
   }
 }

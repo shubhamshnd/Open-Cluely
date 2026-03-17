@@ -18,7 +18,7 @@
     <div class="window-resize-handle resize-handle-nw" data-resize-handle="nw" aria-hidden="true"></div>
     <!-- Draggable Header with Close Button -->
     <div class="drag-handle">
-      <button id="close-app-btn" class="close-app-btn" title="Close Application">&times;</button>
+      <button id="close-app-btn" class="close-app-btn">&times;</button>
     </div>
     <!-- Compact Interface - Horizontal Layout like Cluely -->
     <div class="main-interface">
@@ -32,7 +32,7 @@
       <!-- Action Buttons - Compact -->
       <div class="content-section">
         <div class="action-buttons">
-          <div id="transcription-control" class="transcription-control" title="Toggle Transcription (Ctrl+Alt+Shift+V)">
+          <div id="transcription-control" class="transcription-control">
             <button id="transcription-toggle" class="action-btn transcription-btn" type="button" aria-label="Toggle transcription">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 10v4" />
@@ -43,12 +43,12 @@
               </svg>
             </button>
             <div id="transcription-sources" class="transcription-sources" role="group" aria-label="Transcription sources">
-              <button id="source-system-toggle" class="source-toggle source-system selected" type="button" title="Host audio source">
+              <button id="source-system-toggle" class="source-toggle source-system selected" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
                 </svg>
               </button>
-              <button id="source-mic-toggle" class="source-toggle source-mic" type="button" title="Mic source">
+              <button id="source-mic-toggle" class="source-toggle source-mic" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -59,45 +59,45 @@
             </div>
           </div>
 
-          <button id="screenshot-btn" class="action-btn screenshot-btn" title="Screenshot (Ctrl+Alt+Shift+S)">
+          <button id="screenshot-btn" class="action-btn screenshot-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
             </svg>
           </button>
 
-          <button id="analyze-btn" class="action-btn analyze-btn" title="Ask AI: visible chat context (Ctrl+Alt+Shift+A)">
+          <button id="analyze-btn" class="action-btn analyze-btn">
             Ask AI
           </button>
 
-          <button id="screen-ai-btn" class="action-btn screen-ai-btn" title="Screen AI">
+          <button id="screen-ai-btn" class="action-btn screen-ai-btn">
             Screen AI
           </button>
 
-          <button id="suggest-btn" class="action-btn suggest-btn" title="What should I say?">
+          <button id="suggest-btn" class="action-btn suggest-btn">
             &#x1F4A1;
           </button>
 
-          <button id="notes-btn" class="action-btn notes-btn" title="Generate Meeting Notes">
+          <button id="notes-btn" class="action-btn notes-btn">
             &#x1F4DD;
           </button>
 
-          <button id="insights-btn" class="action-btn insights-btn" title="Get Insights">
+          <button id="insights-btn" class="action-btn insights-btn">
             &#x1F4CA;
           </button>
 
-          <button id="clear-btn" class="action-btn clear-btn" title="Clear">
+          <button id="clear-btn" class="action-btn clear-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
             </svg>
           </button>
 
-          <button id="settings-btn" class="action-btn settings-btn" title="Settings">
+          <button id="settings-btn" class="action-btn settings-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
             </svg>
           </button>
 
-          <button id="hide-btn" class="action-btn hide-btn" title="Emergency Hide (Ctrl+Alt+Shift+X)">
+          <button id="hide-btn" class="action-btn hide-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
             </svg>
@@ -131,7 +131,7 @@
       <div class="chat-header">
         <span class="chat-title">&#x1F916; AI Assistant</span>
         <div class="chat-controls">
-          <button id="copy-btn" class="copy-btn" title="Copy Last Response">
+          <button id="copy-btn" class="copy-btn">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
             </svg>
@@ -149,7 +149,7 @@
           placeholder="Type context to add as You..."
           aria-label="Manual context input"
         ></textarea>
-        <button id="chat-manual-send" class="chat-manual-send" type="button" title="Add to context">Add</button>
+        <button id="chat-manual-send" class="chat-manual-send" type="button">Add</button>
       </div>
       <div id="chat-resize-handle" class="chat-resize-handle" aria-hidden="true"></div>
     </div>
@@ -165,7 +165,7 @@
           <span>AI Response</span>
         </div>
         <div class="results-actions">
-          <button id="close-results" class="close-btn" title="Close">
+          <button id="close-results" class="close-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
             </svg>
@@ -181,7 +181,7 @@
     <div id="settings-panel" class="settings-panel hidden">
       <div class="settings-header">
         <span class="settings-title">Settings</span>
-        <button id="close-settings" class="close-btn" title="Close">
+        <button id="close-settings" class="close-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
           </svg>
