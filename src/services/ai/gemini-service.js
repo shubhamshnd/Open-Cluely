@@ -106,6 +106,30 @@ class GeminiService {
     return Math.ceil(text.length / 4);
   }
 
+  isQuotaExhaustedError(error) {
+    const message = String(error?.message || '').toLowerCase();
+
+    return (
+      message.includes('quota exceeded') ||
+      message.includes('exceeded your current quota') ||
+      message.includes('generate_content_free_tier_requests') ||
+      message.includes('generaterequestsperdayperprojectpermodel') ||
+      message.includes('perdayperprojectpermodel') ||
+      message.includes('daily request limit')
+    );
+  }
+
+  isRetryableError(error) {
+    const message = String(error?.message || '');
+
+    return (
+      message.includes('429') ||
+      message.includes('500') ||
+      message.includes('503') ||
+      message.includes('RATE_LIMIT')
+    );
+  }
+
   async waitForRateLimit() {
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
@@ -165,12 +189,13 @@ class GeminiService {
     } catch (error) {
       console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
 
+      if (this.isQuotaExhaustedError(error)) {
+        console.error('Quota-exhausted error detected. Skipping retries.');
+        throw error;
+      }
+
       if (retryCount < this.maxRetries) {
-        const isRetryable =
-          error.message.includes('429') ||
-          error.message.includes('500') ||
-          error.message.includes('503') ||
-          error.message.includes('RATE_LIMIT');
+        const isRetryable = this.isRetryableError(error);
 
         if (isRetryable) {
           const backoffTime = Math.pow(2, retryCount) * 2000;

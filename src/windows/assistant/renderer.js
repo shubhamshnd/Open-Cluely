@@ -396,7 +396,7 @@ function stopChatResize(event) {
     document.removeEventListener('pointercancel', stopChatResize);
 }
 
-// â”€â”€â”€ Shared PCM16 helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Shared PCM16 helper
 const audioChunkCounters = { mic: 0, system: 0 };
 
 function convertToPCM16(float32Data) {
@@ -1059,7 +1059,7 @@ function handleVoskPartial(data) {
     if (!isSourceActive(source)) return;
 
     const trimmed = text.trim();
-    const icon = source === 'system' ? '🔊' : '🎤';
+    const icon = source === 'system' ? '\u{1F50A}' : '\u{1F3A4}';
     monitorLastText[source] = `Live: ${trimmed}`;
     renderMonitorState();
 
@@ -1302,7 +1302,7 @@ async function getResponseSuggestions() {
         const result = await window.electronAPI.suggestResponse(context);
 
         if (result.success && result.suggestions) {
-            addChatMessage('ai-response', `ðŸ’¡ **What should I say?**\n\n${result.suggestions}`);
+            addChatMessage('ai-response', `\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
             showFeedback('Suggestions generated', 'success');
         } else {
             throw new Error(result.error || 'Failed to generate suggestions');
@@ -1329,7 +1329,7 @@ async function generateMeetingNotes() {
         setAnalyzing(false);
 
         if (result.success && result.notes) {
-            addChatMessage('ai-response', `ðŸ“ **Meeting Notes**\n\n${result.notes}`);
+            addChatMessage('ai-response', `\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
             showFeedback('Meeting notes generated', 'success');
         } else {
             throw new Error(result.error || 'Failed to generate notes');
@@ -1357,7 +1357,7 @@ async function getConversationInsights() {
         setAnalyzing(false);
 
         if (result.success && result.insights) {
-            addChatMessage('ai-response', `ðŸ“Š **Conversation Insights**\n\n${result.insights}`);
+            addChatMessage('ai-response', `\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
             showFeedback('Insights generated', 'success');
         } else {
             throw new Error(result.error || 'Failed to get insights');
@@ -1638,23 +1638,23 @@ function addChatMessage(type, content) {
     switch (type) {
         case 'voice':
         case 'voice-mic':
-            messageContent = `<div class="message-header"><span class="message-icon">ðŸŽ¤</span><span class="message-label">You</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">\u{1F3A4}</span><span class="message-label">You</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
             break;
 
         case 'voice-system':
-            messageContent = `<div class="message-header"><span class="message-icon">ðŸ”Š</span><span class="message-label">Host</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">\u{1F50A}</span><span class="message-label">Host</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
             break;
 
         case 'screenshot':
-            messageContent = `<div class="message-header"><span class="message-icon">ðŸ“¸</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">\u{1F4F8}</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
             break;
 
         case 'ai-response':
-            messageContent = `<div class="message-header"><span class="message-icon">ðŸ¤–</span><span class="message-time">${timestamp}</span></div><div class="message-content ai-response">${formatResponse(content)}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">\u{1F916}</span><span class="message-time">${timestamp}</span></div><div class="message-content ai-response">${formatResponse(content)}</div>`;
             break;
 
         case 'system':
-            messageContent = `<div class="message-header"><span class="message-icon">â„¹ï¸</span><span class="message-time">${timestamp}</span></div><div class="message-content system-message">${content}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">\u2139\uFE0F</span><span class="message-time">${timestamp}</span></div><div class="message-content system-message">${content}</div>`;
             break;
     }
 
