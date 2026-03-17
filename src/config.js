@@ -14,6 +14,20 @@ const ASSEMBLY_AI_SPEECH_MODELS = [
   'universal-streaming-multilingual'
 ];
 
+// Programming language configuration.
+// The first language in this list is treated as the default language everywhere.
+const PROGRAMMING_LANGUAGES = [
+  'Python',
+  'Java',
+  'JavaScript',
+  'TypeScript',
+  'C++',
+  'Go',
+  'Rust',
+  'C#',
+  'Kotlin'
+];
+
 function getGeminiModels() {
   if (!Array.isArray(GEMINI_MODELS) || GEMINI_MODELS.length === 0) {
     throw new Error('Gemini models are not configured. Add at least one model to src/config.js.');
@@ -32,6 +46,28 @@ function isConfiguredGeminiModel(modelName) {
 
 function resolveGeminiModel(modelName) {
   return isConfiguredGeminiModel(modelName) ? modelName : getDefaultGeminiModel();
+}
+
+function getProgrammingLanguages() {
+  if (!Array.isArray(PROGRAMMING_LANGUAGES) || PROGRAMMING_LANGUAGES.length === 0) {
+    throw new Error('Programming languages are not configured. Add at least one language to src/config.js.');
+  }
+
+  return [...PROGRAMMING_LANGUAGES];
+}
+
+function getDefaultProgrammingLanguage() {
+  return getProgrammingLanguages()[0];
+}
+
+function isConfiguredProgrammingLanguage(languageName) {
+  return getProgrammingLanguages().includes(languageName);
+}
+
+function resolveProgrammingLanguage(languageName) {
+  return isConfiguredProgrammingLanguage(languageName)
+    ? languageName
+    : getDefaultProgrammingLanguage();
 }
 
 function getAssemblyAiSpeechModels() {
@@ -67,8 +103,12 @@ module.exports = {
   getDefaultAssemblyAiSpeechModel,
   getGeminiModels,
   getDefaultGeminiModel,
+  getDefaultProgrammingLanguage,
+  getProgrammingLanguages,
   isConfiguredAssemblyAiSpeechModel,
   isConfiguredGeminiModel,
+  isConfiguredProgrammingLanguage,
   resolveAssemblyAiSpeechModel,
-  resolveGeminiModel
+  resolveGeminiModel,
+  resolveProgrammingLanguage
 };

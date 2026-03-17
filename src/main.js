@@ -13,8 +13,11 @@ const {
   getDefaultAssemblyAiSpeechModel,
   getGeminiModels,
   getDefaultGeminiModel,
+  getDefaultProgrammingLanguage,
+  getProgrammingLanguages,
   resolveAssemblyAiSpeechModel,
-  resolveGeminiModel
+  resolveGeminiModel,
+  resolveProgrammingLanguage
 } = require('./config');
 const GeminiService = require('./services/ai/gemini-service');
 const { getAppStatePath, loadAppState, saveAppState } = require('./services/state/app-state');
@@ -37,6 +40,8 @@ const GEMINI_MODELS = getGeminiModels();
 const DEFAULT_GEMINI_MODEL = getDefaultGeminiModel();
 const ASSEMBLY_AI_SPEECH_MODELS = getAssemblyAiSpeechModels();
 const DEFAULT_ASSEMBLY_AI_SPEECH_MODEL = getDefaultAssemblyAiSpeechModel();
+const PROGRAMMING_LANGUAGES = getProgrammingLanguages();
+const DEFAULT_PROGRAMMING_LANGUAGE = getDefaultProgrammingLanguage();
 
 // AssemblyAI streaming transcription
 let assemblyWs = null;
@@ -47,6 +52,7 @@ const ASSEMBLY_AI_SAMPLE_RATE = 16000;
 let geminiService = null;
 let activeGeminiModel = DEFAULT_GEMINI_MODEL;
 let activeAssemblyAiSpeechModel = DEFAULT_ASSEMBLY_AI_SPEECH_MODEL;
+let activeProgrammingLanguage = DEFAULT_PROGRAMMING_LANGUAGE;
 let activeWindowOpacityLevel = DEFAULT_WINDOW_OPACITY_LEVEL;
 let appState = null;
 let appEnvironment = null;
@@ -54,8 +60,13 @@ let isShuttingDown = false;
 let isVisible = true;
 let autoHideTimer = null;
 
-function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
+function initializeGeminiService(
+  apiKey,
+  modelName = activeGeminiModel,
+  programmingLanguage = activeProgrammingLanguage
+) {
   activeGeminiModel = resolveGeminiModel(modelName);
+  activeProgrammingLanguage = resolveProgrammingLanguage(programmingLanguage);
 
   try {
     if (!apiKey) {
@@ -64,8 +75,25 @@ function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
       return;
     }
 
-    console.log('Initializing Gemini AI Service with model:', activeGeminiModel);
-    geminiService = new GeminiService(apiKey, activeGeminiModel);
+    console.log(
+      'Initializing Gemini AI Service with model and language:',
+      activeGeminiModel,
+      activeProgrammingLanguage
+    );
+
+    if (geminiService) {
+      geminiService.updateConfiguration({
+        apiKey,
+        modelName: activeGeminiModel,
+        programmingLanguage: activeProgrammingLanguage
+      });
+    } else {
+      geminiService = new GeminiService(apiKey, {
+        modelName: activeGeminiModel,
+        programmingLanguage: activeProgrammingLanguage
+      });
+    }
+
     console.log('Gemini AI Service initialized successfully');
   } catch (error) {
     geminiService = null;
@@ -77,16 +105,19 @@ function loadPersistedAppState() {
   appState = loadAppState(app);
   activeGeminiModel = resolveGeminiModel(appState.geminiModel);
   activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
+  activeProgrammingLanguage = resolveProgrammingLanguage(appState.programmingLanguage);
   activeWindowOpacityLevel = clampWindowOpacityLevel(appState.windowOpacityLevel);
 
   if (
     appState.geminiModel !== activeGeminiModel ||
     appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
+    appState.programmingLanguage !== activeProgrammingLanguage ||
     appState.windowOpacityLevel !== activeWindowOpacityLevel
   ) {
     appState = saveAppState(app, {
       geminiModel: activeGeminiModel,
       assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
+      programmingLanguage: activeProgrammingLanguage,
       windowOpacityLevel: activeWindowOpacityLevel
     });
   }
@@ -94,6 +125,7 @@ function loadPersistedAppState() {
   console.log('Loaded app state from:', getAppStatePath(app));
   console.log('Restored Gemini model from app state:', activeGeminiModel);
   console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
+  console.log('Restored programming language from app state:', activeProgrammingLanguage);
   console.log(`Restored window opacity level from app state: ${activeWindowOpacityLevel}/10`);
 }
 
@@ -111,6 +143,8 @@ function logStartupConfiguration() {
   console.log(`  Gemini models: ${GEMINI_MODELS.join(', ')}`);
   console.log(`  Default AssemblyAI speech model: ${DEFAULT_ASSEMBLY_AI_SPEECH_MODEL}`);
   console.log(`  AssemblyAI speech models: ${ASSEMBLY_AI_SPEECH_MODELS.join(', ')}`);
+  console.log(`  Default programming language: ${DEFAULT_PROGRAMMING_LANGUAGE}`);
+  console.log(`  Programming languages: ${PROGRAMMING_LANGUAGES.join(', ')}`);
 }
 
 function cleanupTransientResources() {
@@ -390,6 +424,7 @@ async function analyzeForMeetingWithContext(context = '') {
   console.log('Context length:', context.length);
   console.log('API Key exists:', !!appEnvironment.geminiApiKey);
   console.log('Model initialized:', !!(geminiService && geminiService.model));
+  console.log('Programming language preference:', activeProgrammingLanguage);
   console.log('Screenshots count:', screenshots.length);
 
   if (!appEnvironment.geminiApiKey) {
@@ -443,50 +478,15 @@ async function analyzeForMeetingWithContext(context = '') {
     );
 
     console.log(`Prepared ${imageParts.length} image parts for analysis`);
+    /*
 
-    const contextPrompt = context ? `
-    
-CONVERSATION CONTEXT:
-${context}
-
-Based on the conversation context above and the screenshots provided, please:
-1. Answer any questions that were asked in the conversation
-2. Provide relevant insights about what's shown in the screenshots
-3. If there are specific questions in the context, focus on answering those
-4. Be concise but comprehensive
-
-FORMAT YOUR RESPONSE AS:
-    ` : '';
-
-    const prompt = `You are an expert AI assistant for technical meetings and interviews. Analyze the provided screenshots and conversation context.
-
-${contextPrompt}
-
-**CODE SOLUTION:**
-\`\`\`[language]
-[Your complete, working code solution here - if applicable]
-\`\`\`
-
-**ANALYSIS:**
-[Clear explanation of what you see in the screenshots and answers to any questions from the conversation]
-
-**KEY INSIGHTS:**
 • [Important insight 1]
 • [Important insight 2]
 • [Important insight 3]
 
-Rules:
-1. If there are questions in the conversation context, answer them directly
-2. Provide code solutions if the screenshots show coding problems
-3. Be concise but complete
-4. Focus on actionable insights
-5. If it's a meeting/presentation, summarize key points
-6. Include time/space complexity for coding solutions
-
-Analyze the screenshots and conversation context:`;
-
+    */
     console.log('Sending request to Gemini with rate limiting...');
-    const text = await geminiService.generateMultimodal([prompt, ...imageParts]);
+    const text = await geminiService.analyzeScreenshots(imageParts, context);
     console.log('Received response from Gemini');
     
     console.log('Generated text length:', text.length);
@@ -993,7 +993,7 @@ ipcMain.handle('get-conversation-history', async () => {
   }
 });
 
-// Get current settings (API keys + models)
+// Get current settings (API keys + runtime preferences)
 ipcMain.handle('get-settings', () => {
   return {
     geminiApiKey: appEnvironment.geminiApiKey,
@@ -1001,6 +1001,9 @@ ipcMain.handle('get-settings', () => {
     geminiModel: activeGeminiModel,
     geminiModels: GEMINI_MODELS,
     defaultGeminiModel: DEFAULT_GEMINI_MODEL,
+    programmingLanguage: activeProgrammingLanguage,
+    programmingLanguages: PROGRAMMING_LANGUAGES,
+    defaultProgrammingLanguage: DEFAULT_PROGRAMMING_LANGUAGE,
     assemblyAiSpeechModels: ASSEMBLY_AI_SPEECH_MODELS,
     defaultAssemblyAiSpeechModel: DEFAULT_ASSEMBLY_AI_SPEECH_MODEL,
     assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
@@ -1018,6 +1021,7 @@ ipcMain.handle('save-settings', async (event, settings) => {
       settings.assemblyAiSpeechModel,
       activeAssemblyAiSpeechModel
     );
+    activeProgrammingLanguage = resolveProgrammingLanguage(settings.programmingLanguage);
     activeWindowOpacityLevel = clampWindowOpacityLevel(settings.windowOpacityLevel);
     appEnvironment = saveApplicationEnvironment(app, {
       geminiApiKey: settings.geminiApiKey || '',
@@ -1031,16 +1035,22 @@ ipcMain.handle('save-settings', async (event, settings) => {
     appState = saveAppState(app, {
       geminiModel: activeGeminiModel,
       assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
+      programmingLanguage: activeProgrammingLanguage,
       windowOpacityLevel: activeWindowOpacityLevel
     });
     console.log('Saved app state to:', getAppStatePath(app));
     console.log('Settings saved to:', appEnvironment.envPath);
+    console.log('Applied programming language:', activeProgrammingLanguage);
     console.log(`Applied window opacity level: ${activeWindowOpacityLevel}/10`);
 
     applyWindowOpacity();
 
-    // Re-initialize Gemini service with new key/model
-    initializeGeminiService(appEnvironment.geminiApiKey, activeGeminiModel);
+    // Re-initialize Gemini service with new key/model/language
+    initializeGeminiService(
+      appEnvironment.geminiApiKey,
+      activeGeminiModel,
+      activeProgrammingLanguage
+    );
 
     return { success: true };
   } catch (error) {
@@ -1062,7 +1072,11 @@ app.whenReady().then(() => {
 
   logStartupConfiguration();
   loadPersistedAppState();
-  initializeGeminiService(appEnvironment.geminiApiKey, activeGeminiModel);
+  initializeGeminiService(
+    appEnvironment.geminiApiKey,
+    activeGeminiModel,
+    activeProgrammingLanguage
+  );
   console.log('App is ready, creating window...');
   createStealthWindow();
   registerStealthShortcuts();

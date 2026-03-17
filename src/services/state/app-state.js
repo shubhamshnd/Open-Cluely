@@ -8,6 +8,7 @@ function getDefaultAppState() {
   return {
     geminiModel: null,
     assemblyAiSpeechModel: null,
+    programmingLanguage: null,
     windowOpacityLevel: 10
   };
 }
@@ -22,6 +23,10 @@ function sanitizeAppState(state) {
 
     if (typeof state.assemblyAiSpeechModel === 'string' && state.assemblyAiSpeechModel.trim()) {
       nextState.assemblyAiSpeechModel = state.assemblyAiSpeechModel.trim();
+    }
+
+    if (typeof state.programmingLanguage === 'string' && state.programmingLanguage.trim()) {
+      nextState.programmingLanguage = state.programmingLanguage.trim();
     }
 
     const windowOpacityLevel = Number.parseInt(String(state.windowOpacityLevel ?? ''), 10);

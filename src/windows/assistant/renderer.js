@@ -51,6 +51,7 @@ const closeSettingsBtn = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingGeminiKey = document.getElementById('setting-gemini-key');
 const settingGeminiModel = document.getElementById('setting-gemini-model');
+const settingProgrammingLanguage = document.getElementById('setting-programming-language');
 const settingAssemblyKey = document.getElementById('setting-assembly-key');
 const settingAssemblyModel = document.getElementById('setting-assembly-model');
 const settingWindowOpacity = document.getElementById('setting-window-opacity');
@@ -719,6 +720,10 @@ async function openSettings() {
         if (settings && !settings.error) {
             if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
             populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
+            populateProgrammingLanguageOptions(
+                settings.programmingLanguages,
+                settings.programmingLanguage || settings.defaultProgrammingLanguage
+            );
             if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
             populateAssemblyAiSpeechModelOptions(
                 settings.assemblyAiSpeechModels,
@@ -764,6 +769,30 @@ function populateGeminiModelOptions(models, selectedModel) {
         : configuredModels[0];
 }
 
+function populateProgrammingLanguageOptions(languages, selectedLanguage) {
+    if (!settingProgrammingLanguage) {
+        return;
+    }
+
+    settingProgrammingLanguage.innerHTML = '';
+
+    const configuredLanguages = Array.isArray(languages) ? languages : [];
+    if (configuredLanguages.length === 0) {
+        throw new Error('Programming languages are not configured.');
+    }
+
+    configuredLanguages.forEach((languageName) => {
+        const option = document.createElement('option');
+        option.value = languageName;
+        option.textContent = languageName;
+        settingProgrammingLanguage.appendChild(option);
+    });
+
+    settingProgrammingLanguage.value = configuredLanguages.includes(selectedLanguage)
+        ? selectedLanguage
+        : configuredLanguages[0];
+}
+
 function populateAssemblyAiSpeechModelOptions(models, selectedModel) {
     if (!settingAssemblyModel) {
         return;
@@ -794,6 +823,10 @@ async function saveSettings() {
             throw new Error('Gemini models are not configured.');
         }
 
+        if (!settingProgrammingLanguage || settingProgrammingLanguage.options.length === 0) {
+            throw new Error('Programming languages are not configured.');
+        }
+
         if (!settingAssemblyModel || settingAssemblyModel.options.length === 0) {
             throw new Error('AssemblyAI speech models are not configured.');
         }
@@ -802,6 +835,7 @@ async function saveSettings() {
             geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
             assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
             geminiModel: settingGeminiModel.value,
+            programmingLanguage: settingProgrammingLanguage.value,
             assemblyAiSpeechModel: settingAssemblyModel.value,
             windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
         };
@@ -809,7 +843,7 @@ async function saveSettings() {
         const result = await window.electronAPI.saveSettings(settings);
 
         if (result.success) {
-            showFeedback('Settings saved! Restart voice to apply.', 'success');
+            showFeedback('Settings saved. AI changes are active now; voice model applies next session.', 'success');
             closeSettings();
         } else {
             showFeedback(`Failed to save: ${result.error}`, 'error');
