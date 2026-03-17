@@ -90,18 +90,21 @@ async function startApplication() {
   function loadPersistedAppState() {
     appState = loadAppState(app);
 
+    const keyState = geminiRuntime.setKeys(appEnvironment.geminiApiKeys, appState.geminiApiKeyIndex);
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
     const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
     const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
 
     if (
+      appState.geminiApiKeyIndex !== keyState.activeApiKeyIndex ||
       appState.geminiModel !== activeGeminiModel ||
       appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
       appState.programmingLanguage !== activeProgrammingLanguage ||
       appState.windowOpacityLevel !== activeWindowOpacityLevel
     ) {
       appState = saveAppState(app, {
+        geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: activeGeminiModel,
         assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
         programmingLanguage: activeProgrammingLanguage,
@@ -110,6 +113,7 @@ async function startApplication() {
     }
 
     console.log('Loaded app state from:', getAppStatePath(app));
+    console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
     console.log('Restored Gemini model from app state:', activeGeminiModel);
     console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
     console.log('Restored programming language from app state:', activeProgrammingLanguage);
@@ -142,7 +146,6 @@ async function startApplication() {
     screenshotManager,
     windowController,
     geminiRuntime,
-    getAppEnvironment: () => appEnvironment,
     assemblyAiService,
     sendToRenderer,
     quitApplication
@@ -200,8 +203,17 @@ async function startApplication() {
 
     loadPersistedAppState();
 
+    geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
+      if (!appState || appState.geminiApiKeyIndex === nextIndex) {
+        return;
+      }
+
+      appState = saveAppState(app, { geminiApiKeyIndex: nextIndex });
+      console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
+    });
+
     geminiRuntime.initializeGeminiService(
-      appEnvironment.geminiApiKey,
+      geminiRuntime.getActiveApiKey(),
       geminiRuntime.getActiveGeminiModel(),
       geminiRuntime.getActiveProgrammingLanguage()
     );

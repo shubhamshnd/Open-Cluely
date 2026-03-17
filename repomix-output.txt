@@ -50,6 +50,7 @@ Directory Structure
 assets/chrome.ico
 assets/README.md
 BUILD_INSTRUCTIONS.md
+notes.md
 package.json
 README.md
 SETUP-VOSK.md
@@ -405,6 +406,52 @@ This will overwrite the previous build in `dist/`.
 **Version:** 1.0.0
 
 ================
+File: notes.md
+================
+# Codebase Summary (Folder Ownership)
+
+## `src/`
+- `main.js`: thin Electron entrypoint that starts the app bootstrap flow.
+- `config.js`: source of truth for model/language option lists and resolvers.
+
+## `src/bootstrap/`
+- `environment.js`: loads, validates, normalizes, and saves `.env` app settings.
+
+## `src/main-process/`
+- Purpose: main-process composition and feature wiring.
+- `start-application.js`: orchestrates startup, lifecycle hooks, and IPC registration.
+- `startup-logging.js`: startup config logging.
+- `shared/safe-send.js`: guarded `sendToRenderer` helper.
+- `features/assistant/`: screenshot manager, Gemini runtime wrapper, assistant IPC handlers.
+- `features/window/`: window lifecycle, stealth behavior, shortcuts, bounds/opacity control.
+- `features/settings/`: settings IPC handlers (`get-settings`, `save-settings`).
+
+## `src/services/`
+- Purpose: reusable domain services used by main process logic.
+- `ai/`: Gemini integration and prompt builders.
+  - `gemini-service.js`: request queue, model calls, history handling.
+  - `prompts.js`: prompt templates/builders for Ask AI, notes, insights, etc.
+- `assembly-ai/`: AssemblyAI streaming + transcription backend modules.
+  - `service.js`: WebSocket lifecycle, stream state, transcribe flow.
+  - `stt-history.js`: transcript merge/flush buffering.
+  - `ipc.js`: AssemblyAI-related IPC channel registration.
+- `state/`: persisted app state helpers (`cache/app-state.json` load/save/sanitize).
+
+## `src/windows/assistant/`
+- Purpose: active Electron window implementation (UI + preload bridge).
+- `window.js`: BrowserWindow creation/configuration.
+- `preload.js`: exposes `window.electronAPI`.
+- `preload/`: modularized invoke/listener API construction for IPC.
+- `renderer.html` + `styles.css`: UI structure and styling.
+- `renderer.js`: renderer entry module and UI orchestration.
+- `renderer/features/ai-context/`: AI include/exclude message toggle + context bundle building.
+- `renderer/features/assembly-ai/`: renderer-side source state, audio pipeline, transcript buffering.
+- `pcm-capture-worklet.js`: audio worklet used for PCM capture.
+
+## `src/windows/legacy/`
+- Old experimental/backed-up renderer/transcription files kept for reference, not part of active flow.
+
+================
 File: SETUP-VOSK.md
 ================
 # Vosk Setup Guide
@@ -575,6 +622,26 @@ const REQUIRED_ENV_KEYS = Object.freeze([
   'ASSEMBLY_AI_API_KEY'
 ]);
 
+function normalizeGeminiApiKeys(value) {
+  const sourceValues = Array.isArray(value)
+    ? value
+    : String(value ?? '').split(',');
+  const seen = new Set();
+  const keys = [];
+
+  for (const rawValue of sourceValues) {
+    const key = String(rawValue || '').trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    keys.push(key);
+  }
+
+  return keys;
+}
+
 function getEnvPath(app) {
   return app.isPackaged
     ? path.join(process.resourcesPath, '.env')
@@ -605,8 +672,13 @@ function parsePositiveInteger(value, defaultValue) {
 }
 
 function normalizeApplicationEnvironment(source = {}) {
+  const geminiApiKeys = normalizeGeminiApiKeys(
+    source.GEMINI_API_KEY ?? source.geminiApiKey ?? source.geminiApiKeys
+  );
+
   return {
-    geminiApiKey: String(source.GEMINI_API_KEY || source.geminiApiKey || '').trim(),
+    geminiApiKey: geminiApiKeys.join(','),
+    geminiApiKeys,
     assemblyAiApiKey: String(source.ASSEMBLY_AI_API_KEY || source.assemblyAiApiKey || '').trim(),
     hideFromScreenCapture: parseBoolean(
       source.HIDE_FROM_SCREEN_CAPTURE ?? source.hideFromScreenCapture,
@@ -638,7 +710,7 @@ function syncProcessEnvironment(environment) {
 function validateRequiredEnvironment(environment, envPath) {
   const missingKeys = REQUIRED_ENV_KEYS.filter((key) => {
     if (key === 'GEMINI_API_KEY') {
-      return !environment.geminiApiKey;
+      return !Array.isArray(environment.geminiApiKeys) || environment.geminiApiKeys.length === 0;
     }
 
     if (key === 'ASSEMBLY_AI_API_KEY') {
@@ -674,6 +746,7 @@ function buildEnvironmentFileContent(environment) {
     '# Required API keys',
     '# Get Gemini key at: https://makersuite.google.com/app/apikey',
     '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
+    '# Multiple Gemini keys are supported as comma-separated values',
     `GEMINI_API_KEY=${environment.geminiApiKey}`,
     `ASSEMBLY_AI_API_KEY=${environment.assemblyAiApiKey}`,
     '',
@@ -710,6 +783,7 @@ module.exports = {
   buildEnvironmentFileContent,
   getEnvPath,
   loadApplicationEnvironment,
+  normalizeGeminiApiKeys,
   normalizeApplicationEnvironment,
   saveApplicationEnvironment
 };
@@ -727,12 +801,90 @@ const {
   getDefaultProgrammingLanguage
 } = require('../../../config');
 
+const GEMINI_ALL_KEYS_UNAVAILABLE_ERROR_CODE = 'GEMINI_ALL_KEYS_UNAVAILABLE';
+
+function normalizeGeminiApiKeys(keys) {
+  const sourceValues = Array.isArray(keys)
+    ? keys
+    : String(keys ?? '').split(',');
+  const seen = new Set();
+  const nextKeys = [];
+
+  for (const rawValue of sourceValues) {
+    const key = String(rawValue || '').trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    nextKeys.push(key);
+  }
+
+  return nextKeys;
+}
+
 function createGeminiRuntime() {
   let geminiService = null;
   let activeGeminiModel = getDefaultGeminiModel();
   let activeProgrammingLanguage = getDefaultProgrammingLanguage();
+  let geminiApiKeys = [];
+  let activeApiKeyIndex = 0;
+  let activeKeyIndexChangeHandler = null;
 
-  function initializeGeminiService(apiKey, modelName = activeGeminiModel, programmingLanguage = activeProgrammingLanguage) {
+  function notifyActiveKeyIndexChanged(index) {
+    if (typeof activeKeyIndexChangeHandler !== 'function') {
+      return;
+    }
+
+    try {
+      activeKeyIndexChangeHandler(index);
+    } catch (error) {
+      console.error('Failed to persist active Gemini API key index:', error);
+    }
+  }
+
+  function normalizeKeyIndex(index) {
+    if (geminiApiKeys.length === 0) {
+      return 0;
+    }
+
+    const parsedIndex = Number.parseInt(String(index ?? ''), 10);
+    const safeIndex = Number.isFinite(parsedIndex) ? parsedIndex : 0;
+    const maxIndex = geminiApiKeys.length - 1;
+
+    return Math.min(Math.max(safeIndex, 0), maxIndex);
+  }
+
+  function setActiveApiKeyIndex(index, options = {}) {
+    const nextIndex = normalizeKeyIndex(index);
+    const shouldNotify = options.notify !== false;
+    const changed = nextIndex !== activeApiKeyIndex;
+    activeApiKeyIndex = nextIndex;
+
+    if (changed && shouldNotify) {
+      notifyActiveKeyIndexChanged(activeApiKeyIndex);
+    }
+
+    return activeApiKeyIndex;
+  }
+
+  function getActiveApiKey() {
+    if (geminiApiKeys.length === 0) {
+      return '';
+    }
+
+    return geminiApiKeys[activeApiKeyIndex] || '';
+  }
+
+  function hasApiKeys() {
+    return geminiApiKeys.length > 0;
+  }
+
+  function initializeGeminiService(
+    apiKey = getActiveApiKey(),
+    modelName = activeGeminiModel,
+    programmingLanguage = activeProgrammingLanguage
+  ) {
     activeGeminiModel = resolveGeminiModel(modelName);
     activeProgrammingLanguage = resolveProgrammingLanguage(programmingLanguage);
 
@@ -771,6 +923,174 @@ function createGeminiRuntime() {
     }
   }
 
+  function setKeys(apiKeys, preferredIndex = 0) {
+    geminiApiKeys = normalizeGeminiApiKeys(apiKeys);
+
+    if (!hasApiKeys()) {
+      setActiveApiKeyIndex(0);
+      geminiService = null;
+      return {
+        geminiApiKeys: [],
+        activeApiKeyIndex: 0,
+        activeApiKey: ''
+      };
+    }
+
+    setActiveApiKeyIndex(preferredIndex);
+
+    return {
+      geminiApiKeys: [...geminiApiKeys],
+      activeApiKeyIndex,
+      activeApiKey: getActiveApiKey()
+    };
+  }
+
+  function getApiKeys() {
+    return [...geminiApiKeys];
+  }
+
+  function switchToNextKey() {
+    if (!hasApiKeys()) {
+      return {
+        switched: false,
+        activeApiKeyIndex,
+        activeApiKey: ''
+      };
+    }
+
+    if (geminiApiKeys.length === 1) {
+      return {
+        switched: false,
+        activeApiKeyIndex,
+        activeApiKey: getActiveApiKey()
+      };
+    }
+
+    const previousIndex = activeApiKeyIndex;
+    const nextIndex = (activeApiKeyIndex + 1) % geminiApiKeys.length;
+    setActiveApiKeyIndex(nextIndex);
+
+    if (nextIndex === previousIndex) {
+      return {
+        switched: false,
+        activeApiKeyIndex,
+        activeApiKey: getActiveApiKey()
+      };
+    }
+
+    initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
+
+    return {
+      switched: true,
+      activeApiKeyIndex,
+      activeApiKey: getActiveApiKey()
+    };
+  }
+
+  function isSwitchEligibleError(error) {
+    if (!error) {
+      return false;
+    }
+
+    if (geminiService?.isQuotaExhaustedError?.(error)) {
+      return true;
+    }
+
+    if (geminiService?.isAuthenticationError?.(error)) {
+      return true;
+    }
+
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.includes('quota exceeded') ||
+      message.includes('api key not valid') ||
+      message.includes('invalid api key') ||
+      message.includes('permission denied') ||
+      message.includes('401') ||
+      message.includes('403') ||
+      message.includes('unauthorized') ||
+      message.includes('forbidden')
+    );
+  }
+
+  function createAllKeysUnavailableError(cause) {
+    const allKeysUnavailableError = new Error(
+      'All configured Gemini API keys are currently unavailable due to quota or authentication errors.'
+    );
+
+    allKeysUnavailableError.code = GEMINI_ALL_KEYS_UNAVAILABLE_ERROR_CODE;
+    allKeysUnavailableError.isAllKeysUnavailable = true;
+    if (cause) {
+      allKeysUnavailableError.cause = cause;
+    }
+
+    return allKeysUnavailableError;
+  }
+
+  function isAllKeysUnavailableError(error) {
+    return Boolean(
+      error && (
+        error.code === GEMINI_ALL_KEYS_UNAVAILABLE_ERROR_CODE ||
+        error.isAllKeysUnavailable === true
+      )
+    );
+  }
+
+  async function executeWithKeyFailover(operation) {
+    if (typeof operation !== 'function') {
+      throw new Error('Gemini failover operation must be a function.');
+    }
+
+    if (!hasApiKeys()) {
+      throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+    }
+
+    const totalKeys = geminiApiKeys.length;
+    const startIndex = activeApiKeyIndex;
+    let attemptedKeys = 0;
+    let lastSwitchEligibleError = null;
+
+    while (attemptedKeys < totalKeys) {
+      const activeApiKey = getActiveApiKey();
+      if (!activeApiKey) {
+        break;
+      }
+
+      if (!geminiService || geminiService.apiKey !== activeApiKey) {
+        initializeGeminiService(activeApiKey, activeGeminiModel, activeProgrammingLanguage);
+      }
+
+      try {
+        return await operation(geminiService, {
+          activeApiKeyIndex,
+          activeApiKey,
+          attempt: attemptedKeys + 1,
+          totalKeys
+        });
+      } catch (error) {
+        if (!isSwitchEligibleError(error)) {
+          throw error;
+        }
+
+        lastSwitchEligibleError = error;
+        attemptedKeys += 1;
+
+        if (attemptedKeys >= totalKeys) {
+          if (activeApiKeyIndex !== startIndex) {
+            setActiveApiKeyIndex(startIndex);
+            initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
+          }
+
+          throw createAllKeysUnavailableError(lastSwitchEligibleError);
+        }
+
+        switchToNextKey();
+      }
+    }
+
+    throw createAllKeysUnavailableError(lastSwitchEligibleError);
+  }
+
   function getService() {
     return geminiService;
   }
@@ -793,8 +1113,21 @@ function createGeminiRuntime() {
     return activeProgrammingLanguage;
   }
 
+  function setActiveKeyIndexChangeHandler(handler) {
+    activeKeyIndexChangeHandler = typeof handler === 'function' ? handler : null;
+  }
+
   return {
     initializeGeminiService,
+    setKeys,
+    getApiKeys,
+    hasApiKeys,
+    getActiveApiKey,
+    getActiveApiKeyIndex: () => activeApiKeyIndex,
+    switchToNextKey,
+    executeWithKeyFailover,
+    isAllKeysUnavailableError,
+    setActiveKeyIndexChangeHandler,
     getService,
     getGeminiModels,
     getDefaultGeminiModel,
@@ -808,6 +1141,7 @@ function createGeminiRuntime() {
 }
 
 module.exports = {
+  GEMINI_ALL_KEYS_UNAVAILABLE_ERROR_CODE,
   createGeminiRuntime
 };
 
@@ -819,12 +1153,60 @@ function registerAssistantIpc({
   screenshotManager,
   windowController,
   geminiRuntime,
-  getAppEnvironment,
   assemblyAiService,
   sendToRenderer,
   quitApplication
 }) {
   let chatContext = [];
+
+  function getAllKeysUnavailableMessage() {
+    return 'All configured Gemini API keys are currently unavailable (quota exhausted or invalid). Please wait and try again later.';
+  }
+
+  function mapGeminiErrorMessage(error, fallbackPrefix = 'Request failed') {
+    const message = String(error?.message || '');
+    const normalizedMessage = message.toLowerCase();
+
+    if (geminiRuntime.isAllKeysUnavailableError?.(error)) {
+      return getAllKeysUnavailableMessage();
+    }
+
+    if (normalizedMessage.includes('no api key configured')) {
+      return 'No API key configured. Please add GEMINI_API_KEY to your .env file.';
+    }
+
+    if (
+      normalizedMessage.includes('api key not valid') ||
+      normalizedMessage.includes('invalid api key') ||
+      normalizedMessage.includes('api_key_invalid') ||
+      normalizedMessage.includes('permission denied') ||
+      normalizedMessage.includes('permission_denied') ||
+      normalizedMessage.includes('unauthorized') ||
+      normalizedMessage.includes('forbidden') ||
+      normalizedMessage.includes('401') ||
+      normalizedMessage.includes('403')
+    ) {
+      return 'Invalid API key. Please check your GEMINI_API_KEY values.';
+    }
+
+    if (
+      normalizedMessage.includes('quota') ||
+      normalizedMessage.includes('daily request limit') ||
+      normalizedMessage.includes('exceeded your current quota')
+    ) {
+      return 'API quota exceeded. Please try again later.';
+    }
+
+    if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
+      return 'Network error. Please check your internet connection.';
+    }
+
+    if (normalizedMessage.includes('model')) {
+      return 'AI model error. Please try a different model.';
+    }
+
+    return message ? `${fallbackPrefix}: ${message}` : fallbackPrefix;
+  }
 
   async function analyzeForMeetingWithContext(contextInput = '') {
     const payload = typeof contextInput === 'object' && contextInput !== null
@@ -833,26 +1215,17 @@ function registerAssistantIpc({
 
     const contextString = typeof payload.contextString === 'string' ? payload.contextString : '';
     const enabledScreenshotIds = Array.isArray(payload.enabledScreenshotIds) ? payload.enabledScreenshotIds : null;
-    const appEnvironment = getAppEnvironment();
-    const geminiService = geminiRuntime.getService();
 
     console.log('Starting context-aware analysis...');
     console.log('Context length:', contextString.length);
-    console.log('API Key exists:', !!appEnvironment.geminiApiKey);
-    console.log('Model initialized:', !!(geminiService && geminiService.model));
+    console.log('API Keys configured:', geminiRuntime.getApiKeys().length);
+    console.log('Model initialized:', !!(geminiRuntime.getService() && geminiRuntime.getService().model));
     console.log('Programming language preference:', geminiRuntime.getActiveProgrammingLanguage());
     console.log('Screenshots count:', screenshotManager.getScreenshotsCount());
 
-    if (!appEnvironment.geminiApiKey) {
+    if (!geminiRuntime.hasApiKeys()) {
       sendToRenderer('analysis-result', {
         error: 'No API key configured. Please add GEMINI_API_KEY to your .env file.'
-      });
-      return;
-    }
-
-    if (!geminiService || !geminiService.model) {
-      sendToRenderer('analysis-result', {
-        error: 'AI model not initialized. Please check your API key.'
       });
       return;
     }
@@ -879,11 +1252,17 @@ function registerAssistantIpc({
         return;
       }
 
-      const text = await geminiService.analyzeScreenshots(
-        imageParts,
-        '',
-        { contextStringOverride: contextString }
-      );
+      const text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('AI model not initialized. Please check your API key.');
+        }
+
+        return geminiService.analyzeScreenshots(
+          imageParts,
+          '',
+          { contextStringOverride: contextString }
+        );
+      });
 
       chatContext.push({
         type: 'analysis',
@@ -896,21 +1275,8 @@ function registerAssistantIpc({
     } catch (error) {
       console.error('Analysis error details:', error);
 
-      let errorMessage = 'Analysis failed';
-      if (error.message.includes('API_KEY')) {
-        errorMessage = 'Invalid API key. Please check your GEMINI_API_KEY.';
-      } else if (error.message.includes('quota')) {
-        errorMessage = 'API quota exceeded. Please try again later.';
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (error.message.includes('model')) {
-        errorMessage = 'AI model error. Please try a different model.';
-      } else {
-        errorMessage = `Analysis failed: ${error.message}`;
-      }
-
       sendToRenderer('analysis-result', {
-        error: errorMessage
+        error: mapGeminiErrorMessage(error, 'Analysis failed')
       });
     }
   }
@@ -952,19 +1318,13 @@ function registerAssistantIpc({
   });
 
   ipcMain.handle('ask-ai-with-session-context', async (_event, payload = {}) => {
-    const appEnvironment = getAppEnvironment();
-    const geminiService = geminiRuntime.getService();
     const mode = payload?.mode === 'best-next-answer' ? 'best-next-answer' : 'best-next-answer';
 
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai');
 
-      if (!appEnvironment.geminiApiKey) {
+      if (!geminiRuntime.hasApiKeys()) {
         throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
-      }
-
-      if (!geminiService || !geminiService.model) {
-        throw new Error('AI model not initialized. Please check your API key.');
       }
 
       const transcriptContext = typeof payload?.transcriptContext === 'string'
@@ -1002,23 +1362,35 @@ function registerAssistantIpc({
         if (imageParts.length > 0) {
           usedScreenshots = true;
           usedScreenshotCount = imageParts.length;
-          text = await geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
-            contextString,
-            transcriptContext,
-            sessionSummary,
-            screenshotCount: imageParts.length,
-            mode
+          text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+            if (!geminiService || !geminiService.model) {
+              throw new Error('AI model not initialized. Please check your API key.');
+            }
+
+            return geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
+              contextString,
+              transcriptContext,
+              sessionSummary,
+              screenshotCount: imageParts.length,
+              mode
+            });
           });
         }
       }
 
       if (!text) {
-        text = await geminiService.askAiWithSessionContext({
-          contextString,
-          transcriptContext,
-          sessionSummary,
-          screenshotCount: usedScreenshots ? usedScreenshotCount : 0,
-          mode
+        text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+          if (!geminiService || !geminiService.model) {
+            throw new Error('AI model not initialized. Please check your API key.');
+          }
+
+          return geminiService.askAiWithSessionContext({
+            contextString,
+            transcriptContext,
+            sessionSummary,
+            screenshotCount: usedScreenshots ? usedScreenshotCount : 0,
+            mode
+          });
         });
       }
 
@@ -1034,7 +1406,7 @@ function registerAssistantIpc({
       console.error('Error in ask-ai-with-session-context:', error);
       return {
         success: false,
-        error: error.message || 'Ask AI failed',
+        error: mapGeminiErrorMessage(error, 'Ask AI failed'),
         mode,
         usedScreenshots: false
       };
@@ -1064,12 +1436,10 @@ function registerAssistantIpc({
   });
 
   ipcMain.handle('suggest-response', async (_event, context) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-suggest');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
       const payload = typeof context === 'object' && context !== null
@@ -1082,96 +1452,120 @@ function registerAssistantIpc({
         ? payload.contextString
         : '';
 
-      const suggestions = await geminiService.suggestResponse(contextPrompt, {
-        contextString: contextStringOverride
+      const suggestions = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.suggestResponse(contextPrompt, {
+          contextString: contextStringOverride
+        });
       });
 
       return { success: true, suggestions };
     } catch (error) {
       console.error('Error generating suggestions:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate suggestions') };
     }
   });
 
   ipcMain.handle('generate-meeting-notes', async (_event, payload = {}) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-notes');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
         ? payload.contextString
         : '';
 
-      const notes = await geminiService.generateMeetingNotes({
-        contextString: contextStringOverride
+      const notes = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.generateMeetingNotes({
+          contextString: contextStringOverride
+        });
       });
 
       return { success: true, notes };
     } catch (error) {
       console.error('Error generating meeting notes:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate meeting notes') };
     }
   });
 
   ipcMain.handle('generate-follow-up-email', async () => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-followup');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
-      const email = await geminiService.generateFollowUpEmail();
+      const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.generateFollowUpEmail();
+      });
+
       return { success: true, email };
     } catch (error) {
       console.error('Error generating email:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate follow-up email') };
     }
   });
 
   ipcMain.handle('answer-question', async (_event, question) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-answer');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
-      const answer = await geminiService.answerQuestion(question);
+      const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.answerQuestion(question);
+      });
+
       return { success: true, answer };
     } catch (error) {
       console.error('Error answering question:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to answer question') };
     }
   });
 
   ipcMain.handle('get-conversation-insights', async (_event, payload = {}) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-insights');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
         ? payload.contextString
         : '';
 
-      const insights = await geminiService.getConversationInsights({
-        contextString: contextStringOverride
+      const insights = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.getConversationInsights({
+          contextString: contextStringOverride
+        });
       });
 
       return { success: true, insights };
     } catch (error) {
       console.error('Error getting insights:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to get conversation insights') };
     }
   });
 
@@ -1471,7 +1865,9 @@ function registerSettingsIpc({
         nodeOptions: appEnvironment.nodeOptions
       });
 
+      const keyState = geminiRuntime.setKeys(updatedEnvironment.geminiApiKeys, 0);
       const updatedAppState = saveAppState(app, {
+        geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: nextGeminiModel,
         assemblyAiSpeechModel: nextAssemblyModel,
         programmingLanguage: nextProgrammingLanguage,
@@ -1485,9 +1881,10 @@ function registerSettingsIpc({
       console.log('Settings saved to:', updatedEnvironment.envPath);
       console.log('Applied programming language:', nextProgrammingLanguage);
       console.log(`Applied window opacity level: ${nextWindowOpacityLevel}/10`);
+      console.log(`Applied Gemini API key index: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
 
       geminiRuntime.initializeGeminiService(
-        updatedEnvironment.geminiApiKey,
+        keyState.activeApiKey,
         nextGeminiModel,
         nextProgrammingLanguage
       );
@@ -2001,6 +2398,7 @@ function logStartupConfiguration({
   console.log('Loaded .env from:', appEnvironment.envPath);
   console.log('Startup configuration:');
   console.log(`  GEMINI_API_KEY: ${appEnvironment.geminiApiKey ? 'present' : 'missing'}`);
+  console.log(`  GEMINI_API_KEYS configured: ${appEnvironment.geminiApiKeys.length}`);
   console.log(`  ASSEMBLY_AI_API_KEY: ${appEnvironment.assemblyAiApiKey ? 'present' : 'missing'}`);
   console.log(`  HIDE_FROM_SCREEN_CAPTURE: ${appEnvironment.hideFromScreenCapture}`);
   console.log(`  MAX_SCREENSHOTS: ${appEnvironment.maxScreenshots}`);
@@ -5945,6 +6343,8 @@ File: .env.example
 ================
 # API Keys
 # Get Gemini key at: https://makersuite.google.com/app/apikey
+# Multiple Gemini keys are supported as comma-separated values.
+# Example: GEMINI_API_KEY=key_one,key_two,key_three
 # Get AssemblyAI key at: https://www.assemblyai.com/dashboard
 GEMINI_API_KEY=
 ASSEMBLY_AI_API_KEY=
@@ -6057,18 +6457,21 @@ async function startApplication() {
   function loadPersistedAppState() {
     appState = loadAppState(app);
 
+    const keyState = geminiRuntime.setKeys(appEnvironment.geminiApiKeys, appState.geminiApiKeyIndex);
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
     const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
     const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
 
     if (
+      appState.geminiApiKeyIndex !== keyState.activeApiKeyIndex ||
       appState.geminiModel !== activeGeminiModel ||
       appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
       appState.programmingLanguage !== activeProgrammingLanguage ||
       appState.windowOpacityLevel !== activeWindowOpacityLevel
     ) {
       appState = saveAppState(app, {
+        geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: activeGeminiModel,
         assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
         programmingLanguage: activeProgrammingLanguage,
@@ -6077,6 +6480,7 @@ async function startApplication() {
     }
 
     console.log('Loaded app state from:', getAppStatePath(app));
+    console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
     console.log('Restored Gemini model from app state:', activeGeminiModel);
     console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
     console.log('Restored programming language from app state:', activeProgrammingLanguage);
@@ -6109,7 +6513,6 @@ async function startApplication() {
     screenshotManager,
     windowController,
     geminiRuntime,
-    getAppEnvironment: () => appEnvironment,
     assemblyAiService,
     sendToRenderer,
     quitApplication
@@ -6167,8 +6570,17 @@ async function startApplication() {
 
     loadPersistedAppState();
 
+    geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
+      if (!appState || appState.geminiApiKeyIndex === nextIndex) {
+        return;
+      }
+
+      appState = saveAppState(app, { geminiApiKeyIndex: nextIndex });
+      console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
+    });
+
     geminiRuntime.initializeGeminiService(
-      appEnvironment.geminiApiKey,
+      geminiRuntime.getActiveApiKey(),
       geminiRuntime.getActiveGeminiModel(),
       geminiRuntime.getActiveProgrammingLanguage()
     );
@@ -6685,6 +7097,7 @@ const APP_STATE_FILE_NAME = 'app-state.json';
 
 function getDefaultAppState() {
   return {
+    geminiApiKeyIndex: 0,
     geminiModel: null,
     assemblyAiSpeechModel: null,
     programmingLanguage: null,
@@ -6696,6 +7109,11 @@ function sanitizeAppState(state) {
   const nextState = getDefaultAppState();
 
   if (state && typeof state === 'object' && !Array.isArray(state)) {
+    const geminiApiKeyIndex = Number.parseInt(String(state.geminiApiKeyIndex ?? ''), 10);
+    if (Number.isFinite(geminiApiKeyIndex) && geminiApiKeyIndex >= 0) {
+      nextState.geminiApiKeyIndex = geminiApiKeyIndex;
+    }
+
     if (typeof state.geminiModel === 'string' && state.geminiModel.trim()) {
       nextState.geminiModel = state.geminiModel.trim();
     }
@@ -8537,64 +8955,6 @@ select.settings-input {
 }
 
 ================
-File: .gitignore
-================
-# Node.js
-node_modules/
-dist/
-build/
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-
-# Dependency directories
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Optional npm cache directory
-.npm/
-
-# Optional eslint cache
-.eslintcache
-
-# Optional REPL history
-.node_repl_history
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# IDE-specific files
-.idea/
-.vscode/
-*.swp
-*.bak
-*.swo
-
-# Test coverage
-coverage/
-
-# Thumbnails
-.DS_Store
-Thumbs.db
-
-.claude/
-
-.stealth_screenshots/
-cache/
-logs.txt
-
-#.md files
-notes.md
-
-================
 File: src/services/ai/gemini-service.js
 ================
 // ============================================================================
@@ -8715,6 +9075,22 @@ class GeminiService {
       message.includes('generaterequestsperdayperprojectpermodel') ||
       message.includes('perdayperprojectpermodel') ||
       message.includes('daily request limit')
+    );
+  }
+
+  isAuthenticationError(error) {
+    const message = String(error?.message || '').toLowerCase();
+
+    return (
+      message.includes('api key not valid') ||
+      message.includes('invalid api key') ||
+      message.includes('api_key_invalid') ||
+      message.includes('401') ||
+      message.includes('403') ||
+      message.includes('permission denied') ||
+      message.includes('permission_denied') ||
+      message.includes('unauthorized') ||
+      message.includes('forbidden')
     );
   }
 
@@ -8987,6 +9363,64 @@ class GeminiService {
 module.exports = GeminiService;
 
 ================
+File: .gitignore
+================
+# Node.js
+node_modules/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Dependency directories
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm/
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE-specific files
+.idea/
+.vscode/
+*.swp
+*.bak
+*.swo
+
+# Test coverage
+coverage/
+
+# Thumbnails
+.DS_Store
+Thumbs.db
+
+.claude/
+
+.stealth_screenshots/
+cache/
+logs.txt
+
+#.md files
+# notes.md
+
+================
 File: src/windows/assistant/renderer.html
 ================
 <!DOCTYPE html>
@@ -9170,8 +9604,8 @@ File: src/windows/assistant/renderer.html
       </div>
       <div class="settings-body">
         <div class="settings-group">
-          <label class="settings-label">Gemini API Key</label>
-          <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key..." />
+          <label class="settings-label">Gemini API Key(s)</label>
+          <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key(s), comma-separated..." />
         </div>
         <div class="settings-group">
           <label class="settings-label">Gemini Model</label>
@@ -9237,235 +9671,6 @@ File: src/windows/assistant/renderer.html
   <script type="module" src="renderer.js"></script>
 </body>
 </html>
-
-================
-File: README.md
-================
-# Open-Cluely
-
-Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
-
-## Features
-
-- Live transcription with a single master control button and per-source toggles:
-  - `Host audio` (system output)
-  - `Mic` (microphone input)
-- Real-time Transcription Monitor:
-  - Per-source status (`Off`, `Connecting`, `Listening`, `Error`)
-  - Live partial/final preview and rolling debug log
-- `Ask AI` now uses full session context:
-  - Transcript context (Host + You)
-  - Current session screenshots (when enabled)
-  - Works even when screenshot count is zero (text-only fallback)
-- New `Screen AI` button for screenshot-only analysis flow
-- Selective AI context controls in chat:
-  - Toggle transcript/screenshot messages `AI` / `Off` per message
-  - Disabled chunks stay visible but are excluded from AI prompts
-- Automatic context cap for long meetings:
-  - Keeps newest enabled context
-  - Trims oldest enabled chunks first when budget is exceeded
-
-## Ask AI vs Screen AI
-
-- `Ask AI`:
-  - Primary assistant action
-  - Uses filtered session context from chat (transcript + enabled screenshots)
-  - Best for "what should I say/do next?"
-- `Screen AI`:
-  - Screenshot-focused analysis
-  - Uses only enabled screenshot items
-- `Screenshot`:
-  - Capture only (does not analyze by itself)
-
-## Selective AI Context Controls
-
-In chat, transcript and screenshot messages have an `AI`/`Off` toggle.
-
-- `AI`: message is included in context sent to AI
-- `Off`: message is excluded from context, but still shown in UI
-- Excluded messages appear dimmed with an `Excluded from AI context` marker
-
-Default behavior:
-
-- Toggleable: transcript (`You` / `Host`) and screenshot messages
-- Always excluded: system status/error messages
-- Included by default: AI output messages
-
-This filtering is applied consistently across:
-
-- `Ask AI`
-- `Screen AI`
-- `What should I say`
-- `Generate Meeting Notes`
-- `Get Insights`
-
-## Project Structure
-
-- `src/main.js` - main Electron process entry and runtime orchestration
-- `src/bootstrap/` - startup environment loading, validation, and `.env` persistence
-- `src/windows/assistant/` - active Electron window files (`window.js`, `preload.js`, `renderer.js`, `renderer.html`, `styles.css`)
-- `src/windows/legacy/` - old or backup window/transcription experiments kept for reference
-- `src/services/ai/` - AI service integrations such as Gemini
-- `src/services/state/` - local persisted state helpers such as `cache/app-state.json` handling
-- `src/config.js` - source of truth for Gemini and AssemblyAI speech model lists/defaults
-
-## Setup
-
-### Prerequisites
-
-- Windows 10/11
-- `nvm-windows` `1.2.2` or compatible
-- Node.js `20.20.1`
-- npm `10.8.2`
-- Gemini API key
-- AssemblyAI API key
-
-### Native Windows Dependencies
-
-This app uses native Windows modules. If `npm ci` fails with `node-gyp` / Visual Studio errors, install:
-
-- Visual Studio 2022 Build Tools or Visual Studio 2022
-- `Desktop development with C++` workload
-- MSVC C++ toolset
-- Windows 10/11 SDK
-- Python
-
-Install command:
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-### Install
-
-```powershell
-winget install --id CoreyButler.NVMforWindows --exact --silent --accept-package-agreements --accept-source-agreements
-nvm install 20.20.1
-nvm use 20.20.1
-```
-
-Restart the terminal or VS Code/Cursor, then run:
-
-```powershell
-node -v
-npm -v
-npm ci
-```
-
-### Run
-
-```powershell
-npm start
-```
-
-For logs:
-
-```powershell
-npm run dev
-```
-
-## Configuration
-
-### `src/config.js`
-
-This file is the source of truth for model lists:
-
-- `GEMINI_MODELS`: Gemini models shown in settings
-- `ASSEMBLY_AI_SPEECH_MODELS`: AssemblyAI speech models shown in settings
-- The first item in each list is the default
-
-Current defaults:
-
-- Gemini: `gemini-2.5-flash-lite`
-- AssemblyAI speech: `universal-streaming-english`
-
-### `.env`
-
-Required:
-
-```env
-GEMINI_API_KEY=your_gemini_key
-ASSEMBLY_AI_API_KEY=your_assemblyai_key
-```
-
-Optional:
-
-```env
-HIDE_FROM_SCREEN_CAPTURE=true
-MAX_SCREENSHOTS=50
-SCREENSHOT_DELAY=300
-NODE_ENV=production
-NODE_OPTIONS=--max-old-space-size=4096
-```
-
-Notes:
-
-- `GEMINI_MODEL` is not read from `.env`
-- available AssemblyAI speech models are not controlled from `.env`
-- `HIDE_FROM_SCREEN_CAPTURE=false` allows the window to appear in screen share / screenshots
-
-### App State
-
-Runtime selections are persisted in:
-
-```text
-cache/app-state.json
-```
-
-Stored values:
-
-- selected Gemini model
-- selected AssemblyAI speech model
-
-## Build
-
-Use:
-
-```powershell
-npm run build -- --config.win.signAndEditExecutable=false
-```
-
-Output:
-
-```text
-dist/GoogleChrome.exe
-```
-
-If build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
-
-## Scripts
-
-- `npm start` - run the app
-- `npm run dev` - run with logs
-- `npm run build -- --config.win.signAndEditExecutable=false` - build Windows executable
-
-## Repomix
-
-To recreate the merged single-file codebase snapshot (`repomix-output.txt`), run:
-
-```powershell
-npx repomix . --style plain -o repomix-output.txt
-```
-
-Optional (avoid packing the output file itself when experimenting with other output names):
-
-```powershell
-npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
-```
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
-| `Ctrl+Alt+Shift+S` | Capture screenshot |
-| `Ctrl+Alt+Shift+A` | Ask AI (full session context) |
-| `Ctrl+Alt+Shift+X` | Emergency hide |
-| `Ctrl+Alt+Shift+H` | Toggle opacity |
-
-## Note
-
-Use this tool only where recording, transcription, and AI assistance are allowed.
 
 ================
 File: src/windows/assistant/renderer.js
@@ -11425,6 +11630,239 @@ File: package.json
   "author": "Shubham",
   "license": "MIT"
 }
+
+================
+File: README.md
+================
+# Open-Cluely
+
+Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
+
+## Features
+
+- Live transcription with a single master control button and per-source toggles:
+  - `Host audio` (system output)
+  - `Mic` (microphone input)
+- Real-time Transcription Monitor:
+  - Per-source status (`Off`, `Connecting`, `Listening`, `Error`)
+  - Live partial/final preview and rolling debug log
+- `Ask AI` now uses full session context:
+  - Transcript context (Host + You)
+  - Current session screenshots (when enabled)
+  - Works even when screenshot count is zero (text-only fallback)
+- New `Screen AI` button for screenshot-only analysis flow
+- Selective AI context controls in chat:
+  - Toggle transcript/screenshot messages `AI` / `Off` per message
+  - Disabled chunks stay visible but are excluded from AI prompts
+- Automatic context cap for long meetings:
+  - Keeps newest enabled context
+  - Trims oldest enabled chunks first when budget is exceeded
+
+## Ask AI vs Screen AI
+
+- `Ask AI`:
+  - Primary assistant action
+  - Uses filtered session context from chat (transcript + enabled screenshots)
+  - Best for "what should I say/do next?"
+- `Screen AI`:
+  - Screenshot-focused analysis
+  - Uses only enabled screenshot items
+- `Screenshot`:
+  - Capture only (does not analyze by itself)
+
+## Selective AI Context Controls
+
+In chat, transcript and screenshot messages have an `AI`/`Off` toggle.
+
+- `AI`: message is included in context sent to AI
+- `Off`: message is excluded from context, but still shown in UI
+- Excluded messages appear dimmed with an `Excluded from AI context` marker
+
+Default behavior:
+
+- Toggleable: transcript (`You` / `Host`) and screenshot messages
+- Always excluded: system status/error messages
+- Included by default: AI output messages
+
+This filtering is applied consistently across:
+
+- `Ask AI`
+- `Screen AI`
+- `What should I say`
+- `Generate Meeting Notes`
+- `Get Insights`
+
+## Project Structure
+
+- `src/main.js` - main Electron process entry and runtime orchestration
+- `src/bootstrap/` - startup environment loading, validation, and `.env` persistence
+- `src/windows/assistant/` - active Electron window files (`window.js`, `preload.js`, `renderer.js`, `renderer.html`, `styles.css`)
+- `src/windows/legacy/` - old or backup window/transcription experiments kept for reference
+- `src/services/ai/` - AI service integrations such as Gemini
+- `src/services/state/` - local persisted state helpers such as `cache/app-state.json` handling
+- `src/config.js` - source of truth for Gemini and AssemblyAI speech model lists/defaults
+
+## Setup
+
+### Prerequisites
+
+- Windows 10/11
+- `nvm-windows` `1.2.2` or compatible
+- Node.js `20.20.1`
+- npm `10.8.2`
+- one or more Gemini API keys
+- AssemblyAI API key
+
+### Native Windows Dependencies
+
+This app uses native Windows modules. If `npm ci` fails with `node-gyp` / Visual Studio errors, install:
+
+- Visual Studio 2022 Build Tools or Visual Studio 2022
+- `Desktop development with C++` workload
+- MSVC C++ toolset
+- Windows 10/11 SDK
+- Python
+
+Install command:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+### Install
+
+```powershell
+winget install --id CoreyButler.NVMforWindows --exact --silent --accept-package-agreements --accept-source-agreements
+nvm install 20.20.1
+nvm use 20.20.1
+```
+
+Restart the terminal or VS Code/Cursor, then run:
+
+```powershell
+node -v
+npm -v
+npm ci
+```
+
+### Run
+
+```powershell
+npm start
+```
+
+For logs:
+
+```powershell
+npm run dev
+```
+
+## Configuration
+
+### `src/config.js`
+
+This file is the source of truth for model lists:
+
+- `GEMINI_MODELS`: Gemini models shown in settings
+- `ASSEMBLY_AI_SPEECH_MODELS`: AssemblyAI speech models shown in settings
+- The first item in each list is the default
+
+Current defaults:
+
+- Gemini: `gemini-2.5-flash-lite`
+- AssemblyAI speech: `universal-streaming-english`
+
+### `.env`
+
+Required:
+
+```env
+GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
+ASSEMBLY_AI_API_KEY=your_assemblyai_key
+```
+
+Optional:
+
+```env
+HIDE_FROM_SCREEN_CAPTURE=true
+MAX_SCREENSHOTS=50
+SCREENSHOT_DELAY=300
+NODE_ENV=production
+NODE_OPTIONS=--max-old-space-size=4096
+```
+
+Notes:
+
+- `GEMINI_API_KEY` accepts comma-separated keys in strict order.
+- On quota/auth failure, the app retries the same request with the next key.
+- After a full cycle where all keys fail, the app returns an "all keys unavailable" error.
+- `GEMINI_MODEL` is not read from `.env`
+- available AssemblyAI speech models are not controlled from `.env`
+- `HIDE_FROM_SCREEN_CAPTURE=false` allows the window to appear in screen share / screenshots
+
+### App State
+
+Runtime selections are persisted in:
+
+```text
+cache/app-state.json
+```
+
+Stored values:
+
+- active Gemini API key index
+- selected Gemini model
+- selected AssemblyAI speech model
+
+## Build
+
+Use:
+
+```powershell
+npm run build -- --config.win.signAndEditExecutable=false
+```
+
+Output:
+
+```text
+dist/GoogleChrome.exe
+```
+
+If build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
+
+## Scripts
+
+- `npm start` - run the app
+- `npm run dev` - run with logs
+- `npm run build -- --config.win.signAndEditExecutable=false` - build Windows executable
+
+## Repomix
+
+To recreate the merged single-file codebase snapshot (`repomix-output.txt`), run:
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt
+```
+
+Optional (avoid packing the output file itself when experimenting with other output names):
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
+```
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
+| `Ctrl+Alt+Shift+S` | Capture screenshot |
+| `Ctrl+Alt+Shift+A` | Ask AI (full session context) |
+| `Ctrl+Alt+Shift+X` | Emergency hide |
+| `Ctrl+Alt+Shift+H` | Toggle opacity |
+
+## Note
+
+Use this tool only where recording, transcription, and AI assistance are allowed.
 
 ================
 File: src/main.js

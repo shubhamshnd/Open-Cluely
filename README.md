@@ -74,7 +74,7 @@ This filtering is applied consistently across:
 - `nvm-windows` `1.2.2` or compatible
 - Node.js `20.20.1`
 - npm `10.8.2`
-- Gemini API key
+- one or more Gemini API keys
 - AssemblyAI API key
 
 ### Native Windows Dependencies
@@ -141,7 +141,7 @@ Current defaults:
 Required:
 
 ```env
-GEMINI_API_KEY=your_gemini_key
+GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
 ASSEMBLY_AI_API_KEY=your_assemblyai_key
 ```
 
@@ -157,6 +157,9 @@ NODE_OPTIONS=--max-old-space-size=4096
 
 Notes:
 
+- `GEMINI_API_KEY` accepts comma-separated keys in strict order.
+- On quota/auth failure, the app retries the same request with the next key.
+- After a full cycle where all keys fail, the app returns an "all keys unavailable" error.
 - `GEMINI_MODEL` is not read from `.env`
 - available AssemblyAI speech models are not controlled from `.env`
 - `HIDE_FROM_SCREEN_CAPTURE=false` allows the window to appear in screen share / screenshots
@@ -171,6 +174,7 @@ cache/app-state.json
 
 Stored values:
 
+- active Gemini API key index
 - selected Gemini model
 - selected AssemblyAI speech model
 

@@ -10,6 +10,7 @@
   console.log('Loaded .env from:', appEnvironment.envPath);
   console.log('Startup configuration:');
   console.log(`  GEMINI_API_KEY: ${appEnvironment.geminiApiKey ? 'present' : 'missing'}`);
+  console.log(`  GEMINI_API_KEYS configured: ${appEnvironment.geminiApiKeys.length}`);
   console.log(`  ASSEMBLY_AI_API_KEY: ${appEnvironment.assemblyAiApiKey ? 'present' : 'missing'}`);
   console.log(`  HIDE_FROM_SCREEN_CAPTURE: ${appEnvironment.hideFromScreenCapture}`);
   console.log(`  MAX_SCREENSHOTS: ${appEnvironment.maxScreenshots}`);

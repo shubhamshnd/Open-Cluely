@@ -55,7 +55,9 @@
         nodeOptions: appEnvironment.nodeOptions
       });
 
+      const keyState = geminiRuntime.setKeys(updatedEnvironment.geminiApiKeys, 0);
       const updatedAppState = saveAppState(app, {
+        geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: nextGeminiModel,
         assemblyAiSpeechModel: nextAssemblyModel,
         programmingLanguage: nextProgrammingLanguage,
@@ -69,9 +71,10 @@
       console.log('Settings saved to:', updatedEnvironment.envPath);
       console.log('Applied programming language:', nextProgrammingLanguage);
       console.log(`Applied window opacity level: ${nextWindowOpacityLevel}/10`);
+      console.log(`Applied Gemini API key index: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
 
       geminiRuntime.initializeGeminiService(
-        updatedEnvironment.geminiApiKey,
+        keyState.activeApiKey,
         nextGeminiModel,
         nextProgrammingLanguage
       );

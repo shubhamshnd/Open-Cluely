@@ -119,6 +119,22 @@ class GeminiService {
     );
   }
 
+  isAuthenticationError(error) {
+    const message = String(error?.message || '').toLowerCase();
+
+    return (
+      message.includes('api key not valid') ||
+      message.includes('invalid api key') ||
+      message.includes('api_key_invalid') ||
+      message.includes('401') ||
+      message.includes('403') ||
+      message.includes('permission denied') ||
+      message.includes('permission_denied') ||
+      message.includes('unauthorized') ||
+      message.includes('forbidden')
+    );
+  }
+
   isRetryableError(error) {
     const message = String(error?.message || '');
 

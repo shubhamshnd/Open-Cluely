@@ -3,12 +3,60 @@
   screenshotManager,
   windowController,
   geminiRuntime,
-  getAppEnvironment,
   assemblyAiService,
   sendToRenderer,
   quitApplication
 }) {
   let chatContext = [];
+
+  function getAllKeysUnavailableMessage() {
+    return 'All configured Gemini API keys are currently unavailable (quota exhausted or invalid). Please wait and try again later.';
+  }
+
+  function mapGeminiErrorMessage(error, fallbackPrefix = 'Request failed') {
+    const message = String(error?.message || '');
+    const normalizedMessage = message.toLowerCase();
+
+    if (geminiRuntime.isAllKeysUnavailableError?.(error)) {
+      return getAllKeysUnavailableMessage();
+    }
+
+    if (normalizedMessage.includes('no api key configured')) {
+      return 'No API key configured. Please add GEMINI_API_KEY to your .env file.';
+    }
+
+    if (
+      normalizedMessage.includes('api key not valid') ||
+      normalizedMessage.includes('invalid api key') ||
+      normalizedMessage.includes('api_key_invalid') ||
+      normalizedMessage.includes('permission denied') ||
+      normalizedMessage.includes('permission_denied') ||
+      normalizedMessage.includes('unauthorized') ||
+      normalizedMessage.includes('forbidden') ||
+      normalizedMessage.includes('401') ||
+      normalizedMessage.includes('403')
+    ) {
+      return 'Invalid API key. Please check your GEMINI_API_KEY values.';
+    }
+
+    if (
+      normalizedMessage.includes('quota') ||
+      normalizedMessage.includes('daily request limit') ||
+      normalizedMessage.includes('exceeded your current quota')
+    ) {
+      return 'API quota exceeded. Please try again later.';
+    }
+
+    if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
+      return 'Network error. Please check your internet connection.';
+    }
+
+    if (normalizedMessage.includes('model')) {
+      return 'AI model error. Please try a different model.';
+    }
+
+    return message ? `${fallbackPrefix}: ${message}` : fallbackPrefix;
+  }
 
   async function analyzeForMeetingWithContext(contextInput = '') {
     const payload = typeof contextInput === 'object' && contextInput !== null
@@ -17,26 +65,17 @@
 
     const contextString = typeof payload.contextString === 'string' ? payload.contextString : '';
     const enabledScreenshotIds = Array.isArray(payload.enabledScreenshotIds) ? payload.enabledScreenshotIds : null;
-    const appEnvironment = getAppEnvironment();
-    const geminiService = geminiRuntime.getService();
 
     console.log('Starting context-aware analysis...');
     console.log('Context length:', contextString.length);
-    console.log('API Key exists:', !!appEnvironment.geminiApiKey);
-    console.log('Model initialized:', !!(geminiService && geminiService.model));
+    console.log('API Keys configured:', geminiRuntime.getApiKeys().length);
+    console.log('Model initialized:', !!(geminiRuntime.getService() && geminiRuntime.getService().model));
     console.log('Programming language preference:', geminiRuntime.getActiveProgrammingLanguage());
     console.log('Screenshots count:', screenshotManager.getScreenshotsCount());
 
-    if (!appEnvironment.geminiApiKey) {
+    if (!geminiRuntime.hasApiKeys()) {
       sendToRenderer('analysis-result', {
         error: 'No API key configured. Please add GEMINI_API_KEY to your .env file.'
-      });
-      return;
-    }
-
-    if (!geminiService || !geminiService.model) {
-      sendToRenderer('analysis-result', {
-        error: 'AI model not initialized. Please check your API key.'
       });
       return;
     }
@@ -63,11 +102,17 @@
         return;
       }
 
-      const text = await geminiService.analyzeScreenshots(
-        imageParts,
-        '',
-        { contextStringOverride: contextString }
-      );
+      const text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('AI model not initialized. Please check your API key.');
+        }
+
+        return geminiService.analyzeScreenshots(
+          imageParts,
+          '',
+          { contextStringOverride: contextString }
+        );
+      });
 
       chatContext.push({
         type: 'analysis',
@@ -80,21 +125,8 @@
     } catch (error) {
       console.error('Analysis error details:', error);
 
-      let errorMessage = 'Analysis failed';
-      if (error.message.includes('API_KEY')) {
-        errorMessage = 'Invalid API key. Please check your GEMINI_API_KEY.';
-      } else if (error.message.includes('quota')) {
-        errorMessage = 'API quota exceeded. Please try again later.';
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (error.message.includes('model')) {
-        errorMessage = 'AI model error. Please try a different model.';
-      } else {
-        errorMessage = `Analysis failed: ${error.message}`;
-      }
-
       sendToRenderer('analysis-result', {
-        error: errorMessage
+        error: mapGeminiErrorMessage(error, 'Analysis failed')
       });
     }
   }
@@ -136,19 +168,13 @@
   });
 
   ipcMain.handle('ask-ai-with-session-context', async (_event, payload = {}) => {
-    const appEnvironment = getAppEnvironment();
-    const geminiService = geminiRuntime.getService();
     const mode = payload?.mode === 'best-next-answer' ? 'best-next-answer' : 'best-next-answer';
 
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai');
 
-      if (!appEnvironment.geminiApiKey) {
+      if (!geminiRuntime.hasApiKeys()) {
         throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
-      }
-
-      if (!geminiService || !geminiService.model) {
-        throw new Error('AI model not initialized. Please check your API key.');
       }
 
       const transcriptContext = typeof payload?.transcriptContext === 'string'
@@ -186,23 +212,35 @@
         if (imageParts.length > 0) {
           usedScreenshots = true;
           usedScreenshotCount = imageParts.length;
-          text = await geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
-            contextString,
-            transcriptContext,
-            sessionSummary,
-            screenshotCount: imageParts.length,
-            mode
+          text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+            if (!geminiService || !geminiService.model) {
+              throw new Error('AI model not initialized. Please check your API key.');
+            }
+
+            return geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
+              contextString,
+              transcriptContext,
+              sessionSummary,
+              screenshotCount: imageParts.length,
+              mode
+            });
           });
         }
       }
 
       if (!text) {
-        text = await geminiService.askAiWithSessionContext({
-          contextString,
-          transcriptContext,
-          sessionSummary,
-          screenshotCount: usedScreenshots ? usedScreenshotCount : 0,
-          mode
+        text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+          if (!geminiService || !geminiService.model) {
+            throw new Error('AI model not initialized. Please check your API key.');
+          }
+
+          return geminiService.askAiWithSessionContext({
+            contextString,
+            transcriptContext,
+            sessionSummary,
+            screenshotCount: usedScreenshots ? usedScreenshotCount : 0,
+            mode
+          });
         });
       }
 
@@ -218,7 +256,7 @@
       console.error('Error in ask-ai-with-session-context:', error);
       return {
         success: false,
-        error: error.message || 'Ask AI failed',
+        error: mapGeminiErrorMessage(error, 'Ask AI failed'),
         mode,
         usedScreenshots: false
       };
@@ -248,12 +286,10 @@
   });
 
   ipcMain.handle('suggest-response', async (_event, context) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-suggest');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
       const payload = typeof context === 'object' && context !== null
@@ -266,96 +302,120 @@
         ? payload.contextString
         : '';
 
-      const suggestions = await geminiService.suggestResponse(contextPrompt, {
-        contextString: contextStringOverride
+      const suggestions = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.suggestResponse(contextPrompt, {
+          contextString: contextStringOverride
+        });
       });
 
       return { success: true, suggestions };
     } catch (error) {
       console.error('Error generating suggestions:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate suggestions') };
     }
   });
 
   ipcMain.handle('generate-meeting-notes', async (_event, payload = {}) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-notes');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
         ? payload.contextString
         : '';
 
-      const notes = await geminiService.generateMeetingNotes({
-        contextString: contextStringOverride
+      const notes = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.generateMeetingNotes({
+          contextString: contextStringOverride
+        });
       });
 
       return { success: true, notes };
     } catch (error) {
       console.error('Error generating meeting notes:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate meeting notes') };
     }
   });
 
   ipcMain.handle('generate-follow-up-email', async () => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-followup');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
-      const email = await geminiService.generateFollowUpEmail();
+      const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.generateFollowUpEmail();
+      });
+
       return { success: true, email };
     } catch (error) {
       console.error('Error generating email:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate follow-up email') };
     }
   });
 
   ipcMain.handle('answer-question', async (_event, question) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-answer');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
-      const answer = await geminiService.answerQuestion(question);
+      const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.answerQuestion(question);
+      });
+
       return { success: true, answer };
     } catch (error) {
       console.error('Error answering question:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to answer question') };
     }
   });
 
   ipcMain.handle('get-conversation-insights', async (_event, payload = {}) => {
-    const geminiService = geminiRuntime.getService();
-
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-insights');
-      if (!geminiService) {
-        throw new Error('Gemini service not initialized');
+      if (!geminiRuntime.hasApiKeys()) {
+        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
         ? payload.contextString
         : '';
 
-      const insights = await geminiService.getConversationInsights({
-        contextString: contextStringOverride
+      const insights = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        if (!geminiService || !geminiService.model) {
+          throw new Error('Gemini service not initialized');
+        }
+
+        return geminiService.getConversationInsights({
+          contextString: contextStringOverride
+        });
       });
 
       return { success: true, insights };
     } catch (error) {
       console.error('Error getting insights:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: mapGeminiErrorMessage(error, 'Failed to get conversation insights') };
     }
   });
 

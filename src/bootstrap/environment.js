@@ -15,6 +15,26 @@ const REQUIRED_ENV_KEYS = Object.freeze([
   'ASSEMBLY_AI_API_KEY'
 ]);
 
+function normalizeGeminiApiKeys(value) {
+  const sourceValues = Array.isArray(value)
+    ? value
+    : String(value ?? '').split(',');
+  const seen = new Set();
+  const keys = [];
+
+  for (const rawValue of sourceValues) {
+    const key = String(rawValue || '').trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    keys.push(key);
+  }
+
+  return keys;
+}
+
 function getEnvPath(app) {
   return app.isPackaged
     ? path.join(process.resourcesPath, '.env')
@@ -45,8 +65,13 @@ function parsePositiveInteger(value, defaultValue) {
 }
 
 function normalizeApplicationEnvironment(source = {}) {
+  const geminiApiKeys = normalizeGeminiApiKeys(
+    source.GEMINI_API_KEY ?? source.geminiApiKey ?? source.geminiApiKeys
+  );
+
   return {
-    geminiApiKey: String(source.GEMINI_API_KEY || source.geminiApiKey || '').trim(),
+    geminiApiKey: geminiApiKeys.join(','),
+    geminiApiKeys,
     assemblyAiApiKey: String(source.ASSEMBLY_AI_API_KEY || source.assemblyAiApiKey || '').trim(),
     hideFromScreenCapture: parseBoolean(
       source.HIDE_FROM_SCREEN_CAPTURE ?? source.hideFromScreenCapture,
@@ -78,7 +103,7 @@ function syncProcessEnvironment(environment) {
 function validateRequiredEnvironment(environment, envPath) {
   const missingKeys = REQUIRED_ENV_KEYS.filter((key) => {
     if (key === 'GEMINI_API_KEY') {
-      return !environment.geminiApiKey;
+      return !Array.isArray(environment.geminiApiKeys) || environment.geminiApiKeys.length === 0;
     }
 
     if (key === 'ASSEMBLY_AI_API_KEY') {
@@ -114,6 +139,7 @@ function buildEnvironmentFileContent(environment) {
     '# Required API keys',
     '# Get Gemini key at: https://makersuite.google.com/app/apikey',
     '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
+    '# Multiple Gemini keys are supported as comma-separated values',
     `GEMINI_API_KEY=${environment.geminiApiKey}`,
     `ASSEMBLY_AI_API_KEY=${environment.assemblyAiApiKey}`,
     '',
@@ -150,6 +176,7 @@ module.exports = {
   buildEnvironmentFileContent,
   getEnvPath,
   loadApplicationEnvironment,
+  normalizeGeminiApiKeys,
   normalizeApplicationEnvironment,
   saveApplicationEnvironment
 };
