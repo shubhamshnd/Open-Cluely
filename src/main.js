@@ -29,6 +29,10 @@ const WINDOW_DEFAULT_WIDTH = 900;
 const WINDOW_DEFAULT_HEIGHT = 400;
 const WINDOW_MIN_WIDTH = 600;
 const WINDOW_MIN_HEIGHT = 250;
+const WINDOW_OPACITY_LEVEL_MIN = 1;
+const WINDOW_OPACITY_LEVEL_MAX = 10;
+const DEFAULT_WINDOW_OPACITY_LEVEL = 10;
+const STEALTH_OPACITY_LEVEL_DELTA = 4;
 const GEMINI_MODELS = getGeminiModels();
 const DEFAULT_GEMINI_MODEL = getDefaultGeminiModel();
 const ASSEMBLY_AI_SPEECH_MODELS = getAssemblyAiSpeechModels();
@@ -43,9 +47,12 @@ const ASSEMBLY_AI_SAMPLE_RATE = 16000;
 let geminiService = null;
 let activeGeminiModel = DEFAULT_GEMINI_MODEL;
 let activeAssemblyAiSpeechModel = DEFAULT_ASSEMBLY_AI_SPEECH_MODEL;
+let activeWindowOpacityLevel = DEFAULT_WINDOW_OPACITY_LEVEL;
 let appState = null;
 let appEnvironment = null;
 let isShuttingDown = false;
+let isVisible = true;
+let autoHideTimer = null;
 
 function initializeGeminiService(apiKey, modelName = activeGeminiModel) {
   activeGeminiModel = resolveGeminiModel(modelName);
@@ -70,20 +77,24 @@ function loadPersistedAppState() {
   appState = loadAppState(app);
   activeGeminiModel = resolveGeminiModel(appState.geminiModel);
   activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
+  activeWindowOpacityLevel = clampWindowOpacityLevel(appState.windowOpacityLevel);
 
   if (
     appState.geminiModel !== activeGeminiModel ||
-    appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel
+    appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
+    appState.windowOpacityLevel !== activeWindowOpacityLevel
   ) {
     appState = saveAppState(app, {
       geminiModel: activeGeminiModel,
-      assemblyAiSpeechModel: activeAssemblyAiSpeechModel
+      assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
+      windowOpacityLevel: activeWindowOpacityLevel
     });
   }
 
   console.log('Loaded app state from:', getAppStatePath(app));
   console.log('Restored Gemini model from app state:', activeGeminiModel);
   console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
+  console.log(`Restored window opacity level from app state: ${activeWindowOpacityLevel}/10`);
 }
 
 function logStartupConfiguration() {
@@ -151,6 +162,40 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function clampWindowOpacityLevel(level) {
+  const parsedLevel = Number.parseInt(String(level ?? ''), 10);
+
+  if (!Number.isFinite(parsedLevel)) {
+    return DEFAULT_WINDOW_OPACITY_LEVEL;
+  }
+
+  return clamp(parsedLevel, WINDOW_OPACITY_LEVEL_MIN, WINDOW_OPACITY_LEVEL_MAX);
+}
+
+function getWindowOpacityFromLevel(level) {
+  return clampWindowOpacityLevel(level) / 10;
+}
+
+function getVisibleWindowOpacity() {
+  return getWindowOpacityFromLevel(activeWindowOpacityLevel);
+}
+
+function getStealthWindowOpacity() {
+  return getWindowOpacityFromLevel(activeWindowOpacityLevel - STEALTH_OPACITY_LEVEL_DELTA);
+}
+
+function getCurrentWindowOpacity() {
+  return isVisible ? getVisibleWindowOpacity() : getStealthWindowOpacity();
+}
+
+function applyWindowOpacity() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.setOpacity(getCurrentWindowOpacity());
+}
+
 function getSafeWindowBounds(nextBounds = {}) {
   const currentBounds = mainWindow ? mainWindow.getBounds() : {
     x: 0,
@@ -186,6 +231,7 @@ function createStealthWindow() {
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
     hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+    initialOpacity: getVisibleWindowOpacity(),
     nodeEnv: appEnvironment.nodeEnv
   });
 }
@@ -230,24 +276,20 @@ function registerStealthShortcuts() {
   });
 }
 
-let isVisible = true;
-let autoHideTimer = null;
-
 function toggleStealthMode() {
   if (autoHideTimer) {
     clearTimeout(autoHideTimer);
     autoHideTimer = null;
   }
 
-  if (isVisible) {
-    mainWindow.setOpacity(0.6);
-    mainWindow.webContents.send('set-stealth-mode', true);
-    isVisible = false;
-  } else {
-    mainWindow.setOpacity(1.0);
-    mainWindow.webContents.send('set-stealth-mode', false);
-    isVisible = true;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
   }
+
+  const stealthModeEnabled = isVisible;
+  isVisible = !stealthModeEnabled;
+  applyWindowOpacity();
+  mainWindow.webContents.send('set-stealth-mode', stealthModeEnabled);
 }
 
 function emergencyHide() {
@@ -261,8 +303,9 @@ function emergencyHide() {
   
   autoHideTimer = setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setOpacity(1.0);
       isVisible = true;
+      applyWindowOpacity();
+      mainWindow.webContents.send('set-stealth-mode', false);
     }
     autoHideTimer = null;
   }, 2000);
@@ -961,7 +1004,8 @@ ipcMain.handle('get-settings', () => {
     assemblyAiSpeechModels: ASSEMBLY_AI_SPEECH_MODELS,
     defaultAssemblyAiSpeechModel: DEFAULT_ASSEMBLY_AI_SPEECH_MODEL,
     assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
-    hideFromScreenCapture: appEnvironment.hideFromScreenCapture
+    hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+    windowOpacityLevel: activeWindowOpacityLevel
   };
 });
 
@@ -974,6 +1018,7 @@ ipcMain.handle('save-settings', async (event, settings) => {
       settings.assemblyAiSpeechModel,
       activeAssemblyAiSpeechModel
     );
+    activeWindowOpacityLevel = clampWindowOpacityLevel(settings.windowOpacityLevel);
     appEnvironment = saveApplicationEnvironment(app, {
       geminiApiKey: settings.geminiApiKey || '',
       assemblyAiApiKey: settings.assemblyAiApiKey || '',
@@ -985,10 +1030,14 @@ ipcMain.handle('save-settings', async (event, settings) => {
     });
     appState = saveAppState(app, {
       geminiModel: activeGeminiModel,
-      assemblyAiSpeechModel: activeAssemblyAiSpeechModel
+      assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
+      windowOpacityLevel: activeWindowOpacityLevel
     });
     console.log('Saved app state to:', getAppStatePath(app));
     console.log('Settings saved to:', appEnvironment.envPath);
+    console.log(`Applied window opacity level: ${activeWindowOpacityLevel}/10`);
+
+    applyWindowOpacity();
 
     // Re-initialize Gemini service with new key/model
     initializeGeminiService(appEnvironment.geminiApiKey, activeGeminiModel);

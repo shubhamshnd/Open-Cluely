@@ -9,12 +9,14 @@ function createAssistantWindow({
   minWidth,
   minHeight,
   hideFromScreenCapture,
+  initialOpacity,
   nodeEnv
 }) {
   console.log('Creating assistant window...');
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const x = Math.floor((width - defaultWidth) / 2);
   const y = 40;
+  const windowOpacity = Number.isFinite(initialOpacity) ? initialOpacity : 1;
 
   console.log(`Window position: ${x}, ${y}, size: ${defaultWidth}x${defaultHeight}`);
 
@@ -49,7 +51,7 @@ function createAssistantWindow({
     closable: false,
     focusable: true,
     show: false,
-    opacity: 1.0,
+    opacity: windowOpacity,
     type: 'toolbar',
     acceptFirstMouse: false,
     disableAutoHideCursor: true,

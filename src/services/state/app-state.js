@@ -7,7 +7,8 @@ const APP_STATE_FILE_NAME = 'app-state.json';
 function getDefaultAppState() {
   return {
     geminiModel: null,
-    assemblyAiSpeechModel: null
+    assemblyAiSpeechModel: null,
+    windowOpacityLevel: 10
   };
 }
 
@@ -21,6 +22,11 @@ function sanitizeAppState(state) {
 
     if (typeof state.assemblyAiSpeechModel === 'string' && state.assemblyAiSpeechModel.trim()) {
       nextState.assemblyAiSpeechModel = state.assemblyAiSpeechModel.trim();
+    }
+
+    const windowOpacityLevel = Number.parseInt(String(state.windowOpacityLevel ?? ''), 10);
+    if (Number.isFinite(windowOpacityLevel)) {
+      nextState.windowOpacityLevel = Math.min(Math.max(windowOpacityLevel, 1), 10);
     }
   }
 

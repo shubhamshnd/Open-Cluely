@@ -1,5 +1,19 @@
 /* COMPACT GLASS OVERLAY - CLUELY STYLE WITH CHAT INTERFACE */
 
+:root {
+  --glass-shell-bg: rgba(255, 255, 255, 0.3);
+  --glass-shell-border: rgba(255, 255, 255, 0.32);
+  --glass-panel-bg: rgba(255, 255, 255, 0.24);
+  --glass-panel-border: rgba(255, 255, 255, 0.28);
+  --glass-header-bg: rgba(255, 255, 255, 0.32);
+  --glass-control-bg: rgba(255, 255, 255, 0.32);
+  --glass-control-border: rgba(255, 255, 255, 0.34);
+  --glass-input-bg: rgba(255, 255, 255, 0.46);
+  --glass-input-focus-bg: rgba(255, 255, 255, 0.56);
+  --glass-message-bg: rgba(255, 255, 255, 0.28);
+  --glass-settings-bg: rgba(255, 255, 255, 0.4);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -26,10 +40,10 @@ body {
 .glass-container {
   width: 100vw;
   height: 100vh;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--glass-shell-bg);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--glass-shell-border);
   border-radius: 12px;
   padding: 8px;
   position: relative;
@@ -203,9 +217,9 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--glass-header-bg);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--glass-control-border);
   backdrop-filter: blur(20px);
 }
 
@@ -286,8 +300,8 @@ body {
 }
 
 .action-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--glass-control-bg);
+  border: 1px solid var(--glass-control-border);
   color: rgba(0, 0, 0, 0.8);
   padding: 6px 8px;
   border-radius: 6px;
@@ -306,7 +320,7 @@ body {
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.42);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -399,9 +413,9 @@ body {
   max-height: 600px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--glass-panel-bg);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--glass-panel-border);
   border-radius: 8px;
   overflow: hidden;
   position: relative;
@@ -461,8 +475,8 @@ body.chat-resizing * {
   justify-content: space-between;
   align-items: center;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--glass-header-bg);
+  border-bottom: 1px solid var(--glass-panel-border);
   backdrop-filter: blur(20px);
 }
 
@@ -481,8 +495,8 @@ body.chat-resizing * {
 }
 
 .copy-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--glass-control-bg);
+  border: 1px solid var(--glass-control-border);
   color: rgba(0, 0, 0, 0.8);
   padding: 4px;
   border-radius: 4px;
@@ -518,7 +532,7 @@ body.chat-resizing * {
   border-radius: 8px;
   backdrop-filter: blur(15px);
   transition: all 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .chat-message.voice-message {
@@ -611,7 +625,7 @@ body.chat-resizing * {
   -webkit-user-select: text;
   user-select: text;
   word-wrap: break-word;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--glass-message-bg);
   padding: 6px 8px;
   border-radius: 6px;
   font-weight: 500;
@@ -631,7 +645,7 @@ body.chat-resizing * {
 .message-content.ai-response {
   color: rgba(0, 0, 0, 0.98);
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.38);
   font-size: 11px;
 }
 
@@ -648,9 +662,9 @@ body.chat-resizing * {
   right: 0;
   width: 400px;
   max-height: 300px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--glass-panel-bg);
   backdrop-filter: blur(40px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--glass-panel-border);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   display: flex;
@@ -667,7 +681,7 @@ body.chat-resizing * {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--glass-panel-border);
   backdrop-filter: blur(20px);
 }
 
@@ -690,8 +704,8 @@ body.chat-resizing * {
 }
 
 .close-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--glass-control-bg);
+  border: 1px solid var(--glass-control-border);
   color: rgba(0, 0, 0, 0.8);
   padding: 4px;
   border-radius: 4px;
@@ -1031,7 +1045,7 @@ body.chat-resizing * {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--glass-settings-bg);
   backdrop-filter: blur(40px) saturate(1.8);
   border-radius: 12px;
   z-index: 250;
@@ -1135,7 +1149,7 @@ body.chat-resizing * {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--glass-panel-border);
 }
 
 .settings-title {
@@ -1167,9 +1181,29 @@ body.chat-resizing * {
   letter-spacing: 0.5px;
 }
 
+.settings-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-value-chip {
+  min-width: 42px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  color: rgba(15, 23, 42, 0.8);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+}
+
 .settings-input {
-  background: rgba(255, 255, 255, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: var(--glass-input-bg);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 11px;
@@ -1182,7 +1216,7 @@ body.chat-resizing * {
 
 .settings-input:focus {
   border-color: rgba(59, 130, 246, 0.6);
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--glass-input-focus-bg);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
@@ -1198,6 +1232,42 @@ select.settings-input {
   background-repeat: no-repeat;
   background-position: right 6px center;
   padding-right: 22px;
+}
+
+.settings-range {
+  width: 100%;
+  margin: 2px 0 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.75), rgba(147, 197, 253, 0.55));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.settings-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+}
+
+.settings-range:focus {
+  outline: none;
+}
+
+.settings-range:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
 }
 
 .save-settings-btn {

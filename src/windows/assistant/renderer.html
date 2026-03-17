@@ -152,6 +152,21 @@
           <label class="settings-label">AssemblyAI Speech Model</label>
           <select id="setting-assembly-model" class="settings-input"></select>
         </div>
+        <div class="settings-group">
+          <div class="settings-label-row">
+            <label class="settings-label" for="setting-window-opacity">Window Opacity</label>
+            <span id="setting-window-opacity-value" class="settings-value-chip">10/10</span>
+          </div>
+          <input
+            type="range"
+            id="setting-window-opacity"
+            class="settings-range"
+            min="1"
+            max="10"
+            step="1"
+            value="10"
+          />
+        </div>
         <button id="save-settings-btn" class="save-settings-btn">Save Settings</button>
       </div>
     </div>

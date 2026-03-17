@@ -53,6 +53,8 @@ const settingGeminiKey = document.getElementById('setting-gemini-key');
 const settingGeminiModel = document.getElementById('setting-gemini-model');
 const settingAssemblyKey = document.getElementById('setting-assembly-key');
 const settingAssemblyModel = document.getElementById('setting-assembly-model');
+const settingWindowOpacity = document.getElementById('setting-window-opacity');
+const settingWindowOpacityValue = document.getElementById('setting-window-opacity-value');
 
 // Timer
 let startTime = Date.now();
@@ -99,6 +101,25 @@ async function init() {
 
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
+}
+
+function normalizeWindowOpacityLevel(value) {
+    const parsedValue = Number.parseInt(String(value ?? ''), 10);
+
+    if (!Number.isFinite(parsedValue)) {
+        return 10;
+    }
+
+    return clamp(parsedValue, 1, 10);
+}
+
+function updateWindowOpacityValueLabel(value) {
+    if (!settingWindowOpacityValue) {
+        return;
+    }
+
+    const opacityLevel = normalizeWindowOpacityLevel(value);
+    settingWindowOpacityValue.textContent = `${opacityLevel}/10`;
 }
 
 function setupWindowAdjustments() {
@@ -703,6 +724,10 @@ async function openSettings() {
                 settings.assemblyAiSpeechModels,
                 settings.assemblyAiSpeechModel || settings.defaultAssemblyAiSpeechModel
             );
+            if (settingWindowOpacity) {
+                settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
+            }
+            updateWindowOpacityValueLabel(settings.windowOpacityLevel);
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
@@ -777,7 +802,8 @@ async function saveSettings() {
             geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
             assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
             geminiModel: settingGeminiModel.value,
-            assemblyAiSpeechModel: settingAssemblyModel.value
+            assemblyAiSpeechModel: settingAssemblyModel.value,
+            windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
         };
 
         const result = await window.electronAPI.saveSettings(settings);
@@ -985,6 +1011,11 @@ function setupEventListeners() {
     if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
     if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
     if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+    if (settingWindowOpacity) {
+        settingWindowOpacity.addEventListener('input', (event) => {
+            updateWindowOpacityValueLabel(event.target.value);
+        });
+    }
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
