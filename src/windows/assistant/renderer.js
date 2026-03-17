@@ -1,19 +1,60 @@
-// Renderer with AssemblyAI Streaming Transcription - Real-time & Accurate!
+﻿// Renderer with AssemblyAI Streaming Transcription - Real-time & Accurate!
 // Uses AssemblyAI WebSocket API for live speech-to-text
 
 let screenshotsCount = 0;
 let isAnalyzing = false;
 let stealthModeActive = false;
 let stealthHideTimeout = null;
-let isRecording = false;
 let chatMessagesArray = [];
-let currentPartialText = '';
-let lastPartialMessageDiv = null;
 
-// Audio capture state
-let audioContext = null;
-let mediaStream = null;
-let scriptProcessor = null;
+// Mic audio capture state
+let micAudioContext = null;
+let micMediaStream = null;
+let micScriptProcessor = null;
+let isMicActive = false;
+
+// System audio capture state
+let systemAudioContext = null;
+let systemMediaStream = null;
+let systemScriptProcessor = null;
+let isSystemActive = false;
+
+// Source selection state (default: host/system on, mic off)
+const selectedSources = {
+    system: true,
+    mic: false
+};
+
+// Runtime source status state
+const sourceStatuses = {
+    system: 'off',
+    mic: 'off'
+};
+
+// Partial transcription tracking per source
+let micPartialText = '';
+let micPartialDiv = null;
+let systemPartialText = '';
+let systemPartialDiv = null;
+
+const monitorLastText = {
+    system: 'No transcript yet',
+    mic: 'No transcript yet'
+};
+
+const MAX_MONITOR_LOG_ENTRIES = 80;
+const monitorLogEntries = [];
+const TARGET_SAMPLE_RATE = 16000;
+const TARGET_FRAME_MS = 100;
+const MIN_FRAME_MS = 50;
+const TARGET_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * TARGET_FRAME_MS) / 1000);
+const MIN_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * MIN_FRAME_MS) / 1000);
+const WORKLET_MODULE_PATH = 'pcm-capture-worklet.js';
+const workletLoadedContexts = new WeakSet();
+const sourceSampleQueues = {
+    mic: { chunks: [], length: 0 },
+    system: { chunks: [], length: 0 }
+};
 
 // DOM elements
 const statusText = document.getElementById('status-text');
@@ -25,7 +66,15 @@ const emergencyOverlay = document.getElementById('emergency-overlay');
 const chatContainer = document.getElementById('chat-container');
 const chatMessagesElement = document.getElementById('chat-messages');
 const chatResizeHandle = document.getElementById('chat-resize-handle');
-const voiceToggle = document.getElementById('voice-toggle');
+const transcriptionToggle = document.getElementById('transcription-toggle');
+const sourceSystemToggle = document.getElementById('source-system-toggle');
+const sourceMicToggle = document.getElementById('source-mic-toggle');
+const monitorMasterState = document.getElementById('monitor-master-state');
+const monitorStatusSystem = document.getElementById('monitor-status-system');
+const monitorStatusMic = document.getElementById('monitor-status-mic');
+const monitorLiveSystem = document.getElementById('monitor-live-system');
+const monitorLiveMic = document.getElementById('monitor-live-mic');
+const monitorLogList = document.getElementById('monitor-log-list');
 const windowResizeHandles = document.querySelectorAll('[data-resize-handle]');
 
 const screenshotBtn = document.getElementById('screenshot-btn');
@@ -85,6 +134,8 @@ async function init() {
     setupIpcListeners();
     setupWindowAdjustments();
     updateUI();
+    updateTranscriptionUI();
+    renderMonitorState();
     startTimer();
     stealthModeActive = false;
 
@@ -97,7 +148,9 @@ async function init() {
     }
 
     console.log('Renderer initialized - Ready for live transcription!');
-    showFeedback('Ready - click microphone to start real-time transcription', 'success');
+    showFeedback('Ready - click transcription to start', 'success');
+    addMonitorLog('info', 'init', 'Renderer initialized');
+    addMonitorLog('info', 'source-defaults', 'Default sources: Host on, Mic off');
 }
 
 function clamp(value, min, max) {
@@ -309,7 +362,11 @@ function onChatResizeMove(event) {
 
     const deltaY = event.clientY - activeChatResize.startClientY;
     const mainInterface = document.querySelector('.main-interface');
-    const reservedHeight = (mainInterface?.getBoundingClientRect().height || 0) + 56;
+    const monitorSection = document.getElementById('transcription-monitor');
+    const reservedHeight =
+        (mainInterface?.getBoundingClientRect().height || 0) +
+        (monitorSection?.getBoundingClientRect().height || 0) +
+        56;
     const maxChatHeight = Math.max(MIN_CHAT_HEIGHT, window.innerHeight - reservedHeight);
     const nextHeight = clamp(activeChatResize.startHeight + deltaY, MIN_CHAT_HEIGHT, maxChatHeight);
 
@@ -333,205 +390,614 @@ function stopChatResize(event) {
     document.removeEventListener('pointercancel', stopChatResize);
 }
 
-// Start AssemblyAI voice recognition with browser audio capture
-async function startVoiceRecording() {
-    if (isRecording) {
-        console.log('Already recording');
+// â”€â”€â”€ Shared PCM16 helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const audioChunkCounters = { mic: 0, system: 0 };
+
+function convertToPCM16(float32Data) {
+    const int16Data = new Int16Array(float32Data.length);
+    for (let i = 0; i < float32Data.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Data[i]));
+        int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return int16Data;
+}
+
+function sourceLabel(source) {
+    return source === 'system' ? 'Host' : 'Mic';
+}
+
+function normalizeSource(source) {
+    return source === 'system' ? 'system' : 'mic';
+}
+
+function isSourceActive(source) {
+    return source === 'system' ? isSystemActive : isMicActive;
+}
+
+function isAnyTranscriptionActive() {
+    return isSystemActive || isMicActive;
+}
+
+function isAnySourceConnecting() {
+    return sourceStatuses.system === 'connecting' || sourceStatuses.mic === 'connecting';
+}
+
+function setSourceStatus(source, status, liveText) {
+    const resolvedSource = normalizeSource(source);
+    const allowedStatuses = new Set(['off', 'connecting', 'listening', 'error']);
+    sourceStatuses[resolvedSource] = allowedStatuses.has(status) ? status : 'off';
+
+    if (typeof liveText === 'string' && liveText.trim().length > 0) {
+        monitorLastText[resolvedSource] = liveText.trim();
+    }
+
+    renderMonitorState();
+}
+
+function updateTranscriptionUI() {
+    const anyActive = isAnyTranscriptionActive();
+    const anyConnecting = !anyActive && isAnySourceConnecting();
+
+    if (transcriptionToggle) {
+        transcriptionToggle.classList.toggle('active', anyActive);
+        transcriptionToggle.classList.toggle('listening', anyActive);
+        transcriptionToggle.classList.toggle('connecting', anyConnecting);
+    }
+
+    if (sourceSystemToggle) {
+        sourceSystemToggle.classList.toggle('selected', selectedSources.system);
+        sourceSystemToggle.classList.toggle('running', isSystemActive);
+    }
+
+    if (sourceMicToggle) {
+        sourceMicToggle.classList.toggle('selected', selectedSources.mic);
+        sourceMicToggle.classList.toggle('running', isMicActive);
+    }
+}
+
+function renderMonitorState() {
+    updateTranscriptionUI();
+
+    const statusMap = {
+        off: 'Off',
+        connecting: 'Connecting',
+        listening: 'Listening',
+        error: 'Error'
+    };
+
+    if (monitorStatusSystem) {
+        monitorStatusSystem.className = `monitor-status-badge ${sourceStatuses.system}`;
+        monitorStatusSystem.textContent = statusMap[sourceStatuses.system] || 'Off';
+    }
+
+    if (monitorStatusMic) {
+        monitorStatusMic.className = `monitor-status-badge ${sourceStatuses.mic}`;
+        monitorStatusMic.textContent = statusMap[sourceStatuses.mic] || 'Off';
+    }
+
+    if (monitorLiveSystem) {
+        monitorLiveSystem.textContent = monitorLastText.system || 'No transcript yet';
+    }
+
+    if (monitorLiveMic) {
+        monitorLiveMic.textContent = monitorLastText.mic || 'No transcript yet';
+    }
+
+    if (monitorMasterState) {
+        monitorMasterState.classList.remove('active', 'connecting');
+        if (isAnyTranscriptionActive()) {
+            monitorMasterState.textContent = 'Running';
+            monitorMasterState.classList.add('active');
+        } else if (isAnySourceConnecting()) {
+            monitorMasterState.textContent = 'Connecting';
+            monitorMasterState.classList.add('connecting');
+        } else {
+            monitorMasterState.textContent = 'Idle';
+        }
+    }
+}
+
+function formatMonitorTime(timestamp = Date.now()) {
+    return new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function safeJson(value) {
+    try {
+        return JSON.stringify(value);
+    } catch (_) {
+        return '';
+    }
+}
+
+function addMonitorLog(level, event, message, source = null, meta = null, timestamp = Date.now()) {
+    const entry = {
+        level: level || 'info',
+        event: event || 'event',
+        message: message || '',
+        source: source ? normalizeSource(source) : null,
+        meta,
+        timestamp
+    };
+
+    monitorLogEntries.push(entry);
+    if (monitorLogEntries.length > MAX_MONITOR_LOG_ENTRIES) {
+        monitorLogEntries.shift();
+    }
+
+    if (!monitorLogList) {
         return;
     }
 
-    try {
-        console.log('Starting AssemblyAI live transcription...');
+    monitorLogList.innerHTML = '';
+    const entriesToRender = [...monitorLogEntries].reverse();
+    for (const item of entriesToRender) {
+        const row = document.createElement('div');
+        row.className = `monitor-log-entry ${item.level === 'error' ? 'error' : ''}`.trim();
 
-        // Step 1: Tell main process to open AssemblyAI WebSocket
-        const result = await window.electronAPI.startVoiceRecognition();
+        const sourcePrefix = item.source ? `${sourceLabel(item.source)} ` : '';
+        const metaText = item.meta ? ` ${safeJson(item.meta)}` : '';
+        row.textContent = `${formatMonitorTime(item.timestamp)} ${sourcePrefix}${item.event}: ${item.message}${metaText}`;
+        monitorLogList.appendChild(row);
+    }
+}
 
-        if (result && result.error) {
-            throw new Error(result.error);
-        }
+function setSourceSelected(source, enabled) {
+    const resolvedSource = normalizeSource(source);
+    selectedSources[resolvedSource] = !!enabled;
+    addMonitorLog('info', 'source-toggle', `${sourceLabel(resolvedSource)} ${enabled ? 'enabled' : 'disabled'}`, resolvedSource);
+    updateTranscriptionUI();
 
-        // Step 2: Capture microphone audio in the browser
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                channelCount: 1,
-                sampleRate: 16000,
-                echoCancellation: true,
-                noiseSuppression: true
-            }
+    if (isAnyTranscriptionActive() || sourceStatuses[resolvedSource] === 'connecting') {
+        ensureSourceRunning(resolvedSource, !!enabled).catch((error) => {
+            console.error(`Failed to apply live source toggle for ${resolvedSource}:`, error);
+            addMonitorLog('error', 'source-toggle-failed', error.message, resolvedSource);
         });
+    }
+}
 
-        audioContext = new AudioContext({ sampleRate: 16000 });
-        const source = audioContext.createMediaStreamSource(mediaStream);
+async function ensureSourceRunning(source, shouldRun) {
+    const resolvedSource = normalizeSource(source);
+    if (shouldRun) {
+        if (resolvedSource === 'system') {
+            await startSystemAudioRecording();
+        } else {
+            await startMicRecording();
+        }
+    } else if (resolvedSource === 'system') {
+        await stopSystemAudioRecording();
+    } else {
+        await stopMicRecording();
+    }
+}
 
-        // Use ScriptProcessorNode to get raw PCM data
-        // Buffer size 4096 at 16kHz = ~256ms chunks (within AssemblyAI's 50-1000ms range)
-        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+async function startSelectedSources() {
+    if (!selectedSources.system && !selectedSources.mic) {
+        const message = 'Select at least one source (Host or Mic) before starting transcription.';
+        showFeedback(message, 'error');
+        addMonitorLog('error', 'start-blocked', message);
+        return;
+    }
 
-        scriptProcessor.onaudioprocess = (e) => {
-            if (!isRecording) return;
-            const float32Data = e.inputBuffer.getChannelData(0);
+    addMonitorLog('info', 'master-start', 'Starting selected transcription sources');
 
-            // Convert float32 [-1, 1] to int16 [-32768, 32767] (PCM16 little-endian)
-            const int16Data = new Int16Array(float32Data.length);
-            for (let i = 0; i < float32Data.length; i++) {
-                const s = Math.max(-1, Math.min(1, float32Data[i]));
-                int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    if (selectedSources.system) {
+        await ensureSourceRunning('system', true);
+    }
+
+    if (selectedSources.mic) {
+        await ensureSourceRunning('mic', true);
+    }
+}
+
+async function stopAllSources() {
+    addMonitorLog('info', 'master-stop', 'Stopping all active transcription sources');
+    if (isSystemActive || sourceStatuses.system === 'connecting') {
+        await stopSystemAudioRecording();
+    }
+    if (isMicActive || sourceStatuses.mic === 'connecting') {
+        await stopMicRecording();
+    }
+}
+
+async function toggleMasterTranscription() {
+    if (isAnyTranscriptionActive() || isAnySourceConnecting()) {
+        await stopAllSources();
+    } else {
+        await startSelectedSources();
+    }
+    updateTranscriptionUI();
+}
+
+function downsampleFloat32Buffer(input, inputSampleRate, outputSampleRate = TARGET_SAMPLE_RATE) {
+    if (inputSampleRate <= 0 || outputSampleRate <= 0 || input.length === 0) {
+        return input;
+    }
+    if (inputSampleRate === outputSampleRate) {
+        return input;
+    }
+
+    const sampleRateRatio = inputSampleRate / outputSampleRate;
+    const newLength = Math.max(1, Math.round(input.length / sampleRateRatio));
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetInput = 0;
+
+    while (offsetResult < result.length) {
+        const nextOffsetInput = Math.min(input.length, Math.round((offsetResult + 1) * sampleRateRatio));
+        let accum = 0;
+        let count = 0;
+
+        for (let i = offsetInput; i < nextOffsetInput; i++) {
+            accum += input[i];
+            count++;
+        }
+
+        result[offsetResult] = count > 0 ? accum / count : 0;
+        offsetResult++;
+        offsetInput = nextOffsetInput;
+    }
+
+    return result;
+}
+
+async function ensureWorkletModule(context) {
+    if (workletLoadedContexts.has(context)) {
+        return;
+    }
+
+    await context.audioWorklet.addModule(WORKLET_MODULE_PATH);
+    workletLoadedContexts.add(context);
+}
+
+function isLikelyCameraTrack(trackLabel) {
+    const label = String(trackLabel || '').toLowerCase();
+    return label.includes('camera') || label.includes('webcam');
+}
+
+async function getSystemAudioStream(sourceId) {
+    const mandatoryConstraints = {
+        audio: {
+            mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
             }
+        },
+        video: {
+            mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+            }
+        }
+    };
 
-            // Send raw PCM16 bytes to main process → AssemblyAI WebSocket
-            window.electronAPI.sendAudioChunk(int16Data.buffer);
-        };
-
-        source.connect(scriptProcessor);
-        scriptProcessor.connect(audioContext.destination);
-
-        isRecording = true;
-        updateVoiceUI();
-
-        addChatMessage('system', 'Live transcription started - speak now!');
-        showFeedback('Listening with AssemblyAI...', 'success');
-
-    } catch (error) {
-        console.error('Failed to start transcription:', error);
-        showFeedback(`Failed to start: ${error.message}`, 'error');
-        stopAudioCapture();
-        isRecording = false;
-        updateVoiceUI();
-    }
-}
-
-// Clean up audio capture resources
-function stopAudioCapture() {
-    if (scriptProcessor) {
-        scriptProcessor.disconnect();
-        scriptProcessor = null;
-    }
-    if (audioContext) {
-        audioContext.close().catch(() => {});
-        audioContext = null;
-    }
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
-}
-
-// Stop AssemblyAI voice recognition
-async function stopVoiceRecording() {
-    if (!isRecording) return;
+    const flatConstraints = {
+        audio: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId },
+        video: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId }
+    };
 
     try {
-        console.log('Stopping AssemblyAI transcription...');
+        return await navigator.mediaDevices.getUserMedia(mandatoryConstraints);
+    } catch (mandatoryError) {
+        addMonitorLog('info', 'desktop-constraints-fallback', 'Mandatory desktop constraints failed; trying flat syntax', 'system');
+        return navigator.mediaDevices.getUserMedia(flatConstraints);
+    }
+}
 
-        // Stop audio capture first
-        stopAudioCapture();
+function resetSourceSampleQueue(source) {
+    const resolvedSource = normalizeSource(source);
+    sourceSampleQueues[resolvedSource] = { chunks: [], length: 0 };
+}
 
-        // Tell main process to close WebSocket
-        await window.electronAPI.stopVoiceRecognition();
+function appendSourceSamples(source, samples) {
+    if (!samples || samples.length === 0) return;
+    const resolvedSource = normalizeSource(source);
+    sourceSampleQueues[resolvedSource].chunks.push(samples);
+    sourceSampleQueues[resolvedSource].length += samples.length;
+}
 
-        isRecording = false;
-        updateVoiceUI();
+function pullSourceSamples(source, count) {
+    const resolvedSource = normalizeSource(source);
+    const queue = sourceSampleQueues[resolvedSource];
+    const output = new Float32Array(count);
+    let written = 0;
 
-        // Clear any partial text display
-        if (lastPartialMessageDiv) {
-            lastPartialMessageDiv.remove();
-            lastPartialMessageDiv = null;
+    while (written < count && queue.chunks.length > 0) {
+        const first = queue.chunks[0];
+        const take = Math.min(first.length, count - written);
+        output.set(first.subarray(0, take), written);
+        written += take;
+
+        if (take === first.length) {
+            queue.chunks.shift();
+        } else {
+            queue.chunks[0] = first.subarray(take);
         }
-        currentPartialText = '';
+        queue.length -= take;
+    }
 
-        addChatMessage('system', 'Stopped - Click mic to resume');
-        showFeedback('Stopped', 'info');
+    if (written === count) {
+        return output;
+    }
 
+    return output.subarray(0, written);
+}
+
+function sendPcmFrame(source, floatSamples) {
+    if (!floatSamples || floatSamples.length < MIN_FRAME_SAMPLES) {
+        return;
+    }
+
+    const pcm = convertToPCM16(floatSamples);
+    window.electronAPI.sendAudioChunk(source, pcm.buffer);
+    audioChunkCounters[source] += 1;
+
+    if (audioChunkCounters[source] % 50 === 0) {
+        addMonitorLog('info', 'chunk-heartbeat', `Chunks sent: ${audioChunkCounters[source]}`, source, {
+            chunks: audioChunkCounters[source],
+            frameSamples: floatSamples.length
+        });
+    }
+}
+
+function drainSourceSampleQueue(source, { flushPartial = false } = {}) {
+    const resolvedSource = normalizeSource(source);
+    const queue = sourceSampleQueues[resolvedSource];
+
+    while (queue.length >= TARGET_FRAME_SAMPLES) {
+        const frame = pullSourceSamples(resolvedSource, TARGET_FRAME_SAMPLES);
+        sendPcmFrame(resolvedSource, frame);
+    }
+
+    if (flushPartial && queue.length >= MIN_FRAME_SAMPLES) {
+        const tailFrame = pullSourceSamples(resolvedSource, queue.length);
+        sendPcmFrame(resolvedSource, tailFrame);
+    }
+}
+
+async function buildAudioProcessor(context, stream, source, activeCheck) {
+    await ensureWorkletModule(context);
+
+    const src = context.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(context, 'pcm-capture-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1]
+    });
+
+    // Keep graph alive while muting all playback to avoid feedback.
+    const silentGain = context.createGain();
+    silentGain.gain.value = 0;
+
+    node.port.onmessage = (event) => {
+        if (!activeCheck()) return;
+        try {
+            const chunk = event.data instanceof Float32Array ? event.data : new Float32Array(event.data || []);
+            const normalizedChunk = downsampleFloat32Buffer(chunk, context.sampleRate, TARGET_SAMPLE_RATE);
+            appendSourceSamples(source, normalizedChunk);
+            drainSourceSampleQueue(source);
+        } catch (error) {
+            addMonitorLog('error', 'audio-process-failed', error.message || 'Audio processing failed', source);
+        }
+    };
+
+    src.connect(node);
+    node.connect(silentGain);
+    silentGain.connect(context.destination);
+
+    return {
+        disconnect: () => {
+            try { node.port.onmessage = null; } catch (_) {}
+            try { src.disconnect(); } catch (_) {}
+            try { node.disconnect(); } catch (_) {}
+            try { silentGain.disconnect(); } catch (_) {}
+        }
+    };
+}
+
+function stopAudioResources(ctx, stream, processor) {
+    try { processor?.disconnect(); } catch (_) {}
+    try { ctx?.close(); } catch (_) {}
+    stream?.getTracks().forEach(t => t.stop());
+}
+
+async function startMicRecording() {
+    if (isMicActive || sourceStatuses.mic === 'connecting') return;
+    setSourceStatus('mic', 'connecting', 'Connecting to mic...');
+    addMonitorLog('info', 'start-request', 'Starting mic source', 'mic');
+
+    try {
+        const result = await window.electronAPI.startVoiceRecognition('mic');
+        if (result && result.error) throw new Error(result.error);
+
+        micMediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+        });
+        micAudioContext = new AudioContext();
+        await micAudioContext.resume();
+        resetSourceSampleQueue('mic');
+        micScriptProcessor = await buildAudioProcessor(micAudioContext, micMediaStream, 'mic', () => isMicActive);
+
+        isMicActive = true;
+        addChatMessage('system', 'Mic listening...');
+        showFeedback('Mic on', 'success');
+        addMonitorLog('info', 'source-active', 'Mic source active', 'mic');
     } catch (error) {
-        console.error('Failed to stop transcription:', error);
-        showFeedback('Stop failed', 'error');
+        console.error('Failed to start mic:', error);
+        showFeedback(`Mic failed: ${error.message}`, 'error');
+        addMonitorLog('error', 'source-failed', error.message, 'mic');
+        stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+        micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
+        isMicActive = false;
+        resetSourceSampleQueue('mic');
+        setSourceStatus('mic', 'error', `Mic error: ${error.message}`);
+        try {
+            await window.electronAPI.stopVoiceRecognition('mic');
+        } catch (_) {}
     }
+
+    updateTranscriptionUI();
 }
 
-// Toggle voice recognition
-async function toggleVoiceRecognition() {
-    if (isRecording) {
-        await stopVoiceRecording();
-        voiceToggle.classList.remove('active');
-    } else {
-        await startVoiceRecording();
-        if (isRecording) {
-            voiceToggle.classList.add('active');
+async function stopMicRecording() {
+    if (!isMicActive && sourceStatuses.mic !== 'connecting') return;
+    drainSourceSampleQueue('mic', { flushPartial: true });
+    stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+    micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
+    if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
+    micPartialText = '';
+    try {
+        await window.electronAPI.stopVoiceRecognition('mic');
+    } catch (error) {
+        addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop mic source', 'mic');
+    }
+    isMicActive = false;
+    resetSourceSampleQueue('mic');
+    audioChunkCounters.mic = 0;
+    setSourceStatus('mic', 'off', 'Mic stopped');
+    addMonitorLog('info', 'source-stopped', 'Mic source stopped', 'mic');
+    showFeedback('Mic off', 'info');
+}
+
+async function startSystemAudioRecording() {
+    if (isSystemActive || sourceStatuses.system === 'connecting') return;
+    setSourceStatus('system', 'connecting', 'Connecting to host audio...');
+    addMonitorLog('info', 'start-request', 'Starting host audio source', 'system');
+
+    try {
+        const sources = await window.electronAPI.getDesktopSources();
+        if (!sources || sources.length === 0) throw new Error('No desktop sources found');
+        const sourceId = sources[0].id;
+        addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
+
+        const result = await window.electronAPI.startVoiceRecognition('system');
+        if (result && result.error) throw new Error(result.error);
+
+        systemMediaStream = await getSystemAudioStream(sourceId);
+
+        const videoTrack = systemMediaStream.getVideoTracks()[0];
+        if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
+            throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
         }
+
+        systemMediaStream.getVideoTracks().forEach(t => t.stop());
+
+        systemAudioContext = new AudioContext();
+        await systemAudioContext.resume();
+        resetSourceSampleQueue('system');
+        systemScriptProcessor = await buildAudioProcessor(systemAudioContext, systemMediaStream, 'system', () => isSystemActive);
+
+        isSystemActive = true;
+        addChatMessage('system', 'Listening to host audio...');
+        showFeedback('System audio on', 'success');
+        addMonitorLog('info', 'source-active', 'Host source active', 'system');
+    } catch (error) {
+        console.error('Failed to start system audio:', error);
+        showFeedback(`System audio failed: ${error.message}`, 'error');
+        addMonitorLog('error', 'source-failed', error.message, 'system');
+        stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+        systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
+        isSystemActive = false;
+        resetSourceSampleQueue('system');
+        setSourceStatus('system', 'error', `Host error: ${error.message}`);
+        try {
+            await window.electronAPI.stopVoiceRecognition('system');
+        } catch (_) {}
     }
+
+    updateTranscriptionUI();
 }
 
-// Update voice UI
-function updateVoiceUI() {
-    if (!voiceToggle) return;
-
-    if (isRecording) {
-        voiceToggle.classList.add('active', 'listening');
-    } else {
-        voiceToggle.classList.remove('active', 'listening');
+async function stopSystemAudioRecording() {
+    if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
+    drainSourceSampleQueue('system', { flushPartial: true });
+    stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+    systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
+    if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
+    systemPartialText = '';
+    try {
+        await window.electronAPI.stopVoiceRecognition('system');
+    } catch (error) {
+        addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
     }
+    isSystemActive = false;
+    resetSourceSampleQueue('system');
+    audioChunkCounters.system = 0;
+    setSourceStatus('system', 'off', 'Host source stopped');
+    addMonitorLog('info', 'source-stopped', 'Host source stopped', 'system');
+    showFeedback('System audio off', 'info');
 }
 
-// Handle Vosk partial results (real-time display)
 function handleVoskPartial(data) {
-    // Only process if we're actively recording
-    if (!isRecording) return;
-    if (!data.text || data.text.trim().length === 0) return;
+    const source = normalizeSource(data?.source);
+    const text = data?.text;
+    if (!text || text.trim().length === 0) return;
+    if (!isSourceActive(source)) return;
 
-    currentPartialText = data.text.trim();
-    console.log('Partial:', currentPartialText);
+    const trimmed = text.trim();
+    const icon = source === 'system' ? '🔊' : '🎤';
+    monitorLastText[source] = `Live: ${trimmed}`;
+    renderMonitorState();
 
-    // Update or create partial message div
-    if (!lastPartialMessageDiv) {
-        lastPartialMessageDiv = document.createElement('div');
-        lastPartialMessageDiv.className = 'chat-message voice-message partial';
-
-        const timestamp = new Date().toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-
-        lastPartialMessageDiv.innerHTML = `
-            <div class="message-header">
-                <span class="message-icon">🎤</span>
-                <span class="message-time">${timestamp}</span>
-                <span class="partial-indicator">⏱️ Live</span>
-            </div>
-            <div class="message-content partial-text">${currentPartialText}</div>
-        `;
-
-        chatMessagesElement.appendChild(lastPartialMessageDiv);
-    } else {
-        // Update existing partial message
-        const contentDiv = lastPartialMessageDiv.querySelector('.message-content');
-        if (contentDiv) {
-            contentDiv.textContent = currentPartialText;
+    if (source === 'mic') {
+        micPartialText = trimmed;
+        if (!micPartialDiv) {
+            micPartialDiv = createPartialDiv(icon);
+            chatMessagesElement.appendChild(micPartialDiv);
         }
+        micPartialDiv.querySelector('.message-content').textContent = trimmed;
+    } else {
+        systemPartialText = trimmed;
+        if (!systemPartialDiv) {
+            systemPartialDiv = createPartialDiv(icon);
+            chatMessagesElement.appendChild(systemPartialDiv);
+        }
+        systemPartialDiv.querySelector('.message-content').textContent = trimmed;
     }
-
-    // Auto-scroll to bottom
     chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
 }
 
-// Handle Vosk final results
+function createPartialDiv(icon) {
+    const div = document.createElement('div');
+    div.className = 'chat-message voice-message partial';
+    const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    div.innerHTML = `
+        <div class="message-header">
+            <span class="message-icon">${icon}</span>
+            <span class="message-time">${ts}</span>
+            <span class="partial-indicator">Live</span>
+        </div>
+        <div class="message-content partial-text"></div>
+    `;
+    return div;
+}
+
 function handleVoskFinal(data) {
-    // Only process if we're actively recording
-    if (!isRecording) return;
-    if (!data.text || data.text.trim().length === 0) return;
+    const source = normalizeSource(data?.source);
+    const text = data?.text;
+    if (!text || text.trim().length === 0) return;
+    if (!isSourceActive(source)) return;
 
-    const finalText = data.text.trim();
-    console.log('Final:', finalText);
+    const finalText = text.trim();
+    monitorLastText[source] = `Final: ${finalText}`;
+    renderMonitorState();
+    addMonitorLog('info', 'final', 'Final transcript received', source, {
+        chars: finalText.length
+    });
 
-    // Remove partial message if exists
-    if (lastPartialMessageDiv) {
-        lastPartialMessageDiv.remove();
-        lastPartialMessageDiv = null;
+    if (source === 'mic') {
+        if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
+        micPartialText = '';
+        addChatMessage('voice-mic', finalText);
+    } else {
+        if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
+        systemPartialText = '';
+        addChatMessage('voice-system', finalText);
     }
-    currentPartialText = '';
-
-    // Add as final message
-    addChatMessage('voice', finalText);
-    showFeedback('Voice captured', 'success');
+    showFeedback('Captured', 'success');
 }
 
 // Screenshot functions
@@ -642,7 +1108,7 @@ async function getResponseSuggestions() {
         const result = await window.electronAPI.suggestResponse(context);
 
         if (result.success && result.suggestions) {
-            addChatMessage('ai-response', `💡 **What should I say?**\n\n${result.suggestions}`);
+            addChatMessage('ai-response', `ðŸ’¡ **What should I say?**\n\n${result.suggestions}`);
             showFeedback('Suggestions generated', 'success');
         } else {
             throw new Error(result.error || 'Failed to generate suggestions');
@@ -669,7 +1135,7 @@ async function generateMeetingNotes() {
         setAnalyzing(false);
 
         if (result.success && result.notes) {
-            addChatMessage('ai-response', `📝 **Meeting Notes**\n\n${result.notes}`);
+            addChatMessage('ai-response', `ðŸ“ **Meeting Notes**\n\n${result.notes}`);
             showFeedback('Meeting notes generated', 'success');
         } else {
             throw new Error(result.error || 'Failed to generate notes');
@@ -697,7 +1163,7 @@ async function getConversationInsights() {
         setAnalyzing(false);
 
         if (result.success && result.insights) {
-            addChatMessage('ai-response', `📊 **Conversation Insights**\n\n${result.insights}`);
+            addChatMessage('ai-response', `ðŸ“Š **Conversation Insights**\n\n${result.insights}`);
             showFeedback('Insights generated', 'success');
         } else {
             throw new Error(result.error || 'Failed to get insights');
@@ -972,19 +1438,24 @@ function addChatMessage(type, content) {
 
     switch (type) {
         case 'voice':
-            messageContent = `<div class="message-header"><span class="message-icon">🎤</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+        case 'voice-mic':
+            messageContent = `<div class="message-header"><span class="message-icon">ðŸŽ¤</span><span class="message-label">You</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            break;
+
+        case 'voice-system':
+            messageContent = `<div class="message-header"><span class="message-icon">ðŸ”Š</span><span class="message-label">Host</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
             break;
 
         case 'screenshot':
-            messageContent = `<div class="message-header"><span class="message-icon">📸</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">ðŸ“¸</span><span class="message-time">${timestamp}</span></div><div class="message-content">${content}</div>`;
             break;
 
         case 'ai-response':
-            messageContent = `<div class="message-header"><span class="message-icon">🤖</span><span class="message-time">${timestamp}</span></div><div class="message-content ai-response">${formatResponse(content)}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">ðŸ¤–</span><span class="message-time">${timestamp}</span></div><div class="message-content ai-response">${formatResponse(content)}</div>`;
             break;
 
         case 'system':
-            messageContent = `<div class="message-header"><span class="message-icon">ℹ️</span><span class="message-time">${timestamp}</span></div><div class="message-content system-message">${content}</div>`;
+            messageContent = `<div class="message-header"><span class="message-icon">â„¹ï¸</span><span class="message-time">${timestamp}</span></div><div class="message-content system-message">${content}</div>`;
             break;
     }
 
@@ -1024,7 +1495,24 @@ function setupEventListeners() {
     if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
     if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
     if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
-    if (voiceToggle) voiceToggle.addEventListener('click', toggleVoiceRecognition);
+    if (transcriptionToggle) {
+        transcriptionToggle.addEventListener('click', () => {
+            toggleMasterTranscription().catch((error) => {
+                console.error('Failed to toggle transcription:', error);
+                addMonitorLog('error', 'master-toggle-failed', error.message);
+            });
+        });
+    }
+    if (sourceSystemToggle) {
+        sourceSystemToggle.addEventListener('click', () => {
+            setSourceSelected('system', !selectedSources.system);
+        });
+    }
+    if (sourceMicToggle) {
+        sourceMicToggle.addEventListener('click', () => {
+            setSourceSelected('mic', !selectedSources.mic);
+        });
+    }
     if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
     if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
     if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
@@ -1087,7 +1575,7 @@ function setupEventListeners() {
                     break;
                 case 'v':
                     e.preventDefault();
-                    toggleVoiceRecognition();
+                    addMonitorLog('info', 'shortcut-local', 'Local V shortcut captured; awaiting global shortcut event');
                     break;
             }
         }
@@ -1146,29 +1634,23 @@ function setupIpcListeners() {
 
     // AssemblyAI streaming transcription event listeners
     window.electronAPI.onVoskStatus((data) => {
-        console.log('STT status:', data.status, '-', data.message);
+        const source = normalizeSource(data?.source);
+        const status = data?.status;
+        const message = data?.message || '';
+        console.log(`STT status [${source}]:`, status, message);
 
-        switch (data.status) {
-            case 'loading':
-                showLoadingOverlay('Connecting to AssemblyAI...<br><small>Setting up live transcription</small>');
-                showFeedback('Connecting to AssemblyAI...', 'info');
-                break;
-            case 'listening':
-                hideLoadingOverlay();
-                showFeedback('Listening... Speak now!', 'success');
-                if (voiceToggle) {
-                    voiceToggle.classList.add('active');
-                    voiceToggle.style.background = 'rgba(255, 59, 48, 0.3)';
-                }
-                break;
-            case 'stopped':
-                hideLoadingOverlay();
-                showFeedback('Stopped listening', 'info');
-                if (voiceToggle) {
-                    voiceToggle.classList.remove('active');
-                    voiceToggle.style.background = '';
-                }
-                break;
+        if (status === 'loading') {
+            setSourceStatus(source, 'connecting', `Connecting (${sourceLabel(source)})...`);
+            showFeedback(`Connecting (${sourceLabel(source)})...`, 'info');
+            addMonitorLog('info', 'status-loading', message || 'Connection requested', source);
+        } else if (status === 'listening') {
+            setSourceStatus(source, 'listening', `Listening (${sourceLabel(source)})...`);
+            showFeedback(`Listening (${sourceLabel(source)})...`, 'success');
+            addMonitorLog('info', 'status-listening', message || 'Source listening', source);
+        } else if (status === 'stopped') {
+            setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
+            showFeedback(`Stopped (${sourceLabel(source)})`, 'info');
+            addMonitorLog('info', 'status-stopped', message || 'Source stopped', source);
         }
     });
 
@@ -1181,31 +1663,89 @@ function setupIpcListeners() {
     });
 
     window.electronAPI.onVoskError((data) => {
-        console.error('STT error:', data.error);
-        showFeedback(`STT error: ${data.error}`, 'error');
-        addChatMessage('system', `Transcription error: ${data.error}`);
+        const source = normalizeSource(data?.source);
+        const error = data?.error || 'Unknown transcription error';
+        console.error(`STT error [${source}]:`, error);
+        showFeedback(`Error (${sourceLabel(source)}): ${error}`, 'error');
+        addChatMessage('system', `Transcription error (${sourceLabel(source)}): ${error}`);
+        addMonitorLog('error', 'status-error', error, source);
 
-        // Stop recording on error
-        stopAudioCapture();
-        if (isRecording) {
-            isRecording = false;
-            updateVoiceUI();
-            if (voiceToggle) {
-                voiceToggle.classList.remove('active');
-            }
+        if (source === 'system') {
+            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+            systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
+            if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
+            systemPartialText = '';
+            isSystemActive = false;
+            resetSourceSampleQueue('system');
+        } else {
+            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+            micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
+            if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
+            micPartialText = '';
+            isMicActive = false;
+            resetSourceSampleQueue('mic');
         }
+
+        setSourceStatus(source, 'error', `Error: ${error}`);
+        updateTranscriptionUI();
     });
 
-    window.electronAPI.onVoskStopped(() => {
-        console.log('STT stopped');
-        stopAudioCapture();
-        if (isRecording) {
-            isRecording = false;
-            updateVoiceUI();
-            if (voiceToggle) {
-                voiceToggle.classList.remove('active');
-            }
+    window.electronAPI.onVoskStopped((data) => {
+        const source = normalizeSource(data?.source);
+        console.log(`STT stopped [${source}]`);
+        if (source === 'system') {
+            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+            systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
+            if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
+            systemPartialText = '';
+            isSystemActive = false;
+            resetSourceSampleQueue('system');
+        } else {
+            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+            micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
+            if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
+            micPartialText = '';
+            isMicActive = false;
+            resetSourceSampleQueue('mic');
         }
+        setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
+        addMonitorLog('info', 'stopped-event', 'Stop acknowledged by backend', source);
+    });
+
+    if (window.electronAPI.onToggleVoiceRecognition) {
+        window.electronAPI.onToggleVoiceRecognition(() => {
+            addMonitorLog('info', 'shortcut-event', 'Global shortcut toggled transcription');
+            toggleMasterTranscription().catch((error) => {
+                console.error('Global shortcut toggle failed:', error);
+                addMonitorLog('error', 'shortcut-toggle-failed', error.message);
+            });
+        });
+    }
+
+    if (window.electronAPI.onSttDebug) {
+        window.electronAPI.onSttDebug((data) => {
+            const source = data?.source ? normalizeSource(data.source) : null;
+            addMonitorLog(
+                data?.level || 'info',
+                data?.event || 'stt-debug',
+                data?.message || '',
+                source,
+                data?.meta || null,
+                data?.ts || Date.now()
+            );
+        });
+    }
+
+    window.addEventListener('error', (event) => {
+        addMonitorLog('error', 'renderer-error', event?.message || 'Renderer error');
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+        const reason = event?.reason;
+        const message = typeof reason === 'string'
+            ? reason
+            : reason?.message || 'Unhandled promise rejection';
+        addMonitorLog('error', 'renderer-rejection', message);
     });
 }
 
@@ -1215,3 +1755,4 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+

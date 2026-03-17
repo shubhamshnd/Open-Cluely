@@ -1,4 +1,4 @@
-const { app, dialog, globalShortcut, ipcMain, screen } = require('electron');
+const { app, dialog, desktopCapturer, globalShortcut, ipcMain, screen } = require('electron');
 const WebSocket = require('ws');
 
 const fs = require('fs');
@@ -43,9 +43,11 @@ const DEFAULT_ASSEMBLY_AI_SPEECH_MODEL = getDefaultAssemblyAiSpeechModel();
 const PROGRAMMING_LANGUAGES = getProgrammingLanguages();
 const DEFAULT_PROGRAMMING_LANGUAGE = getDefaultProgrammingLanguage();
 
-// AssemblyAI streaming transcription
-let assemblyWs = null;
-let isStreamingSTT = false;
+// AssemblyAI streaming transcription — one WebSocket per audio source
+let assemblyWsMic = null;
+let assemblyWsSystem = null;
+let isStreamingMic = false;
+let isStreamingSystem = false;
 const ASSEMBLY_AI_SAMPLE_RATE = 16000;
 
 // Initialize Gemini Service with rate limiting
@@ -59,6 +61,11 @@ let appEnvironment = null;
 let isShuttingDown = false;
 let isVisible = true;
 let autoHideTimer = null;
+const sttChunkCounters = { mic: 0, system: 0 };
+const sttDroppedChunkCounters = { mic: 0, system: 0 };
+let isRecoveryReloadInProgress = false;
+let lastRecoveryReloadAt = 0;
+const RECOVERY_RELOAD_COOLDOWN_MS = 5000;
 
 function initializeGeminiService(
   apiKey,
@@ -147,22 +154,29 @@ function logStartupConfiguration() {
   console.log(`  Programming languages: ${PROGRAMMING_LANGUAGES.join(', ')}`);
 }
 
-function cleanupTransientResources() {
-  if (assemblyWs) {
-    try {
-      if (assemblyWs.readyState === WebSocket.OPEN) {
-        assemblyWs.send(JSON.stringify({ type: 'Terminate' }));
-      }
-
-      assemblyWs.terminate();
-    } catch (error) {
-      console.error('Error cleaning up AssemblyAI WebSocket:', error);
+function cleanupAssemblyWs(ws) {
+  if (!ws) return;
+  try {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'Terminate' }));
     }
-
-    assemblyWs = null;
+    ws.terminate();
+  } catch (error) {
+    console.error('Error cleaning up AssemblyAI WebSocket:', error);
   }
+}
 
-  isStreamingSTT = false;
+function cleanupTransientResources() {
+  cleanupAssemblyWs(assemblyWsMic);
+  assemblyWsMic = null;
+  cleanupAssemblyWs(assemblyWsSystem);
+  assemblyWsSystem = null;
+  isStreamingMic = false;
+  isStreamingSystem = false;
+  sttChunkCounters.mic = 0;
+  sttChunkCounters.system = 0;
+  sttDroppedChunkCounters.mic = 0;
+  sttDroppedChunkCounters.system = 0;
   globalShortcut.unregisterAll();
 
   screenshots.forEach((screenshotPath) => {
@@ -230,6 +244,102 @@ function applyWindowOpacity() {
   mainWindow.setOpacity(getCurrentWindowOpacity());
 }
 
+function recoverMainWindowVisibility(reason, { reload = false } = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  console.warn(`Window recovery triggered: ${reason}`);
+  emitSttDebug({
+    level: 'error',
+    event: 'window-recovery',
+    message: reason
+  });
+
+  try {
+    if (autoHideTimer) {
+      clearTimeout(autoHideTimer);
+      autoHideTimer = null;
+    }
+
+    isVisible = true;
+    mainWindow.setOpacity(getVisibleWindowOpacity());
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    sendToRenderer('set-stealth-mode', false);
+  } catch (error) {
+    console.error('Window visibility recovery failed:', error);
+  }
+
+  if (!reload || !mainWindow.webContents || mainWindow.webContents.isDestroyed()) {
+    return;
+  }
+
+  const now = Date.now();
+  if (isRecoveryReloadInProgress || now - lastRecoveryReloadAt < RECOVERY_RELOAD_COOLDOWN_MS) {
+    return;
+  }
+
+  isRecoveryReloadInProgress = true;
+  lastRecoveryReloadAt = now;
+  try {
+    mainWindow.webContents.reload();
+    emitSttDebug({
+      event: 'window-reload',
+      message: 'Triggered guarded renderer reload'
+    });
+  } catch (error) {
+    console.error('Window recovery reload failed:', error);
+    isRecoveryReloadInProgress = false;
+    return;
+  }
+
+  setTimeout(() => {
+    isRecoveryReloadInProgress = false;
+  }, 1500);
+}
+
+function attachWindowRecoveryHandlers() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.on('unresponsive', () => {
+    console.error('Main window became unresponsive');
+    recoverMainWindowVisibility('window-unresponsive', { reload: true });
+  });
+
+  const contents = mainWindow.webContents;
+  if (!contents || contents.isDestroyed()) {
+    return;
+  }
+
+  contents.on('render-process-gone', (event, details) => {
+    console.error('Renderer process gone:', details);
+    recoverMainWindowVisibility('render-process-gone', { reload: true });
+  });
+
+  contents.on('unresponsive', () => {
+    console.error('WebContents became unresponsive');
+    recoverMainWindowVisibility('webcontents-unresponsive', { reload: true });
+  });
+
+  contents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    console.error('WebContents did-fail-load:', {
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame
+    });
+    recoverMainWindowVisibility('did-fail-load', { reload: !!isMainFrame });
+  });
+
+  contents.on('did-finish-load', () => {
+    isRecoveryReloadInProgress = false;
+  });
+}
+
 function getSafeWindowBounds(nextBounds = {}) {
   const currentBounds = mainWindow ? mainWindow.getBounds() : {
     x: 0,
@@ -268,6 +378,7 @@ function createStealthWindow() {
     initialOpacity: getVisibleWindowOpacity(),
     nodeEnv: appEnvironment.nodeEnv
   });
+  attachWindowRecoveryHandlers();
 }
 
 function registerStealthShortcuts() {
@@ -290,7 +401,11 @@ function registerStealthShortcuts() {
   });
 
   globalShortcut.register('CommandOrControl+Alt+Shift+V', () => {
-    mainWindow.webContents.send('toggle-voice-recognition');
+    emitSttDebug({
+      event: 'shortcut-toggle',
+      message: 'Global transcription shortcut triggered'
+    });
+    sendToRenderer('toggle-voice-recognition');
   });
 
   globalShortcut.register('CommandOrControl+Alt+Shift+Left', () => {
@@ -323,7 +438,7 @@ function toggleStealthMode() {
   const stealthModeEnabled = isVisible;
   isVisible = !stealthModeEnabled;
   applyWindowOpacity();
-  mainWindow.webContents.send('set-stealth-mode', stealthModeEnabled);
+  sendToRenderer('set-stealth-mode', stealthModeEnabled);
 }
 
 function emergencyHide() {
@@ -333,13 +448,13 @@ function emergencyHide() {
   }
 
   mainWindow.setOpacity(0.01);
-  mainWindow.webContents.send('emergency-clear');
+  sendToRenderer('emergency-clear');
   
   autoHideTimer = setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       isVisible = true;
       applyWindowOpacity();
-      mainWindow.webContents.send('set-stealth-mode', false);
+      sendToRenderer('set-stealth-mode', false);
     }
     autoHideTimer = null;
   }, 2000);
@@ -409,7 +524,7 @@ async function takeStealthScreenshot() {
     console.log(`Screenshot saved: ${screenshotPath}`);
     console.log(`Total screenshots: ${screenshots.length}`);
     
-    mainWindow.webContents.send('screenshot-taken-stealth', screenshots.length);
+    sendToRenderer('screenshot-taken-stealth', screenshots.length);
     
     return screenshotPath;
   } catch (error) {
@@ -429,7 +544,7 @@ async function analyzeForMeetingWithContext(context = '') {
 
   if (!appEnvironment.geminiApiKey) {
     console.error('No GEMINI_API_KEY found');
-    mainWindow.webContents.send('analysis-result', {
+    sendToRenderer('analysis-result', {
       error: 'No API key configured. Please add GEMINI_API_KEY to your .env file.'
     });
     return;
@@ -437,7 +552,7 @@ async function analyzeForMeetingWithContext(context = '') {
 
   if (!geminiService || !geminiService.model) {
     console.error('Gemini model not initialized');
-    mainWindow.webContents.send('analysis-result', {
+    sendToRenderer('analysis-result', {
       error: 'AI model not initialized. Please check your API key.'
     });
     return;
@@ -445,7 +560,7 @@ async function analyzeForMeetingWithContext(context = '') {
 
   if (screenshots.length === 0) {
     console.error('No screenshots to analyze');
-    mainWindow.webContents.send('analysis-result', {
+    sendToRenderer('analysis-result', {
       error: 'No screenshots to analyze. Take a screenshot first.'
     });
     return;
@@ -453,7 +568,7 @@ async function analyzeForMeetingWithContext(context = '') {
 
   try {
     console.log('Sending analysis start signal...');
-    mainWindow.webContents.send('analysis-start');
+    sendToRenderer('analysis-start');
     
     console.log('Processing screenshots...');
     const imageParts = await Promise.all(
@@ -499,7 +614,7 @@ async function analyzeForMeetingWithContext(context = '') {
       screenshotCount: screenshots.length
     });
 
-    mainWindow.webContents.send('analysis-result', { text });
+    sendToRenderer('analysis-result', { text });
     console.log('Analysis result sent to renderer');
     
   } catch (error) {
@@ -521,7 +636,7 @@ async function analyzeForMeetingWithContext(context = '') {
       errorMessage = `Analysis failed: ${error.message}`;
     }
     
-    mainWindow.webContents.send('analysis-result', {
+    sendToRenderer('analysis-result', {
       error: errorMessage
     });
   }
@@ -602,151 +717,339 @@ ipcMain.handle('close-app', () => {
   return { success: true };
 });
 
-// Start AssemblyAI streaming transcription via WebSocket
-ipcMain.handle('start-voice-recognition', () => {
-  console.log('IPC: start-voice-recognition called');
+// Safe wrapper — avoids "Render frame was disposed" if the window closes mid-stream
+function sendToRenderer(channel, data) {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
 
-  if (isStreamingSTT) {
-    console.log('AssemblyAI streaming already running');
-    return { success: true, message: 'Already running' };
+  const contents = mainWindow.webContents;
+  if (!contents || contents.isDestroyed()) return false;
+
+  if (typeof contents.isCrashed === 'function' && contents.isCrashed()) {
+    return false;
   }
 
-  const apiKey = appEnvironment.assemblyAiApiKey;
-  if (!apiKey) {
-    console.error('ASSEMBLY_AI_API_KEY not found');
-    mainWindow.webContents.send('vosk-error', { error: 'ASSEMBLY_AI_API_KEY not configured in .env' });
-    return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured' };
+  const frame = contents.mainFrame;
+  if (frame && typeof frame.isDestroyed === 'function' && frame.isDestroyed()) {
+    return false;
   }
 
   try {
-    const speechModel = activeAssemblyAiSpeechModel;
+    contents.send(channel, data);
+    return true;
+  } catch (error) {
+    console.error(`Failed to send renderer event "${channel}":`, error.message);
+  }
+  return false;
+}
+
+function emitSttDebug({ source = null, level = 'info', event = 'event', message = '', meta = null } = {}) {
+  const payload = {
+    ts: new Date().toISOString(),
+    source: source === 'mic' || source === 'system' ? source : null,
+    level,
+    event,
+    message,
+    meta
+  };
+  sendToRenderer('stt-debug', payload);
+}
+
+// Shared helper: open an AssemblyAI WebSocket for a given audio source ('mic' | 'system')
+function startAssemblyAiStream(source) {
+  const apiKey = appEnvironment.assemblyAiApiKey;
+  if (!apiKey) {
+    console.error('ASSEMBLY_AI_API_KEY not found');
+    emitSttDebug({
+      source,
+      level: 'error',
+      event: 'missing-api-key',
+      message: 'ASSEMBLY_AI_API_KEY not configured'
+    });
+    sendToRenderer('vosk-error', { source, error: 'ASSEMBLY_AI_API_KEY not configured in .env' });
+    return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured' };
+  }
+
+  // Guard against double-start
+  if (source === 'mic' && isStreamingMic) {
+    emitSttDebug({
+      source,
+      event: 'start-skipped',
+      message: 'Start requested while source is already streaming'
+    });
+    return { success: true, message: 'Mic already streaming' };
+  }
+  if (source === 'system' && isStreamingSystem) {
+    emitSttDebug({
+      source,
+      event: 'start-skipped',
+      message: 'Start requested while source is already streaming'
+    });
+    return { success: true, message: 'System audio already streaming' };
+  }
+
+  try {
     const queryParams = new URLSearchParams({
       sample_rate: String(ASSEMBLY_AI_SAMPLE_RATE),
       format_turns: 'true',
-      speech_model: speechModel
+      speech_model: activeAssemblyAiSpeechModel
     });
     const wsUrl = `wss://streaming.assemblyai.com/v3/ws?${queryParams.toString()}`;
 
-    console.log('Connecting to AssemblyAI streaming API...');
-    mainWindow.webContents.send('vosk-status', {
+    console.log(`Connecting to AssemblyAI for source: ${source}`);
+    emitSttDebug({
+      source,
+      event: 'start-request',
+      message: 'Opening AssemblyAI WebSocket',
+      meta: { speechModel: activeAssemblyAiSpeechModel }
+    });
+    sttChunkCounters[source] = 0;
+    sttDroppedChunkCounters[source] = 0;
+    sendToRenderer('vosk-status', {
+      source,
       status: 'loading',
-      message: 'Connecting to AssemblyAI...'
+      message: `Connecting (${source})...`
     });
 
-    assemblyWs = new WebSocket(wsUrl, {
-      headers: { Authorization: apiKey }
+    const ws = new WebSocket(wsUrl, { headers: { Authorization: apiKey } });
+
+    if (source === 'mic') assemblyWsMic = ws;
+    else assemblyWsSystem = ws;
+
+    ws.on('open', () => {
+      console.log(`AssemblyAI WebSocket connected [${source}]`);
+      if (source === 'mic') isStreamingMic = true;
+      else isStreamingSystem = true;
+      emitSttDebug({
+        source,
+        event: 'ws-open',
+        message: 'AssemblyAI WebSocket connected'
+      });
     });
 
-    assemblyWs.on('open', () => {
-      console.log('AssemblyAI WebSocket connected');
-      isStreamingSTT = true;
-      // Don't send 'listening' yet - wait for Begin message
-    });
-
-    assemblyWs.on('message', (rawMessage) => {
+    ws.on('message', (rawMessage) => {
       try {
         const msg = JSON.parse(rawMessage.toString());
 
         switch (msg.type) {
           case 'Begin':
-            console.log('AssemblyAI session started:', msg.id);
-            mainWindow.webContents.send('vosk-status', {
+            console.log(`AssemblyAI session started [${source}]:`, msg.id);
+            emitSttDebug({
+              source,
+              event: 'session-begin',
+              message: 'AssemblyAI session started',
+              meta: { id: msg.id }
+            });
+            sendToRenderer('vosk-status', {
+              source,
               status: 'listening',
-              message: 'Listening via AssemblyAI...'
+              message: `Listening (${source === 'system' ? 'Host' : 'You'})...`
             });
             break;
 
           case 'Turn':
             if (msg.transcript) {
               if (msg.end_of_turn) {
-                // Final result for this turn
-                console.log('AssemblyAI final:', msg.transcript);
-                mainWindow.webContents.send('vosk-final', { text: msg.transcript });
-
-                // Add to Gemini history
-                if (geminiService && msg.transcript) {
-                  geminiService.addToHistory('user', msg.transcript);
+                console.log(`AssemblyAI final [${source}]:`, msg.transcript);
+                emitSttDebug({
+                  source,
+                  event: 'turn-final',
+                  message: 'Final transcript received',
+                  meta: { chars: msg.transcript.length }
+                });
+                sendToRenderer('vosk-final', { source, text: msg.transcript });
+                if (geminiService) {
+                  const label = source === 'system' ? 'Host' : 'You';
+                  geminiService.addToHistory('user', `${label}: ${msg.transcript}`);
                 }
               } else {
-                // Partial / in-progress result
-                mainWindow.webContents.send('vosk-partial', { text: msg.transcript });
+                sendToRenderer('vosk-partial', { source, text: msg.transcript });
               }
             }
             break;
 
           case 'Termination':
-            console.log('AssemblyAI session terminated. Audio duration:', msg.audio_duration_seconds, 's');
-            isStreamingSTT = false;
-            assemblyWs = null;
-            mainWindow.webContents.send('vosk-stopped');
+            console.log(`AssemblyAI terminated [${source}]. Duration:`, msg.audio_duration_seconds, 's');
+            emitSttDebug({
+              source,
+              event: 'termination',
+              message: 'AssemblyAI stream terminated',
+              meta: { durationSeconds: msg.audio_duration_seconds }
+            });
+            if (source === 'mic') { isStreamingMic = false; assemblyWsMic = null; }
+            else { isStreamingSystem = false; assemblyWsSystem = null; }
+            sendToRenderer('vosk-stopped', { source });
             break;
 
           default:
-            console.log('AssemblyAI message:', msg.type);
-            break;
+            console.log(`AssemblyAI message [${source}]:`, msg.type);
         }
       } catch (parseError) {
-        console.error('Failed to parse AssemblyAI message:', parseError);
+        console.error(`Failed to parse AssemblyAI message [${source}]:`, parseError);
+        emitSttDebug({
+          source,
+          level: 'error',
+          event: 'parse-error',
+          message: parseError.message
+        });
       }
     });
 
-    assemblyWs.on('error', (error) => {
-      console.error('AssemblyAI WebSocket error:', error.message);
-      mainWindow.webContents.send('vosk-error', { error: `AssemblyAI connection error: ${error.message}` });
-      isStreamingSTT = false;
-      assemblyWs = null;
+    ws.on('error', (error) => {
+      console.error(`AssemblyAI WebSocket error [${source}]:`, error.message);
+      emitSttDebug({
+        source,
+        level: 'error',
+        event: 'ws-error',
+        message: error.message
+      });
+      sendToRenderer('vosk-error', { source, error: `Connection error (${source}): ${error.message}` });
+      if (source === 'mic') { isStreamingMic = false; assemblyWsMic = null; }
+      else { isStreamingSystem = false; assemblyWsSystem = null; }
     });
 
-    assemblyWs.on('close', (code, reason) => {
-      console.log('AssemblyAI WebSocket closed:', code, reason?.toString());
-      if (isStreamingSTT) {
-        isStreamingSTT = false;
-        assemblyWs = null;
-        mainWindow.webContents.send('vosk-stopped');
+    ws.on('close', (code, reason) => {
+      console.log(`AssemblyAI WebSocket closed [${source}]:`, code, reason?.toString());
+      emitSttDebug({
+        source,
+        event: 'ws-close',
+        message: 'AssemblyAI WebSocket closed',
+        meta: { code, reason: reason?.toString() || '' }
+      });
+      const stillActive = source === 'mic' ? isStreamingMic : isStreamingSystem;
+      if (stillActive) {
+        if (source === 'mic') { isStreamingMic = false; assemblyWsMic = null; }
+        else { isStreamingSystem = false; assemblyWsSystem = null; }
+        sendToRenderer('vosk-stopped', { source });
       }
     });
 
     return { success: true };
 
   } catch (error) {
-    console.error('Error starting AssemblyAI streaming:', error.message);
-    isStreamingSTT = false;
+    console.error(`Error starting AssemblyAI stream [${source}]:`, error.message);
+    emitSttDebug({
+      source,
+      level: 'error',
+      event: 'start-failed',
+      message: error.message
+    });
+    if (source === 'mic') isStreamingMic = false;
+    else isStreamingSystem = false;
     return { success: false, error: error.message };
   }
+}
+
+// Start AssemblyAI streaming for a specific source
+ipcMain.handle('start-voice-recognition', (event, { source } = {}) => {
+  const resolvedSource = source === 'system' ? 'system' : 'mic';
+  console.log(`IPC: start-voice-recognition [${resolvedSource}]`);
+  emitSttDebug({
+    source: resolvedSource,
+    event: 'ipc-start',
+    message: 'Renderer requested source start'
+  });
+  return startAssemblyAiStream(resolvedSource);
 });
 
-// Receive audio chunks from renderer and forward to AssemblyAI
-ipcMain.on('audio-chunk', (event, audioData) => {
-  if (assemblyWs && assemblyWs.readyState === WebSocket.OPEN) {
-    assemblyWs.send(Buffer.from(audioData));
-  }
-});
-
-// Stop AssemblyAI streaming transcription
-ipcMain.handle('stop-voice-recognition', () => {
-  console.log('IPC: stop-voice-recognition called');
-
-  if (!isStreamingSTT || !assemblyWs) {
-    return { success: true, message: 'Not running' };
-  }
-
-  try {
-    // Send graceful terminate message
-    if (assemblyWs.readyState === WebSocket.OPEN) {
-      assemblyWs.send(JSON.stringify({ type: 'Terminate' }));
+// Receive audio chunks from renderer and forward to the correct AssemblyAI WebSocket
+ipcMain.on('audio-chunk', (event, { source, data }) => {
+  const resolvedSource = source === 'system' ? 'system' : 'mic';
+  const ws = resolvedSource === 'system' ? assemblyWsSystem : assemblyWsMic;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(Buffer.from(data));
+    sttChunkCounters[resolvedSource] += 1;
+    if (sttChunkCounters[resolvedSource] % 50 === 0) {
+      emitSttDebug({
+        source: resolvedSource,
+        event: 'chunk-heartbeat',
+        message: 'Streaming audio chunks',
+        meta: {
+          chunks: sttChunkCounters[resolvedSource],
+          dropped: sttDroppedChunkCounters[resolvedSource]
+        }
+      });
     }
-    // The WebSocket 'close' or 'Termination' message handler will clean up
+  } else {
+    sttDroppedChunkCounters[resolvedSource] += 1;
+    if (sttDroppedChunkCounters[resolvedSource] % 25 === 0) {
+      emitSttDebug({
+        source: resolvedSource,
+        level: 'error',
+        event: 'chunk-dropped',
+        message: 'Audio chunk dropped because WebSocket is not open',
+        meta: {
+          dropped: sttDroppedChunkCounters[resolvedSource],
+          readyState: ws ? ws.readyState : 'no-ws'
+        }
+      });
+    }
+  }
+});
 
-    mainWindow.webContents.send('vosk-status', {
-      status: 'stopped',
-      message: 'Stopped listening'
+// Stop AssemblyAI streaming for a specific source (or 'all')
+ipcMain.handle('stop-voice-recognition', (event, { source } = {}) => {
+  console.log(`IPC: stop-voice-recognition [${source}]`);
+  emitSttDebug({
+    source: source === 'system' || source === 'mic' ? source : null,
+    event: 'ipc-stop',
+    message: `Stop requested for ${source || 'default'}`
+  });
+
+  const stopSource = (src) => {
+    const ws = src === 'system' ? assemblyWsSystem : assemblyWsMic;
+    if (!ws) {
+      emitSttDebug({
+        source: src,
+        event: 'stop-noop',
+        message: 'Stop requested but no active socket found'
+      });
+      sttChunkCounters[src] = 0;
+      sttDroppedChunkCounters[src] = 0;
+      return;
+    }
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'Terminate' }));
+      }
+    } catch (e) {
+      console.error(`Error stopping [${src}]:`, e.message);
+      emitSttDebug({
+        source: src,
+        level: 'error',
+        event: 'stop-error',
+        message: e.message
+      });
+    }
+    sendToRenderer('vosk-status', { source: src, status: 'stopped', message: 'Stopped' });
+    if (src === 'mic') isStreamingMic = false;
+    else isStreamingSystem = false;
+    sttChunkCounters[src] = 0;
+    sttDroppedChunkCounters[src] = 0;
+    emitSttDebug({
+      source: src,
+      event: 'stop-issued',
+      message: 'Terminate frame sent to AssemblyAI'
     });
+  };
 
-    isStreamingSTT = false;
-    return { success: true };
+  if (source === 'all') {
+    stopSource('mic');
+    stopSource('system');
+  } else {
+    stopSource(source === 'system' ? 'system' : 'mic');
+  }
+
+  return { success: true };
+});
+
+// Provide desktop capture source IDs to renderer for system audio capture
+ipcMain.handle('get-desktop-sources', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    return sources.map(s => ({ id: s.id, name: s.name }));
   } catch (error) {
-    console.error('Error stopping AssemblyAI:', error.message);
-    return { success: false, error: error.message };
+    console.error('Error getting desktop sources:', error.message);
+    return [];
   }
 });
 

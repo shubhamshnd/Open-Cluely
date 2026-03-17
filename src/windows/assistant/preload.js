@@ -78,24 +78,34 @@ try {
     },
     
     // Voice functionality
-    startVoiceRecognition: () => {
-      console.log('PreloadAPI: startVoiceRecognition called');
-      return ipcRenderer.invoke('start-voice-recognition').catch(err => {
+    startVoiceRecognition: (source) => {
+      console.log('PreloadAPI: startVoiceRecognition called, source:', source);
+      return ipcRenderer.invoke('start-voice-recognition', { source }).catch(err => {
         console.error('PreloadAPI: startVoiceRecognition error:', err);
         return { error: err.message };
       });
     },
-    stopVoiceRecognition: () => {
-      console.log('PreloadAPI: stopVoiceRecognition called');
-      return ipcRenderer.invoke('stop-voice-recognition').catch(err => {
+    stopVoiceRecognition: (source) => {
+      console.log('PreloadAPI: stopVoiceRecognition called, source:', source);
+      return ipcRenderer.invoke('stop-voice-recognition', { source }).catch(err => {
         console.error('PreloadAPI: stopVoiceRecognition error:', err);
         return { error: err.message };
       });
     },
 
     // Send raw PCM16 audio chunk to main process for AssemblyAI streaming
-    sendAudioChunk: (audioData) => {
-      ipcRenderer.send('audio-chunk', audioData);
+    // source: 'mic' | 'system'
+    sendAudioChunk: (source, audioData) => {
+      ipcRenderer.send('audio-chunk', { source, data: audioData });
+    },
+
+    // Get desktop capture source IDs for system audio
+    getDesktopSources: () => {
+      console.log('PreloadAPI: getDesktopSources called');
+      return ipcRenderer.invoke('get-desktop-sources').catch(err => {
+        console.error('PreloadAPI: getDesktopSources error:', err);
+        return [];
+      });
     },
 
     // New Cluely-style features
@@ -369,10 +379,10 @@ try {
     },
 
     onVoskStopped: (callback) => {
-      const handler = () => {
-        console.log('PreloadAPI: onVoskStopped event received');
+      const handler = (event, data) => {
+        console.log('PreloadAPI: onVoskStopped event received', data);
         try {
-          callback();
+          callback(data || {});
         } catch (err) {
           console.error('PreloadAPI: onVoskStopped callback error:', err);
         }
@@ -381,6 +391,37 @@ try {
       return () => {
         console.log('PreloadAPI: removing onVoskStopped listener');
         ipcRenderer.removeListener('vosk-stopped', handler);
+      };
+    },
+
+    onToggleVoiceRecognition: (callback) => {
+      const handler = () => {
+        console.log('PreloadAPI: onToggleVoiceRecognition event received');
+        try {
+          callback();
+        } catch (err) {
+          console.error('PreloadAPI: onToggleVoiceRecognition callback error:', err);
+        }
+      };
+      ipcRenderer.on('toggle-voice-recognition', handler);
+      return () => {
+        console.log('PreloadAPI: removing onToggleVoiceRecognition listener');
+        ipcRenderer.removeListener('toggle-voice-recognition', handler);
+      };
+    },
+
+    onSttDebug: (callback) => {
+      const handler = (event, data) => {
+        try {
+          callback(data || {});
+        } catch (err) {
+          console.error('PreloadAPI: onSttDebug callback error:', err);
+        }
+      };
+      ipcRenderer.on('stt-debug', handler);
+      return () => {
+        console.log('PreloadAPI: removing onSttDebug listener');
+        ipcRenderer.removeListener('stt-debug', handler);
       };
     },
     
