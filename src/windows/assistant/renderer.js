@@ -23,6 +23,10 @@ let screenshotsCount = 0;
 let isAnalyzing = false;
 let stealthModeActive = false;
 let stealthHideTimeout = null;
+const THEME_STORAGE_KEY = 'assistant-theme';
+const THEME_LIGHT = 'light';
+const THEME_DARK = 'dark';
+let activeTheme = THEME_LIGHT;
 const AI_CONTEXT_CHAR_BUDGET = 12000;
 const messageStore = createMessageStore();
 let chatMessagesArray = messageStore.getMessages();
@@ -132,6 +136,7 @@ const confirmCloseBtn = document.getElementById('confirm-close-btn');
 const suggestBtn = document.getElementById('suggest-btn');
 const notesBtn = document.getElementById('notes-btn');
 const insightsBtn = document.getElementById('insights-btn');
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
 
 // Settings elements
 const settingsBtn = document.getElementById('settings-btn');
@@ -178,6 +183,7 @@ async function init() {
     setupEventListeners();
     setupIpcListeners();
     setupWindowAdjustments();
+    applyTheme(loadStoredThemePreference(), { persist: false });
     updateUI();
     updateTranscriptionUI();
     renderMonitorState();
@@ -219,6 +225,65 @@ function updateWindowOpacityValueLabel(value) {
 
     const opacityLevel = normalizeWindowOpacityLevel(value);
     settingWindowOpacityValue.textContent = `${opacityLevel}/10`;
+}
+
+function normalizeTheme(theme) {
+    return theme === THEME_DARK ? THEME_DARK : THEME_LIGHT;
+}
+
+function loadStoredThemePreference() {
+    try {
+        const savedTheme = window.localStorage?.getItem(THEME_STORAGE_KEY);
+        return normalizeTheme(savedTheme);
+    } catch (error) {
+        console.warn('Failed to read saved theme preference:', error);
+        return THEME_LIGHT;
+    }
+}
+
+function saveThemePreference(theme) {
+    try {
+        window.localStorage?.setItem(THEME_STORAGE_KEY, normalizeTheme(theme));
+    } catch (error) {
+        console.warn('Failed to save theme preference:', error);
+    }
+}
+
+function updateThemeToggleUi() {
+    if (!themeToggleBtn) {
+        return;
+    }
+
+    const isDarkMode = activeTheme === THEME_DARK;
+    const nextThemeLabel = isDarkMode ? 'light' : 'dark';
+    const ariaLabel = `Switch to ${nextThemeLabel} mode`;
+
+    themeToggleBtn.classList.toggle('is-dark', isDarkMode);
+    themeToggleBtn.setAttribute('aria-pressed', isDarkMode ? 'true' : 'false');
+    themeToggleBtn.setAttribute('aria-label', ariaLabel);
+    themeToggleBtn.removeAttribute('title');
+}
+
+function applyTheme(theme, options = {}) {
+    const { persist = true, announce = false } = options;
+    activeTheme = normalizeTheme(theme);
+
+    document.body.classList.toggle('theme-dark', activeTheme === THEME_DARK);
+    document.documentElement.setAttribute('data-theme', activeTheme);
+    updateThemeToggleUi();
+
+    if (persist) {
+        saveThemePreference(activeTheme);
+    }
+
+    if (announce) {
+        showFeedback(activeTheme === THEME_DARK ? 'Dark mode enabled' : 'Light mode enabled', 'info');
+    }
+}
+
+function toggleThemeMode() {
+    const nextTheme = activeTheme === THEME_DARK ? THEME_LIGHT : THEME_DARK;
+    applyTheme(nextTheme, { persist: true, announce: true });
 }
 
 function normalizeShortcutToken(token) {
@@ -1958,6 +2023,7 @@ function setupEventListeners() {
     if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
     if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
     if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
+    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleThemeMode);
 
     // Settings buttons
     if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
