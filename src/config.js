@@ -28,6 +28,7 @@ const PROGRAMMING_LANGUAGES = [
   'Kotlin'
 ];
 
+// Gemini model configuration functions
 function getGeminiModels() {
   if (!Array.isArray(GEMINI_MODELS) || GEMINI_MODELS.length === 0) {
     throw new Error('Gemini models are not configured. Add at least one model to src/config.js.');
@@ -48,6 +49,7 @@ function resolveGeminiModel(modelName) {
   return isConfiguredGeminiModel(modelName) ? modelName : getDefaultGeminiModel();
 }
 
+// Programming language configuration functions
 function getProgrammingLanguages() {
   if (!Array.isArray(PROGRAMMING_LANGUAGES) || PROGRAMMING_LANGUAGES.length === 0) {
     throw new Error('Programming languages are not configured. Add at least one language to src/config.js.');
@@ -70,6 +72,7 @@ function resolveProgrammingLanguage(languageName) {
     : getDefaultProgrammingLanguage();
 }
 
+// AssemblyAI speech model configuration functions
 function getAssemblyAiSpeechModels() {
   if (!Array.isArray(ASSEMBLY_AI_SPEECH_MODELS) || ASSEMBLY_AI_SPEECH_MODELS.length === 0) {
     throw new Error('AssemblyAI speech models are not configured. Add at least one model to src/config.js.');

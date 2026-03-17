@@ -45,6 +45,14 @@ try {
         return { error: err.message };
       });
     },
+
+    askAiWithSessionContext: (payload) => {
+      console.log('PreloadAPI: askAiWithSessionContext called');
+      return ipcRenderer.invoke('ask-ai-with-session-context', payload).catch(err => {
+        console.error('PreloadAPI: askAiWithSessionContext error:', err);
+        return { success: false, error: err.message };
+      });
+    },
     
     clearStealth: () => {
       console.log('PreloadAPI: clearStealth called');
@@ -407,6 +415,22 @@ try {
       return () => {
         console.log('PreloadAPI: removing onToggleVoiceRecognition listener');
         ipcRenderer.removeListener('toggle-voice-recognition', handler);
+      };
+    },
+
+    onTriggerAskAi: (callback) => {
+      const handler = () => {
+        console.log('PreloadAPI: onTriggerAskAi event received');
+        try {
+          callback();
+        } catch (err) {
+          console.error('PreloadAPI: onTriggerAskAi callback error:', err);
+        }
+      };
+      ipcRenderer.on('trigger-ask-ai', handler);
+      return () => {
+        console.log('PreloadAPI: removing onTriggerAskAi listener');
+        ipcRenderer.removeListener('trigger-ask-ai', handler);
       };
     },
 

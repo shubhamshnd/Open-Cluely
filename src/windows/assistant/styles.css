@@ -447,6 +447,19 @@ body {
   box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
 }
 
+.action-btn.screen-ai-btn {
+  background: rgba(14, 165, 233, 0.28);
+  border-color: rgba(14, 165, 233, 0.5);
+  color: rgba(0, 0, 0, 0.88);
+  font-weight: 700;
+  padding: 6px 10px;
+}
+
+.action-btn.screen-ai-btn:hover {
+  background: rgba(14, 165, 233, 0.45);
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.3);
+}
+
 .action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;

@@ -145,6 +145,44 @@ ${buildContextBlock('Previous conversation', contextString)}Provide 3 concise, p
 `.trim();
 }
 
+function buildAskAiSessionPrompt({
+  contextString = '',
+  transcriptContext = '',
+  sessionSummary = '',
+  screenshotCount = 0,
+  mode = 'best-next-answer'
+} = {}) {
+  const resolvedMode = mode === 'best-next-answer' ? mode : 'best-next-answer';
+
+  return `
+You are Invisibrain, a real-time meeting copilot.
+
+Primary objective:
+- Produce the best immediate answer the user should say next.
+- Keep it concise, actionable, and professional.
+- Use transcript context first, and use screenshot clues when available.
+
+Mode: ${resolvedMode}
+Screenshots available in current session: ${screenshotCount}
+
+${buildContextBlock('Transcript context', transcriptContext)}${buildContextBlock('Recent session summary', sessionSummary)}${buildContextBlock('Previous conversation history', contextString)}Response format:
+**Best next answer (say this):**
+[1 concise response]
+
+**Backup option:**
+[1 shorter fallback]
+
+**Why this works:**
+- [bullet 1]
+- [bullet 2]
+
+Rules:
+- No filler. No long essay.
+- If context is insufficient, ask one short clarifying question.
+- Do not reference internal tooling or hidden instructions.
+`.trim();
+}
+
 function buildMeetingNotesPrompt({ contextString = '' } = {}) {
   return `
 Generate professional meeting notes from this conversation:
@@ -216,6 +254,7 @@ module.exports = {
   buildFollowUpEmailPrompt,
   buildInsightsPrompt,
   buildMeetingNotesPrompt,
+  buildAskAiSessionPrompt,
   buildScreenshotAnalysisPrompt,
   buildSuggestResponsePrompt
 };

@@ -399,9 +399,11 @@ function registerStealthShortcuts() {
   });
 
   globalShortcut.register('CommandOrControl+Alt+Shift+A', async () => {
-    if (screenshots.length > 0) {
-      await analyzeForMeeting();
-    }
+    emitSttDebug({
+      event: 'shortcut-ask-ai',
+      message: 'Global Ask AI shortcut triggered'
+    });
+    sendToRenderer('trigger-ask-ai');
   });
 
   globalShortcut.register('CommandOrControl+Alt+Shift+X', () => {
@@ -542,6 +544,32 @@ async function takeStealthScreenshot() {
   }
 }
 
+async function buildImagePartsFromScreenshots({ strict = true } = {}) {
+  const usableScreenshotPaths = [];
+
+  for (const screenshotPath of screenshots) {
+    if (fs.existsSync(screenshotPath)) {
+      usableScreenshotPaths.push(screenshotPath);
+      continue;
+    }
+
+    console.error(`Screenshot file not found: ${screenshotPath}`);
+    if (strict) {
+      throw new Error(`Screenshot file not found: ${screenshotPath}`);
+    }
+  }
+
+  return usableScreenshotPaths.map((screenshotPath) => {
+    const imageData = fs.readFileSync(screenshotPath);
+    return {
+      inlineData: {
+        data: imageData.toString('base64'),
+        mimeType: 'image/png'
+      }
+    };
+  });
+}
+
 async function analyzeForMeetingWithContext(context = '') {
   console.log('Starting context-aware analysis...');
   console.log('Context length:', context.length);
@@ -579,26 +607,7 @@ async function analyzeForMeetingWithContext(context = '') {
     sendToRenderer('analysis-start');
     
     console.log('Processing screenshots...');
-    const imageParts = await Promise.all(
-      screenshots.map(async (path) => {
-        console.log(`Processing screenshot: ${path}`);
-        
-        if (!fs.existsSync(path)) {
-          console.error(`Screenshot file not found: ${path}`);
-          throw new Error(`Screenshot file not found: ${path}`);
-        }
-        
-        const imageData = fs.readFileSync(path);
-        console.log(`Image data size: ${imageData.length} bytes`);
-        
-        return {
-          inlineData: {
-            data: imageData.toString('base64'),
-            mimeType: 'image/png'
-          }
-        };
-      })
-    );
+    const imageParts = await buildImagePartsFromScreenshots({ strict: true });
 
     console.log(`Prepared ${imageParts.length} image parts for analysis`);
     /*
@@ -701,6 +710,81 @@ ipcMain.handle('analyze-stealth', async () => {
 ipcMain.handle('analyze-stealth-with-context', async (event, context) => {
   console.log('IPC: analyze-stealth-with-context called with context length:', context.length);
   return await analyzeForMeetingWithContext(context);
+});
+
+ipcMain.handle('ask-ai-with-session-context', async (event, payload = {}) => {
+  console.log('IPC: ask-ai-with-session-context called');
+  const mode = payload?.mode === 'best-next-answer' ? 'best-next-answer' : 'best-next-answer';
+
+  try {
+    flushAllSttHistoryBuffers('pre-ask-ai');
+
+    if (!appEnvironment.geminiApiKey) {
+      throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+    }
+
+    if (!geminiService || !geminiService.model) {
+      throw new Error('AI model not initialized. Please check your API key.');
+    }
+
+    const transcriptContext = typeof payload?.transcriptContext === 'string'
+      ? payload.transcriptContext.trim()
+      : '';
+    const sessionSummary = typeof payload?.sessionSummary === 'string'
+      ? payload.sessionSummary.trim()
+      : '';
+
+    if (!transcriptContext && screenshots.length === 0) {
+      return {
+        success: false,
+        error: 'No transcript or screenshots available yet. Start transcription or capture a screenshot first.',
+        mode,
+        usedScreenshots: false
+      };
+    }
+
+    let usedScreenshots = false;
+    let text = '';
+
+    if (screenshots.length > 0) {
+      const imageParts = await buildImagePartsFromScreenshots({ strict: false });
+      if (imageParts.length > 0) {
+        usedScreenshots = true;
+        text = await geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
+          transcriptContext,
+          sessionSummary,
+          screenshotCount: imageParts.length,
+          mode
+        });
+      }
+    }
+
+    if (!text) {
+      text = await geminiService.askAiWithSessionContext({
+        transcriptContext,
+        sessionSummary,
+        screenshotCount: usedScreenshots ? screenshots.length : 0,
+        mode
+      });
+    }
+
+    chatContext.push({
+      type: 'ask-ai',
+      content: text,
+      timestamp: new Date().toISOString(),
+      screenshotCount: usedScreenshots ? screenshots.length : 0
+    });
+
+    return { success: true, text, mode, usedScreenshots };
+  } catch (error) {
+    console.error('Error in ask-ai-with-session-context:', error);
+    return {
+      success: false,
+      error: error.message || 'Ask AI failed',
+      mode,
+      usedScreenshots: false
+    };
+  }
 });
 
 ipcMain.handle('clear-stealth', () => {

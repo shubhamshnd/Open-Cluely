@@ -13,6 +13,7 @@ const {
 } = require('../../config');
 const {
   buildAnswerQuestionPrompt,
+  buildAskAiSessionPrompt,
   buildFollowUpEmailPrompt,
   buildInsightsPrompt,
   buildMeetingNotesPrompt,
@@ -258,6 +259,40 @@ class GeminiService {
       ],
       additionalContext
     );
+  }
+
+  async askAiWithSessionContext(options = {}) {
+    const contextString = this.getContextString();
+    const prompt = buildAskAiSessionPrompt({
+      contextString,
+      transcriptContext: options.transcriptContext || '',
+      sessionSummary: options.sessionSummary || '',
+      screenshotCount: options.screenshotCount || 0,
+      mode: options.mode || 'best-next-answer'
+    });
+
+    const result = await this.generateText(prompt);
+    this.addToHistory('assistant', `Ask AI: ${result}`);
+    return result;
+  }
+
+  async askAiWithSessionContextAndScreenshots(imageParts, options = {}) {
+    const contextString = this.getContextString();
+    const prompt = buildAskAiSessionPrompt({
+      contextString,
+      transcriptContext: options.transcriptContext || '',
+      sessionSummary: options.sessionSummary || '',
+      screenshotCount: options.screenshotCount || imageParts.length,
+      mode: options.mode || 'best-next-answer'
+    });
+
+    const result = await this.generateMultimodal([
+      { text: prompt },
+      ...imageParts
+    ]);
+
+    this.addToHistory('assistant', `Ask AI: ${result}`);
+    return result;
   }
 
   async suggestResponse(context) {

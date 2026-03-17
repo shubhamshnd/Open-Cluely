@@ -84,6 +84,7 @@ const windowResizeHandles = document.querySelectorAll('[data-resize-handle]');
 
 const screenshotBtn = document.getElementById('screenshot-btn');
 const analyzeBtn = document.getElementById('analyze-btn');
+const screenAiBtn = document.getElementById('screen-ai-btn');
 const clearBtn = document.getElementById('clear-btn');
 const hideBtn = document.getElementById('hide-btn');
 const copyBtn = document.getElementById('copy-btn');
@@ -1128,7 +1129,79 @@ async function takeStealthScreenshot() {
     }
 }
 
-async function analyzeScreenshots() {
+function getTranscriptMessages() {
+    return chatMessagesArray.filter((message) =>
+        message.type === 'voice' ||
+        message.type === 'voice-mic' ||
+        message.type === 'voice-system'
+    );
+}
+
+function buildAskAiContextPayload() {
+    const transcriptContext = getTranscriptMessages()
+        .slice(-24)
+        .map((message) => {
+            if (message.type === 'voice-system') return `Host: ${message.content}`;
+            return `You: ${message.content}`;
+        })
+        .join('\n');
+
+    const sessionSummary = chatMessagesArray
+        .filter((message) =>
+            message.type === 'system' ||
+            message.type === 'ai-response' ||
+            message.type === 'screenshot'
+        )
+        .slice(-8)
+        .map((message) => `${message.type}: ${String(message.content || '').replace(/\s+/g, ' ').trim()}`)
+        .join('\n');
+
+    return {
+        mode: 'best-next-answer',
+        transcriptContext,
+        sessionSummary,
+        screenshotCount: screenshotsCount
+    };
+}
+
+async function askAiWithSessionContext() {
+    if (!window.electronAPI?.askAiWithSessionContext) {
+        showFeedback('Feature not available', 'error');
+        return;
+    }
+
+    const payload = buildAskAiContextPayload();
+    if (!payload.transcriptContext && screenshotsCount === 0) {
+        showFeedback('No transcript or screenshots available yet', 'error');
+        return;
+    }
+
+    try {
+        setAnalyzing(true);
+        showLoadingOverlay('Analyzing full session context...');
+        const result = await window.electronAPI.askAiWithSessionContext(payload);
+        setAnalyzing(false);
+        hideLoadingOverlay();
+
+        if (result?.success && result?.text) {
+            const heading = result.usedScreenshots
+                ? '**Best Next Answer (Transcript + Screen):**'
+                : '**Best Next Answer (Transcript):**';
+            addChatMessage('ai-response', `${heading}\n\n${result.text}`);
+            showFeedback('Ask AI ready', 'success');
+        } else {
+            throw new Error(result?.error || 'Ask AI failed');
+        }
+    } catch (error) {
+        console.error('Ask AI error:', error);
+        setAnalyzing(false);
+        hideLoadingOverlay();
+        showFeedback('Ask AI failed', 'error');
+        addChatMessage('system', `Error: ${error.message}`);
+    }
+}
+
+async function analyzeScreenshotsOnly() {
     if (screenshotsCount === 0) {
         showFeedback('No screenshots to analyze', 'error');
         return;
@@ -1136,7 +1209,7 @@ async function analyzeScreenshots() {
 
     try {
         setAnalyzing(true);
-        showLoadingOverlay();
+        showLoadingOverlay('Analyzing screenshots...');
 
         const context = chatMessagesArray
             .map(msg => `${msg.type}: ${msg.content}`)
@@ -1154,6 +1227,9 @@ async function analyzeScreenshots() {
 async function clearStealthData() {
     try {
         await window.electronAPI.clearStealth();
+        if (window.electronAPI.clearConversationHistory) {
+            await window.electronAPI.clearConversationHistory();
+        }
         screenshotsCount = 0;
         chatMessagesArray = [];
         chatMessagesElement.innerHTML = '';
@@ -1449,10 +1525,15 @@ function updateUI() {
         screenshotCount.textContent = screenshotsCount;
     }
 
+    const hasTranscriptContext = getTranscriptMessages().length > 0;
+
     if (analyzeBtn) {
-        // Enable Ask AI button if we have screenshots OR conversation history
-        const hasContent = screenshotsCount > 0 || chatMessagesArray.length > 0;
+        const hasContent = screenshotsCount > 0 || hasTranscriptContext;
         analyzeBtn.disabled = isAnalyzing || !hasContent;
+    }
+
+    if (screenAiBtn) {
+        screenAiBtn.disabled = isAnalyzing || screenshotsCount === 0;
     }
 }
 
@@ -1608,7 +1689,8 @@ function startTimer() {
 // Event listeners
 function setupEventListeners() {
     if (screenshotBtn) screenshotBtn.addEventListener('click', takeStealthScreenshot);
-    if (analyzeBtn) analyzeBtn.addEventListener('click', analyzeScreenshots);
+    if (analyzeBtn) analyzeBtn.addEventListener('click', askAiWithSessionContext);
+    if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
     if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
     if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
     if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
@@ -1685,7 +1767,7 @@ function setupEventListeners() {
                     break;
                 case 'a':
                     e.preventDefault();
-                    analyzeScreenshots();
+                    addMonitorLog('info', 'shortcut-local', 'Local A shortcut captured; awaiting global Ask AI event');
                     break;
                 case 'x':
                     e.preventDefault();
@@ -1721,7 +1803,7 @@ function setupIpcListeners() {
     window.electronAPI.onAnalysisStart(() => {
         setAnalyzing(true);
         showLoadingOverlay();
-        addChatMessage('system', 'Analyzing screenshots and context...');
+        addChatMessage('system', 'Analyzing screenshots...');
     });
 
     window.electronAPI.onAnalysisResult((data) => {
@@ -1842,6 +1924,16 @@ function setupIpcListeners() {
             toggleMasterTranscription().catch((error) => {
                 console.error('Global shortcut toggle failed:', error);
                 addMonitorLog('error', 'shortcut-toggle-failed', error.message);
+            });
+        });
+    }
+
+    if (window.electronAPI.onTriggerAskAi) {
+        window.electronAPI.onTriggerAskAi(() => {
+            addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
+            askAiWithSessionContext().catch((error) => {
+                console.error('Global Ask AI trigger failed:', error);
+                addMonitorLog('error', 'shortcut-ask-ai-failed', error.message);
             });
         });
     }
