@@ -1619,7 +1619,7 @@ select.settings-input {
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
-  cursor: pointer;
+  cursor: default;
 }
 
 .settings-range::-webkit-slider-runnable-track {
@@ -1639,6 +1639,11 @@ select.settings-input {
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(59, 130, 246, 0.45);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+  cursor: default;
+}
+
+.settings-range::-moz-range-thumb {
+  cursor: default;
 }
 
 .settings-range:focus {
@@ -1989,6 +1994,23 @@ body.theme-dark .settings-helper-text code {
   background: rgba(15, 23, 42, 0.85);
   border-color: rgba(148, 163, 184, 0.36);
   color: rgba(226, 232, 240, 0.92);
+}
+
+body.theme-dark #close-settings.close-btn {
+  color: rgba(248, 250, 252, 0.98);
+  background: rgba(127, 29, 29, 0.46);
+  border-color: rgba(248, 113, 113, 0.62);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.18);
+}
+
+body.theme-dark #close-settings.close-btn:hover {
+  background: rgba(153, 27, 27, 0.68);
+  border-color: rgba(252, 165, 165, 0.78);
+}
+
+body.theme-dark #close-settings.close-btn:focus-visible {
+  outline: 2px solid rgba(248, 113, 113, 0.72);
+  outline-offset: 1px;
 }
 
 body.theme-dark .chat-messages::-webkit-scrollbar-track,
