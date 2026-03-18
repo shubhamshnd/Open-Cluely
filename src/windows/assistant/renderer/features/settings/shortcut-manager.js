@@ -140,6 +140,22 @@ function formatShortcutForDisplay(accelerator) {
         .join('+');
 }
 
+const shortcutIconById = {
+    toggleTranscription: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10v4"/><path d="M7 7v10"/><path d="M11 4v16"/><path d="M15 7v10"/><path d="M19 10v4"/></svg>',
+    takeScreenshot: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>',
+    askAi: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a8 8 0 0 0-8 8v2a4 4 0 0 0 4 4h1v3l3-3h3a8 8 0 0 0 8-8 8 8 0 0 0-8-8zm-1 6h2v2h-2V8zm0 3h2v5h-2v-5z"/></svg>',
+    emergencyHide: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/></svg>',
+    toggleStealth: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a8 8 0 1 0 0 16V4z"/></svg>',
+    moveWindowLeft: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 7l-5 5 5 5V7z"/></svg>',
+    moveWindowRight: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 7l5 5-5 5V7z"/></svg>',
+    moveWindowUp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5H7z"/></svg>',
+    moveWindowDown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>'
+};
+
+function getShortcutIconMarkup(shortcutId) {
+    return shortcutIconById[shortcutId] || '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>';
+}
+
 export function createShortcutManager({ settingsShortcutsList }) {
     let configuredKeyboardShortcuts = [];
     const shortcutBindingsById = new Map();
@@ -163,6 +179,13 @@ export function createShortcutManager({ settingsShortcutsList }) {
             const row = document.createElement('div');
             row.className = 'settings-shortcut-row';
 
+            const shortcutMeta = document.createElement('div');
+            shortcutMeta.className = 'settings-shortcut-meta';
+
+            const icon = document.createElement('span');
+            icon.className = 'settings-shortcut-icon';
+            icon.innerHTML = getShortcutIconMarkup(shortcut.id);
+
             const buttonLabel = document.createElement('span');
             buttonLabel.className = 'settings-shortcut-button';
             buttonLabel.textContent = shortcut.buttonLabel;
@@ -174,7 +197,9 @@ export function createShortcutManager({ settingsShortcutsList }) {
             shortcutValue.className = 'settings-shortcut-key';
             shortcutValue.textContent = formatShortcutForDisplay(shortcut.accelerator);
 
-            row.appendChild(buttonLabel);
+            shortcutMeta.appendChild(icon);
+            shortcutMeta.appendChild(buttonLabel);
+            row.appendChild(shortcutMeta);
             row.appendChild(shortcutValue);
             settingsShortcutsList.appendChild(row);
         });

@@ -1671,10 +1671,36 @@ select.settings-input {
   border: 1px solid rgba(255, 255, 255, 0.32);
 }
 
+.settings-shortcut-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-shortcut-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(15, 23, 42, 0.8);
+  flex: 0 0 auto;
+}
+
+.settings-shortcut-icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
 .settings-shortcut-button {
   font-size: 10px;
   font-weight: 600;
   color: rgba(0, 0, 0, 0.76);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .settings-shortcut-key {
@@ -1988,6 +2014,10 @@ body.theme-dark select.settings-input {
 body.theme-dark .settings-shortcut-row {
   background: rgba(15, 23, 42, 0.66);
   border-color: rgba(148, 163, 184, 0.28);
+}
+
+body.theme-dark .settings-shortcut-icon {
+  color: rgba(191, 219, 254, 0.96);
 }
 
 body.theme-dark .settings-helper-text code {
