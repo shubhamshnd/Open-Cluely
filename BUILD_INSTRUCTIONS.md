@@ -8,9 +8,16 @@ This guide will help you build the app as a disguised Chrome executable.
 2. **All dependencies** installed (`npm install`)
 3. **Chrome icon files** (see below)
 
-## Step 1: Get Chrome Icon
+## Step 1: Check Existing Icons
 
-You need to obtain the official Chrome icon in multiple formats:
+This repo already includes the Windows icon at `assets/chrome.ico`, so you can build the Windows portable `.exe` without downloading anything else first.
+
+You only need additional icon files if:
+
+- you want to replace the current Windows icon, or
+- you plan to build for macOS or Linux and need `chrome.icns` / `chrome.png`
+
+If you need to add or replace icons, use one of the following options:
 
 ### Option A: Extract from Chrome Installation
 1. Navigate to: `C:\Program Files\Google\Chrome\Application\`
@@ -26,6 +33,12 @@ You need to obtain the official Chrome icon in multiple formats:
    - **Linux**: `chrome.png` (512x512)
 
 ### Step 2: Place Icons in Assets Folder
+
+Current state in this repo:
+
+- `assets/chrome.ico` already exists
+- `assets/chrome.icns` is optional unless building for macOS
+- `assets/chrome.png` is optional unless building for Linux
 
 Copy the icon files to the `assets/` folder:
 ```
@@ -43,6 +56,8 @@ npm run build:win
 ```
 
 This will create: `dist/GoogleChrome.exe`
+
+For this repo, this is the recommended build and does not require any extra icon download because `assets/chrome.ico` is already present.
 
 ### Build Options:
 

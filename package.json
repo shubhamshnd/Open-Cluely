@@ -7,7 +7,7 @@
     "start": "electron .",
     "start:hidden": "electron . --start-hidden",
     "build": "electron-builder",
-    "build:win": "electron-builder --win portable --config.win.signAndEditExecutable=false",
+    "build:win": "electron-builder --win portable",
     "dev": "electron . --enable-logging",
     "postinstall": "electron-builder install-app-deps"
   },
