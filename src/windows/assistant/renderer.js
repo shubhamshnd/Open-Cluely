@@ -14,6 +14,8 @@ import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/fea
 import { createChatUiManager } from './renderer/features/chat/chat-ui-manager.js';
 import { createWindowAdjustmentManager } from './renderer/features/layout/window-adjustments.js';
 import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
+import { createSettingsPanelManager } from './renderer/features/settings/settings-panel-manager.js';
+import { createTranscriptionManager } from './renderer/features/transcription/transcription-manager.js';
 
 import {
     createTranscriptionSourceState,
@@ -38,37 +40,8 @@ const messageStore = createMessageStore();
 let chatMessagesArray = messageStore.getMessages();
 const transcriptionSourceState = createTranscriptionSourceState();
 
-// Mic audio capture state
-let micAudioContext = null;
-let micMediaStream = null;
-let micScriptProcessor = null;
-let isMicActive = false;
-
-// System audio capture state
-let systemAudioContext = null;
-let systemMediaStream = null;
-let systemScriptProcessor = null;
-let isSystemActive = false;
-
 // Source selection state (default: host/system on, mic off)
 const selectedSources = transcriptionSourceState.selectedSources;
-
-// Runtime source status state
-const sourceStatuses = transcriptionSourceState.sourceStatuses;
-
-// Partial transcription tracking per source
-let micPartialText = '';
-let micPartialDiv = null;
-let systemPartialText = '';
-let systemPartialDiv = null;
-
-const monitorLastText = {
-    system: 'No transcript yet',
-    mic: 'No transcript yet'
-};
-
-const MAX_MONITOR_LOG_ENTRIES = 80;
-const monitorLogEntries = [];
 
 const audioPipeline = createAudioPipeline({
     sendAudioChunk: (source, audioBuffer) => {
@@ -191,6 +164,37 @@ const chatUiManager = createChatUiManager({
     showFeedback: (message, type) => showFeedback(message, type),
     addMonitorLog: (...args) => addMonitorLog(...args)
 });
+const settingsPanelManager = createSettingsPanelManager({
+    settingsPanel,
+    settingGeminiKey,
+    settingGeminiModel,
+    settingProgrammingLanguage,
+    settingAssemblyKey,
+    settingAssemblyModel,
+    settingWindowOpacity,
+    settingWindowOpacityValue,
+    applySettingsShortcutConfig: (settings) => applySettingsShortcutConfig(settings),
+    showFeedback: (message, type) => showFeedback(message, type)
+});
+const transcriptionManager = createTranscriptionManager({
+    transcriptionSourceState,
+    normalizeSourceRule: normalizeAssemblySource,
+    sourceLabelRule: resolveSourceLabel,
+    audioPipeline,
+    transcriptBufferManager,
+    chatMessagesElement,
+    transcriptionToggle,
+    sourceSystemToggle,
+    sourceMicToggle,
+    monitorMasterState,
+    monitorStatusSystem,
+    monitorStatusMic,
+    monitorLiveSystem,
+    monitorLiveMic,
+    monitorLogList,
+    addChatMessage: (type, content, options) => addChatMessage(type, content, options),
+    showFeedback: (message, type) => showFeedback(message, type)
+});
 
 // Initialize
 async function init() {
@@ -228,27 +232,8 @@ async function init() {
     addMonitorLog('info', 'source-defaults', 'Default sources: Host on, Mic off');
 }
 
-function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-}
-
-function normalizeWindowOpacityLevel(value) {
-    const parsedValue = Number.parseInt(String(value ?? ''), 10);
-
-    if (!Number.isFinite(parsedValue)) {
-        return 10;
-    }
-
-    return clamp(parsedValue, 1, 10);
-}
-
 function updateWindowOpacityValueLabel(value) {
-    if (!settingWindowOpacityValue) {
-        return;
-    }
-
-    const opacityLevel = normalizeWindowOpacityLevel(value);
-    settingWindowOpacityValue.textContent = `${opacityLevel}/10`;
+    settingsPanelManager.updateWindowOpacityValueLabel(value);
 }
 
 function normalizeTheme(theme) {
@@ -336,7 +321,7 @@ function setupWindowAdjustments() {
 }
 
 function sourceLabel(source) {
-    return resolveSourceLabel(source);
+    return transcriptionManager.sourceLabel(source);
 }
 
 function isTranscriptMessageType(type) {
@@ -416,455 +401,39 @@ function toggleChatMessageInclusion(messageId) {
 }
 
 function normalizeSource(source) {
-    return normalizeAssemblySource(source);
-}
-
-function isSourceActive(source) {
-    return source === 'system' ? isSystemActive : isMicActive;
-}
-
-function setMicActive(active) {
-    isMicActive = !!active;
-    transcriptionSourceState.setSourceActive('mic', isMicActive);
-}
-
-function setSystemActive(active) {
-    isSystemActive = !!active;
-    transcriptionSourceState.setSourceActive('system', isSystemActive);
-}
-
-function isAnyTranscriptionActive() {
-    return isSystemActive || isMicActive;
-}
-
-function isAnySourceConnecting() {
-    return transcriptionSourceState.isAnySourceConnecting();
-}
-
-function setSourceStatus(source, status, liveText) {
-    const resolvedSource = normalizeSource(source);
-    transcriptionSourceState.setSourceStatus(resolvedSource, status);
-
-    if (typeof liveText === 'string' && liveText.trim().length > 0) {
-        monitorLastText[resolvedSource] = liveText.trim();
-    }
-
-    renderMonitorState();
+    return transcriptionManager.normalizeSource(source);
 }
 
 function updateTranscriptionUI() {
-    const anyActive = isAnyTranscriptionActive();
-    const anyConnecting = !anyActive && isAnySourceConnecting();
-
-    if (transcriptionToggle) {
-        transcriptionToggle.classList.toggle('active', anyActive);
-        transcriptionToggle.classList.toggle('listening', anyActive);
-        transcriptionToggle.classList.toggle('connecting', anyConnecting);
-    }
-
-    if (sourceSystemToggle) {
-        sourceSystemToggle.classList.toggle('selected', selectedSources.system);
-        sourceSystemToggle.classList.toggle('running', isSystemActive);
-    }
-
-    if (sourceMicToggle) {
-        sourceMicToggle.classList.toggle('selected', selectedSources.mic);
-        sourceMicToggle.classList.toggle('running', isMicActive);
-    }
+    transcriptionManager.updateTranscriptionUI();
 }
 
 function renderMonitorState() {
-    updateTranscriptionUI();
-
-    const statusMap = {
-        off: 'Off',
-        connecting: 'Connecting',
-        listening: 'Listening',
-        error: 'Error'
-    };
-
-    if (monitorStatusSystem) {
-        monitorStatusSystem.className = `monitor-status-badge ${sourceStatuses.system}`;
-        monitorStatusSystem.textContent = statusMap[sourceStatuses.system] || 'Off';
-    }
-
-    if (monitorStatusMic) {
-        monitorStatusMic.className = `monitor-status-badge ${sourceStatuses.mic}`;
-        monitorStatusMic.textContent = statusMap[sourceStatuses.mic] || 'Off';
-    }
-
-    if (monitorLiveSystem) {
-        monitorLiveSystem.textContent = monitorLastText.system || 'No transcript yet';
-    }
-
-    if (monitorLiveMic) {
-        monitorLiveMic.textContent = monitorLastText.mic || 'No transcript yet';
-    }
-
-    if (monitorMasterState) {
-        monitorMasterState.classList.remove('active', 'connecting');
-        if (isAnyTranscriptionActive()) {
-            monitorMasterState.textContent = 'Running';
-            monitorMasterState.classList.add('active');
-        } else if (isAnySourceConnecting()) {
-            monitorMasterState.textContent = 'Connecting';
-            monitorMasterState.classList.add('connecting');
-        } else {
-            monitorMasterState.textContent = 'Idle';
-        }
-    }
-}
-
-function formatMonitorTime(timestamp = Date.now()) {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
-
-function safeJson(value) {
-    try {
-        return JSON.stringify(value);
-    } catch (_) {
-        return '';
-    }
+    transcriptionManager.renderMonitorState();
 }
 
 function addMonitorLog(level, event, message, source = null, meta = null, timestamp = Date.now()) {
-    const entry = {
-        level: level || 'info',
-        event: event || 'event',
-        message: message || '',
-        source: source ? normalizeSource(source) : null,
-        meta,
-        timestamp
-    };
-
-    monitorLogEntries.push(entry);
-    if (monitorLogEntries.length > MAX_MONITOR_LOG_ENTRIES) {
-        monitorLogEntries.shift();
-    }
-
-    if (!monitorLogList) {
-        return;
-    }
-
-    monitorLogList.innerHTML = '';
-    const entriesToRender = [...monitorLogEntries].reverse();
-    for (const item of entriesToRender) {
-        const row = document.createElement('div');
-        row.className = `monitor-log-entry ${item.level === 'error' ? 'error' : ''}`.trim();
-
-        const sourcePrefix = item.source ? `${sourceLabel(item.source)} ` : '';
-        const metaText = item.meta ? ` ${safeJson(item.meta)}` : '';
-        row.textContent = `${formatMonitorTime(item.timestamp)} ${sourcePrefix}${item.event}: ${item.message}${metaText}`;
-        monitorLogList.appendChild(row);
-    }
-}
-
-function resetFinalTranscriptBuffer(source) {
-    transcriptBufferManager.resetFinalTranscriptBuffer(source);
-}
-
-function flushFinalTranscript(source, reason = 'pause-timeout') {
-    transcriptBufferManager.flushFinalTranscript(source, reason);
-}
-
-function queueFinalTranscript(source, text) {
-    transcriptBufferManager.queueFinalTranscript(source, text);
+    transcriptionManager.addMonitorLog(level, event, message, source, meta, timestamp);
 }
 
 function flushAllFinalTranscripts(reason = 'flush-all') {
-    transcriptBufferManager.flushAllFinalTranscripts(reason);
+    transcriptionManager.flushAllFinalTranscripts(reason);
 }
 
 function setSourceSelected(source, enabled) {
-    const resolvedSource = normalizeSource(source);
-    transcriptionSourceState.setSourceSelected(resolvedSource, enabled);
-    addMonitorLog('info', 'source-toggle', `${sourceLabel(resolvedSource)} ${enabled ? 'enabled' : 'disabled'}`, resolvedSource);
-    updateTranscriptionUI();
-
-    if (isAnyTranscriptionActive() || sourceStatuses[resolvedSource] === 'connecting') {
-        ensureSourceRunning(resolvedSource, !!enabled).catch((error) => {
-            console.error(`Failed to apply live source toggle for ${resolvedSource}:`, error);
-            addMonitorLog('error', 'source-toggle-failed', error.message, resolvedSource);
-        });
-    }
-}
-
-async function ensureSourceRunning(source, shouldRun) {
-    const resolvedSource = normalizeSource(source);
-    if (shouldRun) {
-        if (resolvedSource === 'system') {
-            await startSystemAudioRecording();
-        } else {
-            await startMicRecording();
-        }
-    } else if (resolvedSource === 'system') {
-        await stopSystemAudioRecording();
-    } else {
-        await stopMicRecording();
-    }
-}
-
-async function startSelectedSources() {
-    if (!selectedSources.system && !selectedSources.mic) {
-        const message = 'Select at least one source (Host or Mic) before starting transcription.';
-        showFeedback(message, 'error');
-        addMonitorLog('error', 'start-blocked', message);
-        return;
-    }
-
-    addMonitorLog('info', 'master-start', 'Starting selected transcription sources');
-
-    if (selectedSources.system) {
-        await ensureSourceRunning('system', true);
-    }
-
-    if (selectedSources.mic) {
-        await ensureSourceRunning('mic', true);
-    }
-}
-
-async function stopAllSources() {
-    addMonitorLog('info', 'master-stop', 'Stopping all active transcription sources');
-    if (isSystemActive || sourceStatuses.system === 'connecting') {
-        await stopSystemAudioRecording();
-    }
-    if (isMicActive || sourceStatuses.mic === 'connecting') {
-        await stopMicRecording();
-    }
+    return transcriptionManager.setSourceSelected(source, enabled);
 }
 
 async function toggleMasterTranscription() {
-    if (isAnyTranscriptionActive() || isAnySourceConnecting()) {
-        await stopAllSources();
-    } else {
-        await startSelectedSources();
-    }
-    updateTranscriptionUI();
-}
-
-function isLikelyCameraTrack(trackLabel) {
-    return audioPipeline.isLikelyCameraTrack(trackLabel);
-}
-
-async function getSystemAudioStream(sourceId) {
-    return audioPipeline.getSystemAudioStream(sourceId);
-}
-
-function resetSourceSampleQueue(source) {
-    audioPipeline.resetSourceSampleQueue(source);
-}
-
-function drainSourceSampleQueue(source, { flushPartial = false } = {}) {
-    audioPipeline.drainSourceSampleQueue(source, { flushPartial });
-}
-
-async function buildAudioProcessor(context, stream, source, activeCheck) {
-    return audioPipeline.buildAudioProcessor(context, stream, source, activeCheck);
-}
-
-function stopAudioResources(ctx, stream, processor) {
-    audioPipeline.stopAudioResources(ctx, stream, processor);
-}
-
-async function startMicRecording() {
-    if (isMicActive || sourceStatuses.mic === 'connecting') return;
-    setSourceStatus('mic', 'connecting', 'Connecting to mic...');
-    addMonitorLog('info', 'start-request', 'Starting mic source', 'mic');
-    resetFinalTranscriptBuffer('mic');
-
-    try {
-        const result = await window.electronAPI.startVoiceRecognition('mic');
-        if (result && result.error) throw new Error(result.error);
-
-        micMediaStream = await navigator.mediaDevices.getUserMedia({
-            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
-        });
-        micAudioContext = new AudioContext();
-        await micAudioContext.resume();
-        resetSourceSampleQueue('mic');
-        micScriptProcessor = await buildAudioProcessor(micAudioContext, micMediaStream, 'mic', () => isMicActive);
-
-        setMicActive(true);
-        addChatMessage('system', 'Mic listening...');
-        showFeedback('Mic on', 'success');
-        addMonitorLog('info', 'source-active', 'Mic source active', 'mic');
-    } catch (error) {
-        console.error('Failed to start mic:', error);
-        showFeedback(`Mic failed: ${error.message}`, 'error');
-        addMonitorLog('error', 'source-failed', error.message, 'mic');
-        stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-        micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-        setMicActive(false);
-        resetSourceSampleQueue('mic');
-        setSourceStatus('mic', 'error', `Mic error: ${error.message}`);
-        try {
-            await window.electronAPI.stopVoiceRecognition('mic');
-        } catch (_) {}
-    }
-
-    updateTranscriptionUI();
-}
-
-async function stopMicRecording() {
-    if (!isMicActive && sourceStatuses.mic !== 'connecting') return;
-    drainSourceSampleQueue('mic', { flushPartial: true });
-    flushFinalTranscript('mic', 'stop-request');
-    stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-    micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-    if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-    micPartialText = '';
-    try {
-        await window.electronAPI.stopVoiceRecognition('mic');
-    } catch (error) {
-        addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop mic source', 'mic');
-    }
-    setMicActive(false);
-    resetSourceSampleQueue('mic');
-    audioPipeline.resetChunkCounter('mic');
-    setSourceStatus('mic', 'off', 'Mic stopped');
-    addMonitorLog('info', 'source-stopped', 'Mic source stopped', 'mic');
-    showFeedback('Mic off', 'info');
-}
-
-async function startSystemAudioRecording() {
-    if (isSystemActive || sourceStatuses.system === 'connecting') return;
-    setSourceStatus('system', 'connecting', 'Connecting to host audio...');
-    addMonitorLog('info', 'start-request', 'Starting host audio source', 'system');
-    resetFinalTranscriptBuffer('system');
-
-    try {
-        const sources = await window.electronAPI.getDesktopSources();
-        if (!sources || sources.length === 0) throw new Error('No desktop sources found');
-        const sourceId = sources[0].id;
-        addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
-
-        const result = await window.electronAPI.startVoiceRecognition('system');
-        if (result && result.error) throw new Error(result.error);
-
-        systemMediaStream = await getSystemAudioStream(sourceId);
-
-        const videoTrack = systemMediaStream.getVideoTracks()[0];
-        if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
-            throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
-        }
-
-        systemMediaStream.getVideoTracks().forEach(t => t.stop());
-
-        systemAudioContext = new AudioContext();
-        await systemAudioContext.resume();
-        resetSourceSampleQueue('system');
-        systemScriptProcessor = await buildAudioProcessor(systemAudioContext, systemMediaStream, 'system', () => isSystemActive);
-
-        setSystemActive(true);
-        addChatMessage('system', 'Listening to host audio...');
-        showFeedback('System audio on', 'success');
-        addMonitorLog('info', 'source-active', 'Host source active', 'system');
-    } catch (error) {
-        console.error('Failed to start system audio:', error);
-        showFeedback(`System audio failed: ${error.message}`, 'error');
-        addMonitorLog('error', 'source-failed', error.message, 'system');
-        stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-        systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-        setSystemActive(false);
-        resetSourceSampleQueue('system');
-        setSourceStatus('system', 'error', `Host error: ${error.message}`);
-        try {
-            await window.electronAPI.stopVoiceRecognition('system');
-        } catch (_) {}
-    }
-
-    updateTranscriptionUI();
-}
-
-async function stopSystemAudioRecording() {
-    if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
-    drainSourceSampleQueue('system', { flushPartial: true });
-    flushFinalTranscript('system', 'stop-request');
-    stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-    systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-    if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-    systemPartialText = '';
-    try {
-        await window.electronAPI.stopVoiceRecognition('system');
-    } catch (error) {
-        addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
-    }
-    setSystemActive(false);
-    resetSourceSampleQueue('system');
-    audioPipeline.resetChunkCounter('system');
-    setSourceStatus('system', 'off', 'Host source stopped');
-    addMonitorLog('info', 'source-stopped', 'Host source stopped', 'system');
-    showFeedback('System audio off', 'info');
-}
-
-function handleVoskPartial(data) {
-    const source = normalizeSource(data?.source);
-    const text = data?.text;
-    if (!text || text.trim().length === 0) return;
-    if (!isSourceActive(source)) return;
-
-    const trimmed = text.trim();
-    const icon = source === 'system' ? '\u{1F50A}' : '\u{1F3A4}';
-    monitorLastText[source] = `Live: ${trimmed}`;
-    renderMonitorState();
-
-    if (source === 'mic') {
-        micPartialText = trimmed;
-        if (!micPartialDiv) {
-            micPartialDiv = createPartialDiv(icon);
-            chatMessagesElement.appendChild(micPartialDiv);
-        }
-        micPartialDiv.querySelector('.message-content').textContent = trimmed;
-    } else {
-        systemPartialText = trimmed;
-        if (!systemPartialDiv) {
-            systemPartialDiv = createPartialDiv(icon);
-            chatMessagesElement.appendChild(systemPartialDiv);
-        }
-        systemPartialDiv.querySelector('.message-content').textContent = trimmed;
-    }
-    chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
-}
-
-function createPartialDiv(icon) {
-    const div = document.createElement('div');
-    div.className = 'chat-message voice-message partial';
-    const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    div.innerHTML = `
-        <div class="message-header">
-            <span class="message-icon">${icon}</span>
-            <span class="message-time">${ts}</span>
-            <span class="partial-indicator">Live</span>
-        </div>
-        <div class="message-content partial-text"></div>
-    `;
-    return div;
+    return transcriptionManager.toggleMasterTranscription();
 }
 
 function handleVoskFinal(data) {
-    const source = normalizeSource(data?.source);
-    const text = data?.text;
-    if (!text || text.trim().length === 0) return;
+    transcriptionManager.handleVoskFinal(data);
+}
 
-    const finalText = text.trim();
-    monitorLastText[source] = `Final: ${finalText}`;
-    renderMonitorState();
-    addMonitorLog('info', 'final', 'Final transcript received', source, {
-        chars: finalText.length
-    });
-
-    if (source === 'mic') {
-        if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-        micPartialText = '';
-    } else {
-        if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-        systemPartialText = '';
-    }
-    queueFinalTranscript(source, finalText);
+function handleVoskPartial(data) {
+    transcriptionManager.handleVoskPartial(data);
 }
 
 // Screenshot functions
@@ -1125,146 +694,15 @@ async function getConversationInsights() {
 // SETTINGS FUNCTIONS
 
 async function openSettings() {
-    if (!settingsPanel) return;
-
-    try {
-        const settings = await window.electronAPI.getSettings();
-        if (settings && !settings.error) {
-            applySettingsShortcutConfig(settings);
-            if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
-            populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
-            populateProgrammingLanguageOptions(
-                settings.programmingLanguages,
-                settings.programmingLanguage || settings.defaultProgrammingLanguage
-            );
-            if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
-            populateAssemblyAiSpeechModelOptions(
-                settings.assemblyAiSpeechModels,
-                settings.assemblyAiSpeechModel || settings.defaultAssemblyAiSpeechModel
-            );
-            if (settingWindowOpacity) {
-                settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
-            }
-            updateWindowOpacityValueLabel(settings.windowOpacityLevel);
-        }
-    } catch (error) {
-        console.error('Failed to load settings:', error);
-    }
-
-    settingsPanel.classList.remove('hidden');
+    await settingsPanelManager.openSettings();
 }
 
 function closeSettings() {
-    if (settingsPanel) settingsPanel.classList.add('hidden');
-}
-
-function populateGeminiModelOptions(models, selectedModel) {
-    if (!settingGeminiModel) {
-        return;
-    }
-
-    settingGeminiModel.innerHTML = '';
-
-    const configuredModels = Array.isArray(models) ? models : [];
-    if (configuredModels.length === 0) {
-        throw new Error('Gemini models are not configured.');
-    }
-
-    configuredModels.forEach((modelName) => {
-        const option = document.createElement('option');
-        option.value = modelName;
-        option.textContent = modelName;
-        settingGeminiModel.appendChild(option);
-    });
-
-    settingGeminiModel.value = configuredModels.includes(selectedModel)
-        ? selectedModel
-        : configuredModels[0];
-}
-
-function populateProgrammingLanguageOptions(languages, selectedLanguage) {
-    if (!settingProgrammingLanguage) {
-        return;
-    }
-
-    settingProgrammingLanguage.innerHTML = '';
-
-    const configuredLanguages = Array.isArray(languages) ? languages : [];
-    if (configuredLanguages.length === 0) {
-        throw new Error('Programming languages are not configured.');
-    }
-
-    configuredLanguages.forEach((languageName) => {
-        const option = document.createElement('option');
-        option.value = languageName;
-        option.textContent = languageName;
-        settingProgrammingLanguage.appendChild(option);
-    });
-
-    settingProgrammingLanguage.value = configuredLanguages.includes(selectedLanguage)
-        ? selectedLanguage
-        : configuredLanguages[0];
-}
-
-function populateAssemblyAiSpeechModelOptions(models, selectedModel) {
-    if (!settingAssemblyModel) {
-        return;
-    }
-
-    settingAssemblyModel.innerHTML = '';
-
-    const configuredModels = Array.isArray(models) ? models : [];
-    if (configuredModels.length === 0) {
-        throw new Error('AssemblyAI speech models are not configured.');
-    }
-
-    configuredModels.forEach((modelName) => {
-        const option = document.createElement('option');
-        option.value = modelName;
-        option.textContent = modelName;
-        settingAssemblyModel.appendChild(option);
-    });
-
-    settingAssemblyModel.value = configuredModels.includes(selectedModel)
-        ? selectedModel
-        : configuredModels[0];
+    settingsPanelManager.closeSettings();
 }
 
 async function saveSettings() {
-    try {
-        if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
-            throw new Error('Gemini models are not configured.');
-        }
-
-        if (!settingProgrammingLanguage || settingProgrammingLanguage.options.length === 0) {
-            throw new Error('Programming languages are not configured.');
-        }
-
-        if (!settingAssemblyModel || settingAssemblyModel.options.length === 0) {
-            throw new Error('AssemblyAI speech models are not configured.');
-        }
-
-        const settings = {
-            geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
-            assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
-            geminiModel: settingGeminiModel.value,
-            programmingLanguage: settingProgrammingLanguage.value,
-            assemblyAiSpeechModel: settingAssemblyModel.value,
-            windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
-        };
-
-        const result = await window.electronAPI.saveSettings(settings);
-
-        if (result.success) {
-            showFeedback('Settings saved. AI changes are active now; voice model applies next session.', 'success');
-            closeSettings();
-        } else {
-            showFeedback(`Failed to save: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        console.error('Failed to save settings:', error);
-        showFeedback('Failed to save settings', 'error');
-    }
+    await settingsPanelManager.saveSettings();
 }
 
 // UI Helper functions
@@ -1586,24 +1024,7 @@ function setupIpcListeners() {
 
     // AssemblyAI streaming transcription event listeners
     window.electronAPI.onVoskStatus((data) => {
-        const source = normalizeSource(data?.source);
-        const status = data?.status;
-        const message = data?.message || '';
-        console.log(`STT status [${source}]:`, status, message);
-
-        if (status === 'loading') {
-            setSourceStatus(source, 'connecting', `Connecting (${sourceLabel(source)})...`);
-            showFeedback(`Connecting (${sourceLabel(source)})...`, 'info');
-            addMonitorLog('info', 'status-loading', message || 'Connection requested', source);
-        } else if (status === 'listening') {
-            setSourceStatus(source, 'listening', `Listening (${sourceLabel(source)})...`);
-            showFeedback(`Listening (${sourceLabel(source)})...`, 'success');
-            addMonitorLog('info', 'status-listening', message || 'Source listening', source);
-        } else if (status === 'stopped') {
-            setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
-            showFeedback(`Stopped (${sourceLabel(source)})`, 'info');
-            addMonitorLog('info', 'status-stopped', message || 'Source stopped', source);
-        }
+        transcriptionManager.handleVoskStatus(data);
     });
 
     window.electronAPI.onVoskPartial((data) => {
@@ -1615,59 +1036,11 @@ function setupIpcListeners() {
     });
 
     window.electronAPI.onVoskError((data) => {
-        const source = normalizeSource(data?.source);
-        const error = data?.error || 'Unknown transcription error';
-        console.error(`STT error [${source}]:`, error);
-        showFeedback(`Error (${sourceLabel(source)}): ${error}`, 'error');
-        addChatMessage('system', `Transcription error (${sourceLabel(source)}): ${error}`);
-        addMonitorLog('error', 'status-error', error, source);
-        flushFinalTranscript(source, 'status-error');
-
-        if (source === 'system') {
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-            if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-            systemPartialText = '';
-            setSystemActive(false);
-            resetSourceSampleQueue('system');
-            resetFinalTranscriptBuffer('system');
-        } else {
-            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-            micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-            if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-            micPartialText = '';
-            setMicActive(false);
-            resetSourceSampleQueue('mic');
-            resetFinalTranscriptBuffer('mic');
-        }
-
-        setSourceStatus(source, 'error', `Error: ${error}`);
-        updateTranscriptionUI();
+        transcriptionManager.handleVoskError(data);
     });
 
     window.electronAPI.onVoskStopped((data) => {
-        const source = normalizeSource(data?.source);
-        console.log(`STT stopped [${source}]`);
-        flushFinalTranscript(source, 'stopped-event');
-        if (source === 'system') {
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-            if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-            systemPartialText = '';
-            setSystemActive(false);
-            resetSourceSampleQueue('system');
-            resetFinalTranscriptBuffer('system');
-        } else {
-            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-            micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-            if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-            micPartialText = '';
-            setMicActive(false);
-            resetSourceSampleQueue('mic');
-            resetFinalTranscriptBuffer('mic');
-        }
-        setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
-        addMonitorLog('info', 'stopped-event', 'Stop acknowledged by backend', source);
+        transcriptionManager.handleVoskStopped(data);
     });
 
     if (window.electronAPI.onToggleVoiceRecognition) {

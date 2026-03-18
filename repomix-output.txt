@@ -78,6 +78,7 @@ src/windows/assistant/preload/actions.js
 src/windows/assistant/preload/create-electron-api.js
 src/windows/assistant/preload/helpers.js
 src/windows/assistant/preload/listeners.js
+src/windows/assistant/renderer-globals.d.ts
 src/windows/assistant/renderer.html
 src/windows/assistant/renderer.js
 src/windows/assistant/renderer/features/ai-context/context-bundle.js
@@ -87,6 +88,9 @@ src/windows/assistant/renderer/features/ai-context/toggle-ui.js
 src/windows/assistant/renderer/features/assembly-ai/audio-pipeline.js
 src/windows/assistant/renderer/features/assembly-ai/source-state.js
 src/windows/assistant/renderer/features/assembly-ai/transcript-buffer.js
+src/windows/assistant/renderer/features/chat/chat-ui-manager.js
+src/windows/assistant/renderer/features/layout/window-adjustments.js
+src/windows/assistant/renderer/features/settings/shortcut-manager.js
 src/windows/assistant/styles.css
 src/windows/assistant/window.js
 src/windows/legacy/renderer-webspeech-broken.js
@@ -187,223 +191,6 @@ If successful, you should see:
 ---
 
 **Note:** This is for educational purposes and authorized use only.
-
-================
-File: BUILD_INSTRUCTIONS.md
-================
-# Build Instructions - Chrome Disguised Executable
-
-This guide will help you build the app as a disguised Chrome executable.
-
-## Prerequisites
-
-1. **Node.js and npm** installed
-2. **All dependencies** installed (`npm install`)
-3. **Chrome icon files** (see below)
-
-## Step 1: Get Chrome Icon
-
-You need to obtain the official Chrome icon in multiple formats:
-
-### Option A: Extract from Chrome Installation
-1. Navigate to: `C:\Program Files\Google\Chrome\Application\`
-2. Find `chrome.exe`
-3. Use a tool like ResourceHacker or IconsExtract to extract the icon
-4. Save as `chrome.ico`
-
-### Option B: Download Chrome Icon
-1. Go to: https://icon-icons.com/icon/chrome/194617
-2. Download in these formats:
-   - **Windows**: `chrome.ico` (256x256 or higher)
-   - **macOS**: `chrome.icns`
-   - **Linux**: `chrome.png` (512x512)
-
-### Step 2: Place Icons in Assets Folder
-
-Copy the icon files to the `assets/` folder:
-```
-d:\Open-Cluely\assets\
-  ├── chrome.ico   (Windows)
-  ├── chrome.icns  (macOS)
-  └── chrome.png   (Linux)
-```
-
-## Step 3: Build the Application
-
-### For Windows (Portable EXE):
-```bash
-npm run build:win
-```
-
-This will create: `dist/GoogleChrome.exe`
-
-### Build Options:
-
-**Portable (recommended for stealth):**
-```bash
-npm run build:win
-```
-- Creates: `dist/GoogleChrome.exe`
-- No installation required
-- Can be run from any location
-- No registry entries
-
-**NSIS Installer (for permanent installation):**
-```bash
-npm run build -- --win nsis
-```
-- Creates: `dist/Google Chrome (2) Setup.exe`
-- Installs to Program Files
-- Adds to Start Menu
-
-## Step 4: Configure Environment
-
-Before building, make sure your `.env` file is configured:
-
-```env
-GEMINI_API_KEY=your_api_key_here
-```
-
-The `.env` file will be automatically included in the build.
-
-## Step 5: Run the Built Application
-
-### Portable Version:
-1. Navigate to `dist/`
-2. Run `GoogleChrome.exe`
-3. The app will run with Chrome icon and name
-
-### Running in Background:
-The app is configured to:
-- Run with Chrome icon
-- Show as "Google Chrome (2)" in Task Manager
-- Be published by "Google LLC" (in properties)
-- Use portable mode (no installation)
-- Support hidden launch mode via `START_HIDDEN=true` or `--start-hidden`
-
-## Build Configuration Details
-
-The app is configured with:
-
-- **Product Name**: Google Chrome (2)
-- **Executable Name**: GoogleChrome.exe
-- **App ID**: com.google.chrome
-- **Publisher**: Google LLC
-- **Icon**: Chrome logo
-- **Target**: Portable (no installer)
-
-## Stealth Features
-
-✅ Chrome icon in taskbar
-✅ "Google Chrome (2)" in Task Manager
-✅ Google LLC as publisher
-✅ Portable (no installation traces)
-✅ Runs in background
-✅ Transparent overlay
-
-## Testing the Build
-
-After building:
-
-1. **Check the file**:
-   - Name: `GoogleChrome.exe`
-   - Icon: Chrome logo
-   - Location: `dist/GoogleChrome.exe`
-
-2. **Run it**:
-   ```bash
-   cd dist
-   ./GoogleChrome.exe
-   ```
-
-3. **Verify in Task Manager**:
-   - Press `Ctrl + Shift + Esc`
-   - Look for "Google Chrome (2)"
-   - Should have Chrome icon
-
-## Advanced: Custom Build Options
-
-### Change the disguise name:
-Edit `package.json`:
-```json
-"productName": "Your Custom Name"
-```
-
-### Change the output filename:
-```json
-"portable": {
-  "artifactName": "YourName.exe"
-}
-```
-
-### Add auto-start on Windows login:
-Add this to your code in `main.js`:
-```javascript
-const { app } = require('electron');
-
-app.setLoginItemSettings({
-  openAtLogin: true,
-  path: process.execPath
-});
-```
-
-## Troubleshooting
-
-### Icon not showing:
-- Make sure `assets/chrome.ico` exists
-- Icon must be 256x256 or higher
-- Try rebuilding: `npm run build -- --win portable`
-
-### Build fails:
-- Run: `npm install electron-builder --save-dev`
-- Clear cache: `npm run build -- --win portable --clean`
-
-### .env file missing in build:
-- Check `extraResources` in package.json
-- Make sure `.env` file exists in root directory
-
-## Security Notes
-
-⚠️ **Important**: This tool is for educational purposes and authorized use only (interviews, meetings with consent).
-
-- Use responsibly
-- Obtain consent when required
-- Follow local laws and regulations
-- Do not use for malicious purposes
-
-## File Locations After Build
-
-```
-d:\Open-Cluely\
-├── dist/
-│   ├── GoogleChrome.exe          ← Your built app
-│   ├── win-unpacked/             ← Unpacked files (can delete)
-│   └── builder-debug.yml         ← Build logs
-├── assets/
-│   └── chrome.ico                ← Chrome icon
-├── src/                          ← Source code
-└── package.json                  ← Build config
-```
-
-## Distribution
-
-To share the app:
-1. Copy `GoogleChrome.exe` from `dist/` folder
-2. Make sure `.env` with GEMINI_API_KEY is in the same directory
-3. Run the executable
-
-## Updating
-
-To rebuild after changes:
-```bash
-npm run build:win
-```
-
-This will overwrite the previous build in `dist/`.
-
----
-
-**Version:** 1.0.0
 
 ================
 File: notes.md
@@ -799,29 +586,6 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
 
 module.exports = {
   createScreenshotManager
-};
-
-================
-File: src/main-process/features/window/window-constants.js
-================
-const WINDOW_DEFAULT_WIDTH = 900;
-const WINDOW_DEFAULT_HEIGHT = 400;
-const WINDOW_MIN_WIDTH = 600;
-const WINDOW_MIN_HEIGHT = 250;
-const WINDOW_OPACITY_LEVEL_MIN = 1;
-const WINDOW_OPACITY_LEVEL_MAX = 10;
-const DEFAULT_WINDOW_OPACITY_LEVEL = 10;
-const STEALTH_OPACITY_LEVEL_DELTA = 4;
-
-module.exports = {
-  WINDOW_DEFAULT_WIDTH,
-  WINDOW_DEFAULT_HEIGHT,
-  WINDOW_MIN_WIDTH,
-  WINDOW_MIN_HEIGHT,
-  WINDOW_OPACITY_LEVEL_MIN,
-  WINDOW_OPACITY_LEVEL_MAX,
-  DEFAULT_WINDOW_OPACITY_LEVEL,
-  STEALTH_OPACITY_LEVEL_DELTA
 };
 
 ================
@@ -2042,6 +1806,17 @@ module.exports = {
 };
 
 ================
+File: src/windows/assistant/renderer-globals.d.ts
+================
+export {};
+
+declare global {
+  interface Window {
+    electronAPI: any;
+  }
+}
+
+================
 File: src/windows/assistant/renderer/features/ai-context/context-bundle.js
 ================
 import {
@@ -2705,6 +2480,624 @@ export function createTranscriptBufferManager({
     queueFinalTranscript,
     resetFinalTranscriptBuffer
   };
+}
+
+================
+File: src/windows/assistant/renderer/features/chat/chat-ui-manager.js
+================
+export function createChatUiManager({
+    chatContainer,
+    chatMessagesElement,
+    chatComposer,
+    chatManualInput,
+    chatManualSend,
+    messageStore,
+    maxChatInputHeight,
+    escapeHtml,
+    updateUi,
+    onMessagesChanged,
+    showFeedback,
+    addMonitorLog
+}) {
+    function formatResponse(text) {
+        return String(text || '')
+            .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/\n/g, '<br>');
+    }
+
+    function isChatNearBottom(threshold = 28) {
+        if (!chatMessagesElement) {
+            return true;
+        }
+
+        const distanceFromBottom =
+            chatMessagesElement.scrollHeight - chatMessagesElement.clientHeight - chatMessagesElement.scrollTop;
+        return distanceFromBottom <= threshold;
+    }
+
+    function addChatMessage(type, content, options = {}) {
+        if (!chatMessagesElement) {
+            return null;
+        }
+
+        const shouldAutoScroll = isChatNearBottom();
+
+        const timestampDate = new Date();
+        const record = messageStore.add(type, content, {
+            id: options.id,
+            timestamp: timestampDate,
+            canToggleAi: options.canToggleAi,
+            includeInAi: options.includeInAi,
+            screenshotId: options.screenshotId
+        });
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${type}-message`;
+        messageDiv.dataset.messageId = record.id;
+        if (record.canToggleAi) {
+            messageDiv.classList.add('ai-toggleable');
+            messageDiv.classList.add(record.includeInAi ? 'ai-included' : 'ai-excluded');
+        }
+
+        const timestamp = timestampDate.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        let icon = '\u2139\uFE0F';
+        let label = '';
+        let contentClass = 'message-content';
+        let safeContent = escapeHtml(content);
+
+        switch (type) {
+            case 'voice':
+            case 'voice-mic':
+                icon = '\u{1F3A4}';
+                label = 'You';
+                break;
+
+            case 'voice-system':
+                icon = '\u{1F50A}';
+                label = 'Host';
+                break;
+
+            case 'screenshot':
+                icon = '\u{1F4F8}';
+                break;
+
+            case 'ai-response':
+                icon = '\u{1F916}';
+                contentClass = 'message-content ai-response';
+                safeContent = formatResponse(content);
+                break;
+
+            case 'system':
+                icon = '\u2139\uFE0F';
+                contentClass = 'message-content system-message';
+                break;
+        }
+
+        const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
+        const toggleHtml = record.canToggleAi
+            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? 'AI' : 'Off'}</button>`
+            : '';
+        const exclusionHtml = record.canToggleAi
+            ? '<div class="ai-excluded-note">Excluded from AI context</div>'
+            : '';
+
+        const messageContent = `
+        <div class="message-header">
+            <span class="message-icon">${icon}</span>
+            ${labelHtml}
+            ${toggleHtml}
+            <span class="message-time">${timestamp}</span>
+        </div>
+        <div class="${contentClass}">${exclusionHtml}${safeContent}</div>
+    `;
+
+        messageDiv.innerHTML = messageContent;
+        chatMessagesElement.appendChild(messageDiv);
+
+        if (shouldAutoScroll) {
+            chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+        }
+
+        onMessagesChanged?.(messageStore.getMessages());
+        updateUi?.();
+
+        return record;
+    }
+
+    function updateChatComposerHeight() {
+        if (!chatContainer || !chatComposer) {
+            return;
+        }
+
+        const composerHeight = Math.max(0, Math.round(chatComposer.getBoundingClientRect().height));
+        if (composerHeight > 0) {
+            chatContainer.style.setProperty('--chat-composer-height', `${composerHeight}px`);
+        }
+    }
+
+    function autoResizeManualInput() {
+        if (!chatManualInput) {
+            return;
+        }
+
+        chatManualInput.style.height = 'auto';
+        const nextHeight = Math.min(chatManualInput.scrollHeight, maxChatInputHeight);
+        chatManualInput.style.height = `${Math.max(24, nextHeight)}px`;
+        chatManualInput.style.overflowY = chatManualInput.scrollHeight > maxChatInputHeight ? 'auto' : 'hidden';
+        updateChatComposerHeight();
+    }
+
+    function updateManualComposerState() {
+        if (!chatManualInput || !chatManualSend) {
+            return;
+        }
+
+        chatManualSend.disabled = String(chatManualInput.value || '').trim().length === 0;
+    }
+
+    function submitManualContextMessage() {
+        if (!chatManualInput) {
+            return;
+        }
+
+        const text = String(chatManualInput.value || '').trim();
+        if (!text) {
+            showFeedback?.('Type a message first', 'error');
+            return;
+        }
+
+        addChatMessage('voice-mic', text);
+        addMonitorLog?.('info', 'manual-context-added', 'Manual context message added', 'mic', {
+            chars: text.length
+        });
+        showFeedback?.('Manual context added', 'success');
+
+        chatManualInput.value = '';
+        autoResizeManualInput();
+        updateManualComposerState();
+        chatManualInput.focus();
+    }
+
+    return {
+        addChatMessage,
+        autoResizeManualInput,
+        submitManualContextMessage,
+        updateManualComposerState
+    };
+}
+
+================
+File: src/windows/assistant/renderer/features/layout/window-adjustments.js
+================
+export function createWindowAdjustmentManager({
+    windowResizeHandles,
+    chatContainer,
+    minWindowWidth,
+    minWindowHeight,
+    onViewportResize
+}) {
+    let activeWindowResize = null;
+    let pendingWindowBounds = null;
+    let windowResizeFrame = null;
+
+    function setupWindowAdjustments() {
+        setupWindowResizeHandles();
+        enforceChatFillLayout();
+        window.addEventListener('resize', () => {
+            enforceChatFillLayout();
+            onViewportResize?.();
+        });
+    }
+
+    function enforceChatFillLayout() {
+        if (!chatContainer) {
+            return;
+        }
+
+        // Ensure stale manual-resize inline styles never pin chat height.
+        chatContainer.style.removeProperty('height');
+    }
+
+    function setupWindowResizeHandles() {
+        if (!window.electronAPI || !windowResizeHandles.length) {
+            return;
+        }
+
+        windowResizeHandles.forEach((handle) => {
+            handle.addEventListener('pointerdown', startWindowResize);
+        });
+    }
+
+    async function startWindowResize(event) {
+        if (!window.electronAPI?.getWindowBounds || !window.electronAPI?.setWindowBounds) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const handleElement = event.currentTarget;
+        if (!handleElement) {
+            return;
+        }
+
+        const direction = handleElement.dataset.resizeHandle;
+        const pointerId = event.pointerId;
+        const startScreenX = event.screenX;
+        const startScreenY = event.screenY;
+        const startBounds = await window.electronAPI.getWindowBounds();
+        if (!startBounds || startBounds.error) {
+            console.error('Failed to get initial window bounds:', startBounds?.error);
+            return;
+        }
+
+        activeWindowResize = {
+            direction,
+            pointerId,
+            startScreenX,
+            startScreenY,
+            startBounds,
+            handleElement
+        };
+
+        document.body.classList.add('window-resizing');
+        handleElement.setPointerCapture?.(pointerId);
+
+        document.addEventListener('pointermove', onWindowResizeMove);
+        document.addEventListener('pointerup', stopWindowResize);
+        document.addEventListener('pointercancel', stopWindowResize);
+    }
+
+    function onWindowResizeMove(event) {
+        if (!activeWindowResize || event.pointerId !== activeWindowResize.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const deltaX = event.screenX - activeWindowResize.startScreenX;
+        const deltaY = event.screenY - activeWindowResize.startScreenY;
+        const nextBounds = calculateWindowResizeBounds(
+            activeWindowResize.startBounds,
+            activeWindowResize.direction,
+            deltaX,
+            deltaY
+        );
+
+        scheduleWindowResize(nextBounds);
+    }
+
+    function calculateWindowResizeBounds(startBounds, direction, deltaX, deltaY) {
+        let { x, y, width, height } = startBounds;
+
+        if (direction.includes('e')) {
+            width = Math.max(minWindowWidth, startBounds.width + deltaX);
+        }
+
+        if (direction.includes('s')) {
+            height = Math.max(minWindowHeight, startBounds.height + deltaY);
+        }
+
+        if (direction.includes('w')) {
+            const nextWidth = Math.max(minWindowWidth, startBounds.width - deltaX);
+            x = startBounds.x + (startBounds.width - nextWidth);
+            width = nextWidth;
+        }
+
+        if (direction.includes('n')) {
+            const nextHeight = Math.max(minWindowHeight, startBounds.height - deltaY);
+            y = startBounds.y + (startBounds.height - nextHeight);
+            height = nextHeight;
+        }
+
+        return {
+            x: Math.round(x),
+            y: Math.round(y),
+            width: Math.round(width),
+            height: Math.round(height)
+        };
+    }
+
+    function scheduleWindowResize(bounds) {
+        pendingWindowBounds = bounds;
+        if (windowResizeFrame) {
+            return;
+        }
+
+        windowResizeFrame = window.requestAnimationFrame(async () => {
+            windowResizeFrame = null;
+            const nextBounds = pendingWindowBounds;
+            pendingWindowBounds = null;
+
+            if (!nextBounds) {
+                return;
+            }
+
+            const result = await window.electronAPI.setWindowBounds(nextBounds);
+            if (result && result.error) {
+                console.error('Failed to set window bounds:', result.error);
+            }
+        });
+    }
+
+    function stopWindowResize(event) {
+        if (!activeWindowResize) {
+            return;
+        }
+
+        if (event.pointerId && event.pointerId !== activeWindowResize.pointerId) {
+            return;
+        }
+
+        activeWindowResize.handleElement?.releasePointerCapture?.(activeWindowResize.pointerId);
+        activeWindowResize = null;
+        pendingWindowBounds = null;
+
+        if (windowResizeFrame) {
+            window.cancelAnimationFrame(windowResizeFrame);
+            windowResizeFrame = null;
+        }
+
+        document.body.classList.remove('window-resizing');
+        document.removeEventListener('pointermove', onWindowResizeMove);
+        document.removeEventListener('pointerup', stopWindowResize);
+        document.removeEventListener('pointercancel', stopWindowResize);
+    }
+
+    return {
+        setupWindowAdjustments
+    };
+}
+
+================
+File: src/windows/assistant/renderer/features/settings/shortcut-manager.js
+================
+function normalizeShortcutToken(token) {
+    const normalized = String(token || '').trim().toLowerCase();
+    const aliasMap = {
+        left: 'arrowleft',
+        right: 'arrowright',
+        up: 'arrowup',
+        down: 'arrowdown',
+        escape: 'escape',
+        esc: 'escape',
+        enter: 'enter',
+        return: 'enter',
+        plus: '+',
+        space: ' '
+    };
+
+    if (Object.prototype.hasOwnProperty.call(aliasMap, normalized)) {
+        return aliasMap[normalized];
+    }
+
+    return normalized;
+}
+
+function parseAcceleratorBinding(accelerator) {
+    if (typeof accelerator !== 'string' || accelerator.trim().length === 0) {
+        return null;
+    }
+
+    const tokens = accelerator
+        .split('+')
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+    if (tokens.length === 0) {
+        return null;
+    }
+
+    const binding = {
+        ctrl: false,
+        meta: false,
+        ctrlOrMeta: false,
+        alt: false,
+        shift: false,
+        key: ''
+    };
+
+    tokens.forEach((token) => {
+        const normalized = String(token).toLowerCase();
+        switch (normalized) {
+            case 'commandorcontrol':
+                binding.ctrlOrMeta = true;
+                break;
+            case 'ctrl':
+            case 'control':
+                binding.ctrl = true;
+                break;
+            case 'command':
+            case 'cmd':
+            case 'meta':
+            case 'super':
+                binding.meta = true;
+                break;
+            case 'alt':
+            case 'option':
+                binding.alt = true;
+                break;
+            case 'shift':
+                binding.shift = true;
+                break;
+            default:
+                binding.key = normalizeShortcutToken(normalized);
+                break;
+        }
+    });
+
+    if (!binding.key) {
+        return null;
+    }
+
+    return binding;
+}
+
+function normalizeKeyboardShortcutDefinition(shortcut) {
+    if (!shortcut || typeof shortcut !== 'object') {
+        return null;
+    }
+
+    const id = typeof shortcut.id === 'string' ? shortcut.id.trim() : '';
+    const accelerator = typeof shortcut.accelerator === 'string' ? shortcut.accelerator.trim() : '';
+    if (!id || !accelerator) {
+        return null;
+    }
+
+    const buttonLabel = typeof shortcut.buttonLabel === 'string' && shortcut.buttonLabel.trim()
+        ? shortcut.buttonLabel.trim()
+        : id;
+    const description = typeof shortcut.description === 'string' ? shortcut.description.trim() : '';
+
+    return {
+        id,
+        accelerator,
+        buttonLabel,
+        description
+    };
+}
+
+function formatShortcutTokenForDisplay(token) {
+    const normalized = String(token || '').trim().toLowerCase();
+    const displayMap = {
+        commandorcontrol: navigator.platform.toLowerCase().includes('mac') ? 'Cmd' : 'Ctrl',
+        command: 'Cmd',
+        cmd: 'Cmd',
+        control: 'Ctrl',
+        ctrl: 'Ctrl',
+        alt: navigator.platform.toLowerCase().includes('mac') ? 'Option' : 'Alt',
+        option: 'Option',
+        shift: 'Shift',
+        left: 'Left',
+        right: 'Right',
+        up: 'Up',
+        down: 'Down'
+    };
+
+    if (Object.prototype.hasOwnProperty.call(displayMap, normalized)) {
+        return displayMap[normalized];
+    }
+
+    if (normalized.length === 1) {
+        return normalized.toUpperCase();
+    }
+
+    return token;
+}
+
+function formatShortcutForDisplay(accelerator) {
+    return String(accelerator || '')
+        .split('+')
+        .map((token) => token.trim())
+        .filter(Boolean)
+        .map((token) => formatShortcutTokenForDisplay(token))
+        .join('+');
+}
+
+export function createShortcutManager({ settingsShortcutsList }) {
+    let configuredKeyboardShortcuts = [];
+    const shortcutBindingsById = new Map();
+
+    function renderKeyboardShortcutsInSettings() {
+        if (!settingsShortcutsList) {
+            return;
+        }
+
+        settingsShortcutsList.innerHTML = '';
+
+        if (!configuredKeyboardShortcuts.length) {
+            const emptyState = document.createElement('div');
+            emptyState.className = 'settings-shortcuts-empty';
+            emptyState.textContent = 'No shortcuts configured.';
+            settingsShortcutsList.appendChild(emptyState);
+            return;
+        }
+
+        configuredKeyboardShortcuts.forEach((shortcut) => {
+            const row = document.createElement('div');
+            row.className = 'settings-shortcut-row';
+
+            const buttonLabel = document.createElement('span');
+            buttonLabel.className = 'settings-shortcut-button';
+            buttonLabel.textContent = shortcut.buttonLabel;
+            if (shortcut.description) {
+                buttonLabel.title = shortcut.description;
+            }
+
+            const shortcutValue = document.createElement('span');
+            shortcutValue.className = 'settings-shortcut-key';
+            shortcutValue.textContent = formatShortcutForDisplay(shortcut.accelerator);
+
+            row.appendChild(buttonLabel);
+            row.appendChild(shortcutValue);
+            settingsShortcutsList.appendChild(row);
+        });
+    }
+
+    function setConfiguredKeyboardShortcuts(shortcuts) {
+        const normalizedShortcuts = Array.isArray(shortcuts)
+            ? shortcuts
+                .map((shortcut) => normalizeKeyboardShortcutDefinition(shortcut))
+                .filter(Boolean)
+            : [];
+
+        configuredKeyboardShortcuts = normalizedShortcuts;
+        shortcutBindingsById.clear();
+
+        normalizedShortcuts.forEach((shortcut) => {
+            const parsedBinding = parseAcceleratorBinding(shortcut.accelerator);
+            if (parsedBinding) {
+                shortcutBindingsById.set(shortcut.id, parsedBinding);
+            }
+        });
+
+        renderKeyboardShortcutsInSettings();
+    }
+
+    function getShortcutBinding(shortcutId) {
+        return shortcutBindingsById.get(shortcutId) || null;
+    }
+
+    function isShortcutPressed(event, shortcutId) {
+        const binding = getShortcutBinding(shortcutId);
+        if (!binding) {
+            return false;
+        }
+
+        const eventKey = normalizeShortcutToken(event.key);
+        if (eventKey !== binding.key) {
+            return false;
+        }
+
+        if (binding.ctrlOrMeta) {
+            if (!event.ctrlKey && !event.metaKey) {
+                return false;
+            }
+        } else if (event.ctrlKey !== binding.ctrl || event.metaKey !== binding.meta) {
+            return false;
+        }
+
+        return event.altKey === binding.alt && event.shiftKey === binding.shift;
+    }
+
+    function applySettingsShortcutConfig(settings) {
+        if (!settings || settings.error) {
+            return;
+        }
+
+        setConfiguredKeyboardShortcuts(settings.keyboardShortcuts);
+    }
+
+    return {
+        applySettingsShortcutConfig,
+        isShortcutPressed
+    };
 }
 
 ================
@@ -4698,203 +5091,6 @@ const transcribe = async (
 };
 
 ================
-File: src/bootstrap/environment.js
-================
-const fs = require('fs');
-const path = require('path');
-const dotenv = require('dotenv');
-
-const OPTIONAL_ENV_DEFAULTS = Object.freeze({
-  HIDE_FROM_SCREEN_CAPTURE: 'true',
-  START_HIDDEN: 'false',
-  MAX_SCREENSHOTS: '50',
-  SCREENSHOT_DELAY: '300',
-  NODE_ENV: 'production',
-  NODE_OPTIONS: '--max-old-space-size=4096'
-});
-
-const REQUIRED_ENV_KEYS = Object.freeze([
-  'GEMINI_API_KEY',
-  'ASSEMBLY_AI_API_KEY'
-]);
-
-function normalizeGeminiApiKeys(value) {
-  const sourceValues = Array.isArray(value)
-    ? value
-    : String(value ?? '').split(',');
-  const seen = new Set();
-  const keys = [];
-
-  for (const rawValue of sourceValues) {
-    const key = String(rawValue || '').trim();
-    if (!key || seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    keys.push(key);
-  }
-
-  return keys;
-}
-
-function getEnvPath(app) {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, '.env')
-    : path.join(__dirname, '..', '..', '.env');
-}
-
-function parseBoolean(value, defaultValue) {
-  if (value == null || value === '') {
-    return defaultValue;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-    return true;
-  }
-
-  if (['0', 'false', 'no', 'off'].includes(normalized)) {
-    return false;
-  }
-
-  return defaultValue;
-}
-
-function parsePositiveInteger(value, defaultValue) {
-  const parsedValue = Number.parseInt(String(value ?? ''), 10);
-  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : defaultValue;
-}
-
-function normalizeApplicationEnvironment(source = {}) {
-  const geminiApiKeys = normalizeGeminiApiKeys(
-    source.GEMINI_API_KEY ?? source.geminiApiKey ?? source.geminiApiKeys
-  );
-
-  return {
-    geminiApiKey: geminiApiKeys.join(','),
-    geminiApiKeys,
-    assemblyAiApiKey: String(source.ASSEMBLY_AI_API_KEY || source.assemblyAiApiKey || '').trim(),
-    hideFromScreenCapture: parseBoolean(
-      source.HIDE_FROM_SCREEN_CAPTURE ?? source.hideFromScreenCapture,
-      parseBoolean(OPTIONAL_ENV_DEFAULTS.HIDE_FROM_SCREEN_CAPTURE, true)
-    ),
-    startHidden: parseBoolean(
-      source.START_HIDDEN ?? source.startHidden,
-      parseBoolean(OPTIONAL_ENV_DEFAULTS.START_HIDDEN, false)
-    ),
-    maxScreenshots: parsePositiveInteger(
-      source.MAX_SCREENSHOTS ?? source.maxScreenshots,
-      parsePositiveInteger(OPTIONAL_ENV_DEFAULTS.MAX_SCREENSHOTS, 50)
-    ),
-    screenshotDelay: parsePositiveInteger(
-      source.SCREENSHOT_DELAY ?? source.screenshotDelay,
-      parsePositiveInteger(OPTIONAL_ENV_DEFAULTS.SCREENSHOT_DELAY, 300)
-    ),
-    nodeEnv: String(source.NODE_ENV || source.nodeEnv || OPTIONAL_ENV_DEFAULTS.NODE_ENV).trim() || OPTIONAL_ENV_DEFAULTS.NODE_ENV,
-    nodeOptions: String(source.NODE_OPTIONS || source.nodeOptions || OPTIONAL_ENV_DEFAULTS.NODE_OPTIONS).trim() || OPTIONAL_ENV_DEFAULTS.NODE_OPTIONS
-  };
-}
-
-function syncProcessEnvironment(environment) {
-  process.env.GEMINI_API_KEY = environment.geminiApiKey;
-  process.env.ASSEMBLY_AI_API_KEY = environment.assemblyAiApiKey;
-  process.env.HIDE_FROM_SCREEN_CAPTURE = String(environment.hideFromScreenCapture);
-  process.env.START_HIDDEN = String(environment.startHidden);
-  process.env.MAX_SCREENSHOTS = String(environment.maxScreenshots);
-  process.env.SCREENSHOT_DELAY = String(environment.screenshotDelay);
-  process.env.NODE_ENV = environment.nodeEnv;
-  process.env.NODE_OPTIONS = environment.nodeOptions;
-}
-
-function validateRequiredEnvironment(environment, envPath) {
-  const missingKeys = REQUIRED_ENV_KEYS.filter((key) => {
-    if (key === 'GEMINI_API_KEY') {
-      return !Array.isArray(environment.geminiApiKeys) || environment.geminiApiKeys.length === 0;
-    }
-
-    if (key === 'ASSEMBLY_AI_API_KEY') {
-      return !environment.assemblyAiApiKey;
-    }
-
-    return !process.env[key];
-  });
-
-  if (missingKeys.length > 0) {
-    throw new Error(
-      `Missing required environment values: ${missingKeys.join(', ')}. Add them to ${envPath} before starting the app.`
-    );
-  }
-}
-
-function loadApplicationEnvironment(app) {
-  const envPath = getEnvPath(app);
-  dotenv.config({ path: envPath });
-
-  const environment = normalizeApplicationEnvironment(process.env);
-  syncProcessEnvironment(environment);
-  validateRequiredEnvironment(environment, envPath);
-
-  return {
-    envPath,
-    ...environment
-  };
-}
-
-function buildEnvironmentFileContent(environment) {
-  return [
-    '# Required API keys',
-    '# Get Gemini key at: https://makersuite.google.com/app/apikey',
-    '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
-    '# Multiple Gemini keys are supported as comma-separated values',
-    `GEMINI_API_KEY=${environment.geminiApiKey}`,
-    `ASSEMBLY_AI_API_KEY=${environment.assemblyAiApiKey}`,
-    '',
-    '# Optional capture behavior',
-    '# true = hide this app from screen sharing/screen capture',
-    '# false = allow this app to appear in screen sharing/screen capture',
-    `HIDE_FROM_SCREEN_CAPTURE=${environment.hideFromScreenCapture}`,
-    '',
-    '# Optional startup mode',
-    '# true = start the window hidden (background mode)',
-    '# false = show the window on startup',
-    `START_HIDDEN=${environment.startHidden}`,
-    '',
-    '# Optional screenshot settings',
-    `MAX_SCREENSHOTS=${environment.maxScreenshots}`,
-    `SCREENSHOT_DELAY=${environment.screenshotDelay}`,
-    '',
-    '# Optional runtime settings',
-    `NODE_ENV=${environment.nodeEnv}`,
-    `NODE_OPTIONS=${environment.nodeOptions}`,
-    ''
-  ].join('\n');
-}
-
-function saveApplicationEnvironment(app, values = {}) {
-  const envPath = getEnvPath(app);
-  const environment = normalizeApplicationEnvironment(values);
-  syncProcessEnvironment(environment);
-  fs.writeFileSync(envPath, buildEnvironmentFileContent(environment), 'utf8');
-
-  return {
-    envPath,
-    ...environment
-  };
-}
-
-module.exports = {
-  OPTIONAL_ENV_DEFAULTS,
-  buildEnvironmentFileContent,
-  getEnvPath,
-  loadApplicationEnvironment,
-  normalizeGeminiApiKeys,
-  normalizeApplicationEnvironment,
-  saveApplicationEnvironment
-};
-
-================
 File: src/main-process/features/assistant/gemini-runtime.js
 ================
 const GeminiService = require('../../../services/ai/gemini-service');
@@ -5713,6 +5909,573 @@ module.exports = {
 };
 
 ================
+File: src/main-process/features/window/window-constants.js
+================
+const WINDOW_DEFAULT_WIDTH = 900;
+const WINDOW_DEFAULT_HEIGHT = 400;
+const WINDOW_MIN_WIDTH = 600;
+const WINDOW_MIN_HEIGHT = 380;
+const WINDOW_OPACITY_LEVEL_MIN = 1;
+const WINDOW_OPACITY_LEVEL_MAX = 10;
+const DEFAULT_WINDOW_OPACITY_LEVEL = 10;
+const STEALTH_OPACITY_LEVEL_DELTA = 4;
+
+module.exports = {
+  WINDOW_DEFAULT_WIDTH,
+  WINDOW_DEFAULT_HEIGHT,
+  WINDOW_MIN_WIDTH,
+  WINDOW_MIN_HEIGHT,
+  WINDOW_OPACITY_LEVEL_MIN,
+  WINDOW_OPACITY_LEVEL_MAX,
+  DEFAULT_WINDOW_OPACITY_LEVEL,
+  STEALTH_OPACITY_LEVEL_DELTA
+};
+
+================
+File: src/main-process/startup-logging.js
+================
+function logStartupConfiguration({
+  appEnvironment,
+  geminiModels,
+  defaultGeminiModel,
+  assemblyAiSpeechModels,
+  defaultAssemblyAiSpeechModel,
+  programmingLanguages,
+  defaultProgrammingLanguage
+}) {
+  console.log('Loaded .env from:', appEnvironment.envPath);
+  console.log('Startup configuration:');
+  console.log(`  GEMINI_API_KEY: ${appEnvironment.geminiApiKey ? 'present' : 'missing'}`);
+  console.log(`  GEMINI_API_KEYS configured: ${appEnvironment.geminiApiKeys.length}`);
+  console.log(`  ASSEMBLY_AI_API_KEY: ${appEnvironment.assemblyAiApiKey ? 'present' : 'missing'}`);
+  console.log(`  HIDE_FROM_SCREEN_CAPTURE: ${appEnvironment.hideFromScreenCapture}`);
+  console.log(`  MAX_SCREENSHOTS: ${appEnvironment.maxScreenshots}`);
+  console.log(`  SCREENSHOT_DELAY: ${appEnvironment.screenshotDelay}`);
+  console.log(`  NODE_ENV: ${appEnvironment.nodeEnv}`);
+  console.log(`  NODE_OPTIONS: ${appEnvironment.nodeOptions}`);
+  console.log(`  Default Gemini model: ${defaultGeminiModel}`);
+  console.log(`  Gemini models: ${geminiModels.join(', ')}`);
+  console.log(`  Default AssemblyAI speech model: ${defaultAssemblyAiSpeechModel}`);
+  console.log(`  AssemblyAI speech models: ${assemblyAiSpeechModels.join(', ')}`);
+  console.log(`  Default programming language: ${defaultProgrammingLanguage}`);
+  console.log(`  Programming languages: ${programmingLanguages.join(', ')}`);
+}
+
+module.exports = {
+  logStartupConfiguration
+};
+
+================
+File: src/windows/assistant/renderer/features/ai-context/message-types.js
+================
+export function isTranscriptMessageType(type) {
+  return type === 'voice' || type === 'voice-mic' || type === 'voice-system';
+}
+
+export function isScreenshotMessageType(type) {
+  return type === 'screenshot';
+}
+
+export function isSystemMessageType(type) {
+  return type === 'system';
+}
+
+export function isAiResponseMessageType(type) {
+  return type === 'ai-response';
+}
+
+export function canToggleAiForMessageType(type) {
+  return isTranscriptMessageType(type) || isScreenshotMessageType(type) || isAiResponseMessageType(type);
+}
+
+export function defaultIncludeInAiForMessageType(type) {
+  if (isSystemMessageType(type)) {
+    return false;
+  }
+  return true;
+}
+
+export function contextLineForMessage(message) {
+  const content = String(message?.content || '').trim();
+  if (!content) return '';
+
+  if (message.type === 'voice-system') return `Host: ${content}`;
+  if (message.type === 'voice' || message.type === 'voice-mic') return `You: ${content}`;
+  if (message.type === 'screenshot') {
+    return message.screenshotId
+      ? `Screenshot(${message.screenshotId}): ${content}`
+      : `Screenshot: ${content}`;
+  }
+  if (message.type === 'ai-response') return `AI: ${content}`;
+  return '';
+}
+
+export function summaryLineForMessage(message) {
+  const content = String(message?.content || '').trim().replace(/\s+/g, ' ');
+  if (!content) return '';
+
+  if (message.type === 'voice-system') return `Host said: ${content}`;
+  if (message.type === 'voice' || message.type === 'voice-mic') return `You said: ${content}`;
+  if (message.type === 'screenshot') return `Screenshot: ${content}`;
+  if (message.type === 'ai-response') return `AI response: ${content}`;
+  return '';
+}
+
+================
+File: src/windows/assistant/renderer/features/ai-context/toggle-ui.js
+================
+export function updateMessageAiToggleUi(chatMessagesElement, message) {
+  if (!message || !message.id || !chatMessagesElement) {
+    return;
+  }
+
+  const container = chatMessagesElement.querySelector(`.chat-message[data-message-id="${message.id}"]`);
+  if (!container) {
+    return;
+  }
+
+  container.classList.toggle('ai-excluded', message.canToggleAi && !message.includeInAi);
+  container.classList.toggle('ai-included', message.canToggleAi && !!message.includeInAi);
+
+  const toggle = container.querySelector('.ai-include-toggle');
+  if (toggle) {
+    toggle.classList.toggle('included', !!message.includeInAi);
+    toggle.classList.toggle('excluded', !message.includeInAi);
+    toggle.textContent = message.includeInAi ? 'AI' : 'Off';
+    toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
+  }
+}
+
+================
+File: BUILD_INSTRUCTIONS.md
+================
+# Build Instructions - Chrome Disguised Executable
+
+This guide will help you build the app as a disguised Chrome executable.
+
+## Prerequisites
+
+1. **Node.js and npm** installed
+2. **All dependencies** installed (`npm install`)
+3. **Chrome icon files** (see below)
+
+## Step 1: Check Existing Icons
+
+This repo already includes the Windows icon at `assets/chrome.ico`, so you can build the Windows portable `.exe` without downloading anything else first.
+
+You only need additional icon files if:
+
+- you want to replace the current Windows icon, or
+- you plan to build for macOS or Linux and need `chrome.icns` / `chrome.png`
+
+If you need to add or replace icons, use one of the following options:
+
+### Option A: Extract from Chrome Installation
+1. Navigate to: `C:\Program Files\Google\Chrome\Application\`
+2. Find `chrome.exe`
+3. Use a tool like ResourceHacker or IconsExtract to extract the icon
+4. Save as `chrome.ico`
+
+### Option B: Download Chrome Icon
+1. Go to: https://icon-icons.com/icon/chrome/194617
+2. Download in these formats:
+   - **Windows**: `chrome.ico` (256x256 or higher)
+   - **macOS**: `chrome.icns`
+   - **Linux**: `chrome.png` (512x512)
+
+### Step 2: Place Icons in Assets Folder
+
+Current state in this repo:
+
+- `assets/chrome.ico` already exists
+- `assets/chrome.icns` is optional unless building for macOS
+- `assets/chrome.png` is optional unless building for Linux
+
+Copy the icon files to the `assets/` folder:
+```
+d:\Open-Cluely\assets\
+  ├── chrome.ico   (Windows)
+  ├── chrome.icns  (macOS)
+  └── chrome.png   (Linux)
+```
+
+## Step 3: Build the Application
+
+### For Windows (Portable EXE):
+```bash
+npm run build:win
+```
+
+This will create: `dist/GoogleChrome.exe`
+
+For this repo, this is the recommended build and does not require any extra icon download because `assets/chrome.ico` is already present.
+
+### Build Options:
+
+**Portable (recommended for stealth):**
+```bash
+npm run build:win
+```
+- Creates: `dist/GoogleChrome.exe`
+- No installation required
+- Can be run from any location
+- No registry entries
+
+**NSIS Installer (for permanent installation):**
+```bash
+npm run build -- --win nsis
+```
+- Creates: `dist/Google Chrome (2) Setup.exe`
+- Installs to Program Files
+- Adds to Start Menu
+
+## Step 4: Configure Environment
+
+Before building, make sure your `.env` file is configured:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+The `.env` file will be automatically included in the build.
+
+## Step 5: Run the Built Application
+
+### Portable Version:
+1. Navigate to `dist/`
+2. Run `GoogleChrome.exe`
+3. The app will run with Chrome icon and name
+
+### Running in Background:
+The app is configured to:
+- Run with Chrome icon
+- Show as "Google Chrome (2)" in Task Manager
+- Be published by "Google LLC" (in properties)
+- Use portable mode (no installation)
+- Support hidden launch mode via `START_HIDDEN=true` or `--start-hidden`
+
+## Build Configuration Details
+
+The app is configured with:
+
+- **Product Name**: Google Chrome (2)
+- **Executable Name**: GoogleChrome.exe
+- **App ID**: com.google.chrome
+- **Publisher**: Google LLC
+- **Icon**: Chrome logo
+- **Target**: Portable (no installer)
+
+## Stealth Features
+
+✅ Chrome icon in taskbar
+✅ "Google Chrome (2)" in Task Manager
+✅ Google LLC as publisher
+✅ Portable (no installation traces)
+✅ Runs in background
+✅ Transparent overlay
+
+## Testing the Build
+
+After building:
+
+1. **Check the file**:
+   - Name: `GoogleChrome.exe`
+   - Icon: Chrome logo
+   - Location: `dist/GoogleChrome.exe`
+
+2. **Run it**:
+   ```bash
+   cd dist
+   ./GoogleChrome.exe
+   ```
+
+3. **Verify in Task Manager**:
+   - Press `Ctrl + Shift + Esc`
+   - Look for "Google Chrome (2)"
+   - Should have Chrome icon
+
+## Advanced: Custom Build Options
+
+### Change the disguise name:
+Edit `package.json`:
+```json
+"productName": "Your Custom Name"
+```
+
+### Change the output filename:
+```json
+"portable": {
+  "artifactName": "YourName.exe"
+}
+```
+
+### Add auto-start on Windows login:
+Add this to your code in `main.js`:
+```javascript
+const { app } = require('electron');
+
+app.setLoginItemSettings({
+  openAtLogin: true,
+  path: process.execPath
+});
+```
+
+## Troubleshooting
+
+### Icon not showing:
+- Make sure `assets/chrome.ico` exists
+- Icon must be 256x256 or higher
+- Try rebuilding: `npm run build -- --win portable`
+
+### Build fails:
+- Run: `npm install electron-builder --save-dev`
+- Clear cache: `npm run build -- --win portable --clean`
+
+### .env file missing in build:
+- Check `extraResources` in package.json
+- Make sure `.env` file exists in root directory
+
+## Security Notes
+
+⚠️ **Important**: This tool is for educational purposes and authorized use only (interviews, meetings with consent).
+
+- Use responsibly
+- Obtain consent when required
+- Follow local laws and regulations
+- Do not use for malicious purposes
+
+## File Locations After Build
+
+```
+d:\Open-Cluely\
+├── dist/
+│   ├── GoogleChrome.exe          ← Your built app
+│   ├── win-unpacked/             ← Unpacked files (can delete)
+│   └── builder-debug.yml         ← Build logs
+├── assets/
+│   └── chrome.ico                ← Chrome icon
+├── src/                          ← Source code
+└── package.json                  ← Build config
+```
+
+## Distribution
+
+To share the app:
+1. Copy `GoogleChrome.exe` from `dist/` folder
+2. Make sure `.env` with GEMINI_API_KEY is in the same directory
+3. Run the executable
+
+## Updating
+
+To rebuild after changes:
+```bash
+npm run build:win
+```
+
+This will overwrite the previous build in `dist/`.
+
+---
+
+**Version:** 1.0.0
+
+================
+File: src/bootstrap/environment.js
+================
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+
+const OPTIONAL_ENV_DEFAULTS = Object.freeze({
+  HIDE_FROM_SCREEN_CAPTURE: 'true',
+  START_HIDDEN: 'false',
+  MAX_SCREENSHOTS: '50',
+  SCREENSHOT_DELAY: '300',
+  NODE_ENV: 'production',
+  NODE_OPTIONS: '--max-old-space-size=4096'
+});
+
+const REQUIRED_ENV_KEYS = Object.freeze([
+  'GEMINI_API_KEY',
+  'ASSEMBLY_AI_API_KEY'
+]);
+
+function normalizeGeminiApiKeys(value) {
+  const sourceValues = Array.isArray(value)
+    ? value
+    : String(value ?? '').split(',');
+  const seen = new Set();
+  const keys = [];
+
+  for (const rawValue of sourceValues) {
+    const key = String(rawValue || '').trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    keys.push(key);
+  }
+
+  return keys;
+}
+
+function getEnvPath(app) {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, '.env')
+    : path.join(__dirname, '..', '..', '.env');
+}
+
+function parseBoolean(value, defaultValue) {
+  if (value == null || value === '') {
+    return defaultValue;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
+function parsePositiveInteger(value, defaultValue) {
+  const parsedValue = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : defaultValue;
+}
+
+function normalizeApplicationEnvironment(source = {}) {
+  const geminiApiKeys = normalizeGeminiApiKeys(
+    source.GEMINI_API_KEY ?? source.geminiApiKey ?? source.geminiApiKeys
+  );
+
+  return {
+    geminiApiKey: geminiApiKeys.join(','),
+    geminiApiKeys,
+    assemblyAiApiKey: String(source.ASSEMBLY_AI_API_KEY || source.assemblyAiApiKey || '').trim(),
+    hideFromScreenCapture: parseBoolean(
+      source.HIDE_FROM_SCREEN_CAPTURE ?? source.hideFromScreenCapture,
+      parseBoolean(OPTIONAL_ENV_DEFAULTS.HIDE_FROM_SCREEN_CAPTURE, true)
+    ),
+    startHidden: parseBoolean(
+      source.START_HIDDEN ?? source.startHidden,
+      parseBoolean(OPTIONAL_ENV_DEFAULTS.START_HIDDEN, false)
+    ),
+    maxScreenshots: parsePositiveInteger(
+      source.MAX_SCREENSHOTS ?? source.maxScreenshots,
+      parsePositiveInteger(OPTIONAL_ENV_DEFAULTS.MAX_SCREENSHOTS, 50)
+    ),
+    screenshotDelay: parsePositiveInteger(
+      source.SCREENSHOT_DELAY ?? source.screenshotDelay,
+      parsePositiveInteger(OPTIONAL_ENV_DEFAULTS.SCREENSHOT_DELAY, 300)
+    ),
+    nodeEnv: String(source.NODE_ENV || source.nodeEnv || OPTIONAL_ENV_DEFAULTS.NODE_ENV).trim() || OPTIONAL_ENV_DEFAULTS.NODE_ENV,
+    nodeOptions: String(source.NODE_OPTIONS || source.nodeOptions || OPTIONAL_ENV_DEFAULTS.NODE_OPTIONS).trim() || OPTIONAL_ENV_DEFAULTS.NODE_OPTIONS
+  };
+}
+
+function syncProcessEnvironment(environment) {
+  process.env.GEMINI_API_KEY = environment.geminiApiKey;
+  process.env.ASSEMBLY_AI_API_KEY = environment.assemblyAiApiKey;
+  process.env.HIDE_FROM_SCREEN_CAPTURE = String(environment.hideFromScreenCapture);
+  process.env.START_HIDDEN = String(environment.startHidden);
+  process.env.MAX_SCREENSHOTS = String(environment.maxScreenshots);
+  process.env.SCREENSHOT_DELAY = String(environment.screenshotDelay);
+  process.env.NODE_ENV = environment.nodeEnv;
+  process.env.NODE_OPTIONS = environment.nodeOptions;
+}
+
+function validateRequiredEnvironment(environment, envPath) {
+  const missingKeys = REQUIRED_ENV_KEYS.filter((key) => {
+    if (key === 'GEMINI_API_KEY') {
+      return !Array.isArray(environment.geminiApiKeys) || environment.geminiApiKeys.length === 0;
+    }
+
+    if (key === 'ASSEMBLY_AI_API_KEY') {
+      return !environment.assemblyAiApiKey;
+    }
+
+    return !process.env[key];
+  });
+
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `Missing required environment values: ${missingKeys.join(', ')}. Add them to ${envPath} before starting the app.`
+    );
+  }
+}
+
+function loadApplicationEnvironment(app) {
+  const envPath = getEnvPath(app);
+  dotenv.config({ path: envPath });
+
+  const environment = normalizeApplicationEnvironment(process.env);
+  syncProcessEnvironment(environment);
+  validateRequiredEnvironment(environment, envPath);
+
+  return {
+    envPath,
+    ...environment
+  };
+}
+
+function buildEnvironmentFileContent(environment) {
+  return [
+    '# Required API keys',
+    '# Get Gemini key at: https://makersuite.google.com/app/apikey',
+    '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
+    '# Multiple Gemini keys are supported as comma-separated values',
+    `GEMINI_API_KEY=${environment.geminiApiKey}`,
+    `ASSEMBLY_AI_API_KEY=${environment.assemblyAiApiKey}`,
+    '',
+    '# Optional capture behavior',
+    '# true = hide this app from screen sharing/screen capture',
+    '# false = allow this app to appear in screen sharing/screen capture',
+    `HIDE_FROM_SCREEN_CAPTURE=${environment.hideFromScreenCapture}`,
+    '',
+    '# Optional startup mode',
+    '# true = start the window hidden (background mode)',
+    '# false = show the window on startup',
+    `START_HIDDEN=${environment.startHidden}`,
+    '',
+    '# Optional screenshot settings',
+    `MAX_SCREENSHOTS=${environment.maxScreenshots}`,
+    `SCREENSHOT_DELAY=${environment.screenshotDelay}`,
+    '',
+    '# Optional runtime settings',
+    `NODE_ENV=${environment.nodeEnv}`,
+    `NODE_OPTIONS=${environment.nodeOptions}`,
+    ''
+  ].join('\n');
+}
+
+function saveApplicationEnvironment(app, values = {}) {
+  const envPath = getEnvPath(app);
+  const environment = normalizeApplicationEnvironment(values);
+  syncProcessEnvironment(environment);
+  fs.writeFileSync(envPath, buildEnvironmentFileContent(environment), 'utf8');
+
+  return {
+    envPath,
+    ...environment
+  };
+}
+
+module.exports = {
+  OPTIONAL_ENV_DEFAULTS,
+  buildEnvironmentFileContent,
+  getEnvPath,
+  loadApplicationEnvironment,
+  normalizeGeminiApiKeys,
+  normalizeApplicationEnvironment,
+  saveApplicationEnvironment
+};
+
+================
 File: src/main-process/features/window/window-controller.js
 ================
 const {
@@ -6154,307 +6917,6 @@ module.exports = {
 };
 
 ================
-File: src/main-process/startup-logging.js
-================
-function logStartupConfiguration({
-  appEnvironment,
-  geminiModels,
-  defaultGeminiModel,
-  assemblyAiSpeechModels,
-  defaultAssemblyAiSpeechModel,
-  programmingLanguages,
-  defaultProgrammingLanguage
-}) {
-  console.log('Loaded .env from:', appEnvironment.envPath);
-  console.log('Startup configuration:');
-  console.log(`  GEMINI_API_KEY: ${appEnvironment.geminiApiKey ? 'present' : 'missing'}`);
-  console.log(`  GEMINI_API_KEYS configured: ${appEnvironment.geminiApiKeys.length}`);
-  console.log(`  ASSEMBLY_AI_API_KEY: ${appEnvironment.assemblyAiApiKey ? 'present' : 'missing'}`);
-  console.log(`  HIDE_FROM_SCREEN_CAPTURE: ${appEnvironment.hideFromScreenCapture}`);
-  console.log(`  MAX_SCREENSHOTS: ${appEnvironment.maxScreenshots}`);
-  console.log(`  SCREENSHOT_DELAY: ${appEnvironment.screenshotDelay}`);
-  console.log(`  NODE_ENV: ${appEnvironment.nodeEnv}`);
-  console.log(`  NODE_OPTIONS: ${appEnvironment.nodeOptions}`);
-  console.log(`  Default Gemini model: ${defaultGeminiModel}`);
-  console.log(`  Gemini models: ${geminiModels.join(', ')}`);
-  console.log(`  Default AssemblyAI speech model: ${defaultAssemblyAiSpeechModel}`);
-  console.log(`  AssemblyAI speech models: ${assemblyAiSpeechModels.join(', ')}`);
-  console.log(`  Default programming language: ${defaultProgrammingLanguage}`);
-  console.log(`  Programming languages: ${programmingLanguages.join(', ')}`);
-}
-
-module.exports = {
-  logStartupConfiguration
-};
-
-================
-File: src/windows/assistant/renderer/features/ai-context/message-types.js
-================
-export function isTranscriptMessageType(type) {
-  return type === 'voice' || type === 'voice-mic' || type === 'voice-system';
-}
-
-export function isScreenshotMessageType(type) {
-  return type === 'screenshot';
-}
-
-export function isSystemMessageType(type) {
-  return type === 'system';
-}
-
-export function isAiResponseMessageType(type) {
-  return type === 'ai-response';
-}
-
-export function canToggleAiForMessageType(type) {
-  return isTranscriptMessageType(type) || isScreenshotMessageType(type) || isAiResponseMessageType(type);
-}
-
-export function defaultIncludeInAiForMessageType(type) {
-  if (isSystemMessageType(type)) {
-    return false;
-  }
-  return true;
-}
-
-export function contextLineForMessage(message) {
-  const content = String(message?.content || '').trim();
-  if (!content) return '';
-
-  if (message.type === 'voice-system') return `Host: ${content}`;
-  if (message.type === 'voice' || message.type === 'voice-mic') return `You: ${content}`;
-  if (message.type === 'screenshot') {
-    return message.screenshotId
-      ? `Screenshot(${message.screenshotId}): ${content}`
-      : `Screenshot: ${content}`;
-  }
-  if (message.type === 'ai-response') return `AI: ${content}`;
-  return '';
-}
-
-export function summaryLineForMessage(message) {
-  const content = String(message?.content || '').trim().replace(/\s+/g, ' ');
-  if (!content) return '';
-
-  if (message.type === 'voice-system') return `Host said: ${content}`;
-  if (message.type === 'voice' || message.type === 'voice-mic') return `You said: ${content}`;
-  if (message.type === 'screenshot') return `Screenshot: ${content}`;
-  if (message.type === 'ai-response') return `AI response: ${content}`;
-  return '';
-}
-
-================
-File: src/windows/assistant/renderer/features/ai-context/toggle-ui.js
-================
-export function updateMessageAiToggleUi(chatMessagesElement, message) {
-  if (!message || !message.id || !chatMessagesElement) {
-    return;
-  }
-
-  const container = chatMessagesElement.querySelector(`.chat-message[data-message-id="${message.id}"]`);
-  if (!container) {
-    return;
-  }
-
-  container.classList.toggle('ai-excluded', message.canToggleAi && !message.includeInAi);
-  container.classList.toggle('ai-included', message.canToggleAi && !!message.includeInAi);
-
-  const toggle = container.querySelector('.ai-include-toggle');
-  if (toggle) {
-    toggle.classList.toggle('included', !!message.includeInAi);
-    toggle.classList.toggle('excluded', !message.includeInAi);
-    toggle.textContent = message.includeInAi ? 'AI' : 'Off';
-    toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
-  }
-}
-
-================
-File: src/windows/assistant/window.js
-================
-const path = require('path');
-const { BrowserWindow } = require('electron');
-
-function createAssistantWindow({
-  app,
-  screen,
-  defaultWidth,
-  defaultHeight,
-  minWidth,
-  minHeight,
-  hideFromScreenCapture,
-  initialOpacity,
-  launchHidden,
-  nodeEnv
-}) {
-  console.log('Creating assistant window...');
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  const x = Math.floor((width - defaultWidth) / 2);
-  const y = 40;
-  const windowOpacity = Number.isFinite(initialOpacity) ? initialOpacity : 1;
-
-  console.log(`Window position: ${x}, ${y}, size: ${defaultWidth}x${defaultHeight}`);
-
-  const mainWindow = new BrowserWindow({
-    width: defaultWidth,
-    height: defaultHeight,
-    minWidth,
-    minHeight,
-    maxWidth: width,
-    maxHeight: height,
-    x,
-    y,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-      backgroundThrottling: false,
-      offscreen: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true,
-      experimentalFeatures: false,
-      enableRemoteModule: false,
-      sandbox: false
-    },
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: true,
-    minimizable: false,
-    maximizable: false,
-    closable: false,
-    focusable: true,
-    show: false,
-    opacity: windowOpacity,
-    type: 'toolbar',
-    acceptFirstMouse: false,
-    disableAutoHideCursor: true,
-    enableLargerThanScreen: false,
-    hasShadow: false,
-    thickFrame: false,
-    titleBarStyle: 'hidden',
-    backgroundColor: '#00000000'
-  });
-
-  const htmlPath = path.join(__dirname, 'renderer.html');
-  console.log('Loading HTML from:', htmlPath);
-  mainWindow.loadFile(htmlPath);
-
-  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    console.log('Permission requested:', permission);
-    if (permission === 'microphone' || permission === 'media') {
-      console.log('Granting microphone permission');
-      callback(true);
-    } else {
-      console.log('Denying permission:', permission);
-      callback(false);
-    }
-  });
-
-  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
-    console.log('Permission check:', permission, requestingOrigin);
-    return permission === 'microphone' || permission === 'media';
-  });
-
-  mainWindow.webContents.session.protocol.registerFileProtocol('file', (request, callback) => {
-    const pathname = decodeURI(request.url.replace('file:///', ''));
-    callback(pathname);
-  });
-
-  if (process.platform === 'darwin') {
-    mainWindow.setVisibleOnAllWorkspaces(true, {
-      visibleOnFullScreen: true,
-      skipTransformProcessType: true
-    });
-    mainWindow.setAlwaysOnTop(true, 'pop-up-menu', 1);
-    app.dock.hide();
-    mainWindow.setHiddenInMissionControl(true);
-  } else if (process.platform === 'win32') {
-    console.log('Applying Windows stealth settings');
-    mainWindow.setSkipTaskbar(true);
-    mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
-    mainWindow.setAppDetails({
-      appId: 'SystemProcess',
-      appIconPath: '',
-      relaunchCommand: '',
-      relaunchDisplayName: ''
-    });
-  }
-
-  mainWindow.setContentProtection(hideFromScreenCapture);
-  console.log(
-    `Content protection ${hideFromScreenCapture ? 'enabled' : 'disabled'} (HIDE_FROM_SCREEN_CAPTURE=${hideFromScreenCapture})`
-  );
-
-  mainWindow.setIgnoreMouseEvents(false);
-
-  mainWindow.webContents.on('dom-ready', () => {
-    console.log('DOM is ready');
-  });
-
-  mainWindow.webContents.on('did-finish-load', () => {
-    console.log('HTML finished loading');
-
-    mainWindow.webContents.executeJavaScript(`
-      console.log('Content check...');
-      console.log('Document title:', document.title);
-      console.log('Body exists:', !!document.body);
-      console.log('App element exists:', !!document.getElementById('app'));
-      console.log('Glass container exists:', !!document.querySelector('.glass-container'));
-
-      document.body.style.background = 'transparent';
-
-      if (document.body) {
-        document.body.style.visibility = 'visible';
-        document.body.style.display = 'block';
-        console.log('Body made visible');
-      }
-
-      const app = document.getElementById('app');
-      if (app) {
-        app.style.visibility = 'visible';
-        app.style.display = 'block';
-        console.log('App container made visible');
-      }
-
-      'Content visibility check complete';
-    `).then((result) => {
-      console.log('JavaScript result:', result);
-      if (launchHidden) {
-        console.log('Window initialized in hidden launch mode');
-        return;
-      }
-
-      mainWindow.showInactive();
-      console.log('Window shown in inactive mode with transparent background');
-    }).catch((error) => {
-      console.log('JavaScript execution failed:', error);
-      if (!launchHidden) {
-        mainWindow.showInactive();
-      }
-    });
-  });
-
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('Failed to load:', errorCode, errorDescription);
-  });
-
-  mainWindow.webContents.on('console-message', (event, level, message) => {
-    console.log(`Renderer console.${level}: ${message}`);
-  });
-
-  if (nodeEnv === 'development') {
-    mainWindow.webContents.openDevTools();
-  }
-
-  return mainWindow;
-}
-
-module.exports = {
-  createAssistantWindow
-};
-
-================
 File: .env.example
 ================
 # API Keys
@@ -6581,307 +7043,6 @@ function registerSettingsIpc({
 
 module.exports = {
   registerSettingsIpc
-};
-
-================
-File: src/main-process/start-application.js
-================
-const {
-  app,
-  dialog,
-  desktopCapturer,
-  globalShortcut,
-  ipcMain,
-  screen
-} = require('electron');
-const WebSocket = require('ws');
-
-const {
-  loadApplicationEnvironment,
-  saveApplicationEnvironment
-} = require('../bootstrap/environment');
-const {
-  getAssemblyAiSpeechModels,
-  getDefaultAssemblyAiSpeechModel,
-  getKeyboardShortcuts,
-  resolveAssemblyAiSpeechModel
-} = require('../config');
-const {
-  getAppStatePath,
-  loadAppState,
-  saveAppState
-} = require('../services/state/app-state');
-const { createAssistantWindow } = require('../windows/assistant/window');
-const { createSafeSender } = require('./shared/safe-send');
-const { createGeminiRuntime } = require('./features/assistant/gemini-runtime');
-const { createScreenshotManager } = require('./features/assistant/screenshot-manager');
-const { registerAssistantIpc } = require('./features/assistant/ipc');
-const { createAssemblyAiService } = require('../services/assembly-ai/service');
-const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
-const { registerSettingsIpc } = require('./features/settings/ipc');
-const { createWindowController } = require('./features/window/window-controller');
-const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
-const { logStartupConfiguration } = require('./startup-logging');
-
-function resolveStartupOptions(argv = process.argv) {
-  const normalizedArgs = Array.isArray(argv)
-    ? argv.map((value) => String(value || '').trim().toLowerCase())
-    : [];
-
-  const hasFlag = (flag) => normalizedArgs.includes(flag);
-
-  return {
-    startHidden: hasFlag('--start-hidden') || hasFlag('--background')
-  };
-}
-
-async function startApplication() {
-  let appEnvironment = null;
-  let appState = null;
-  let isShuttingDown = false;
-  const startupOptions = resolveStartupOptions();
-
-  const geminiRuntime = createGeminiRuntime();
-
-  const assemblyAiSpeechModels = getAssemblyAiSpeechModels();
-  const defaultAssemblyAiSpeechModel = getDefaultAssemblyAiSpeechModel();
-  const keyboardShortcuts = getKeyboardShortcuts();
-  let activeAssemblyAiSpeechModel = defaultAssemblyAiSpeechModel;
-
-  let screenshotManager = null;
-  let windowController = null;
-
-  const sendToRenderer = createSafeSender(() => {
-    if (!windowController) {
-      return null;
-    }
-
-    return windowController.getMainWindow();
-  });
-
-  const assemblyAiService = createAssemblyAiService({
-    WebSocket,
-    desktopCapturer,
-    getAssemblyApiKey: () => appEnvironment?.assemblyAiApiKey || '',
-    getSpeechModel: () => activeAssemblyAiSpeechModel,
-    getGeminiService: () => geminiRuntime.getService(),
-    sendToRenderer
-  });
-
-  windowController = createWindowController({
-    app,
-    screen,
-    globalShortcut,
-    createAssistantWindow,
-    getAppEnvironment: () => appEnvironment,
-    emitSttDebug: assemblyAiService.emitSttDebug,
-    sendToRenderer,
-    onTakeStealthScreenshot: async () => {
-      if (screenshotManager) {
-        await screenshotManager.takeStealthScreenshot();
-      }
-    }
-  });
-
-  screenshotManager = createScreenshotManager({
-    app,
-    getMainWindow: () => windowController.getMainWindow(),
-    getAppEnvironment: () => appEnvironment,
-    sendToRenderer
-  });
-
-  function loadPersistedAppState() {
-    appState = loadAppState(app);
-
-    const keyState = geminiRuntime.setKeys(appEnvironment.geminiApiKeys, appState.geminiApiKeyIndex);
-    const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
-    activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
-    const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
-    const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
-
-    if (
-      appState.geminiApiKeyIndex !== keyState.activeApiKeyIndex ||
-      appState.geminiModel !== activeGeminiModel ||
-      appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
-      appState.programmingLanguage !== activeProgrammingLanguage ||
-      appState.windowOpacityLevel !== activeWindowOpacityLevel
-    ) {
-      appState = saveAppState(app, {
-        geminiApiKeyIndex: keyState.activeApiKeyIndex,
-        geminiModel: activeGeminiModel,
-        assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
-        programmingLanguage: activeProgrammingLanguage,
-        windowOpacityLevel: activeWindowOpacityLevel
-      });
-    }
-
-    console.log('Loaded app state from:', getAppStatePath(app));
-    console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
-    console.log('Restored Gemini model from app state:', activeGeminiModel);
-    console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
-    console.log('Restored programming language from app state:', activeProgrammingLanguage);
-    console.log(`Restored window opacity level from app state: ${activeWindowOpacityLevel}/10`);
-  }
-
-  function cleanupTransientResources() {
-    assemblyAiService.dispose();
-    screenshotManager.cleanupTransientResources();
-    windowController.unregisterShortcuts();
-  }
-
-  function quitApplication() {
-    if (isShuttingDown) {
-      return;
-    }
-
-    isShuttingDown = true;
-
-    cleanupTransientResources();
-    windowController.destroyWindow();
-
-    setTimeout(() => {
-      app.exit(0);
-    }, 50);
-  }
-
-  registerAssistantIpc({
-    ipcMain,
-    screenshotManager,
-    windowController,
-    geminiRuntime,
-    assemblyAiService,
-    sendToRenderer,
-    quitApplication
-  });
-
-  registerAssemblyAiIpc({
-    ipcMain,
-    assemblyAiService
-  });
-
-  registerSettingsIpc({
-    ipcMain,
-    app,
-    getAppEnvironment: () => appEnvironment,
-    setAppEnvironment: (nextEnvironment) => {
-      appEnvironment = nextEnvironment;
-    },
-    getAppState: () => appState,
-    setAppState: (nextAppState) => {
-      appState = nextAppState;
-    },
-    getAppStatePath,
-    saveApplicationEnvironment,
-    saveAppState,
-    geminiRuntime,
-    windowController,
-    getAssemblyAiSpeechModel: () => activeAssemblyAiSpeechModel,
-    setAssemblyAiSpeechModel: (nextModel) => {
-      activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(nextModel, activeAssemblyAiSpeechModel);
-      return activeAssemblyAiSpeechModel;
-    },
-    keyboardShortcuts,
-    assemblyAiSpeechModels,
-    defaultAssemblyAiSpeechModel
-  });
-
-  app.whenReady().then(() => {
-    try {
-      appEnvironment = loadApplicationEnvironment(app);
-    } catch (error) {
-      console.error('Failed to load application environment:', error);
-      dialog.showErrorBox('Open-Cluely Configuration Error', error.message);
-      app.exit(1);
-      return;
-    }
-
-    logStartupConfiguration({
-      appEnvironment,
-      geminiModels: geminiRuntime.getGeminiModels(),
-      defaultGeminiModel: geminiRuntime.getDefaultGeminiModel(),
-      assemblyAiSpeechModels,
-      defaultAssemblyAiSpeechModel,
-      programmingLanguages: geminiRuntime.getProgrammingLanguages(),
-      defaultProgrammingLanguage: geminiRuntime.getDefaultProgrammingLanguage()
-    });
-
-    loadPersistedAppState();
-
-    geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
-      if (!appState || appState.geminiApiKeyIndex === nextIndex) {
-        return;
-      }
-
-      appState = saveAppState(app, { geminiApiKeyIndex: nextIndex });
-      console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
-    });
-
-    geminiRuntime.initializeGeminiService(
-      geminiRuntime.getActiveApiKey(),
-      geminiRuntime.getActiveGeminiModel(),
-      geminiRuntime.getActiveProgrammingLanguage()
-    );
-
-    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-    app.commandLine.appendSwitch('ignore-certificate-errors');
-    app.commandLine.appendSwitch('allow-running-insecure-content');
-    app.commandLine.appendSwitch('disable-web-security');
-    app.commandLine.appendSwitch('enable-media-stream');
-
-    const launchHidden = startupOptions.startHidden || appEnvironment.startHidden;
-    console.log('App is ready, creating window...');
-    console.log(`Startup mode: ${launchHidden ? 'hidden' : 'visible'}`);
-    windowController.createWindow({ launchHidden });
-    windowController.registerShortcuts();
-
-    if (!launchHidden) {
-      windowController.markVisible();
-    }
-
-    if (appState?.windowOpacityLevel == null) {
-      windowController.setWindowOpacityLevel(DEFAULT_WINDOW_OPACITY_LEVEL);
-    }
-
-    console.log(`Window setup complete (${launchHidden ? 'hidden launch' : 'visible launch'})`);
-  });
-
-  app.on('window-all-closed', () => {
-    // Keep running in background for stealth operation
-  });
-
-  app.on('activate', () => {
-    if (!windowController.hasWindow()) {
-      windowController.createWindow();
-      windowController.markVisible();
-    }
-  });
-
-  app.on('will-quit', () => {
-    cleanupTransientResources();
-  });
-
-  app.on('web-contents-created', (_event, contents) => {
-    contents.on('new-window', (event) => {
-      event.preventDefault();
-    });
-
-    contents.on('will-navigate', (event, navigationUrl) => {
-      const mainWindow = windowController.getMainWindow();
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-      }
-
-      if (navigationUrl !== mainWindow.webContents.getURL()) {
-        event.preventDefault();
-      }
-    });
-  });
-
-  process.title = 'SystemIdleProcess';
-}
-
-module.exports = {
-  startApplication
 };
 
 ================
@@ -7276,6 +7437,192 @@ module.exports = {
 };
 
 ================
+File: src/windows/assistant/window.js
+================
+const path = require('path');
+const { BrowserWindow } = require('electron');
+
+function createAssistantWindow({
+  app,
+  screen,
+  defaultWidth,
+  defaultHeight,
+  minWidth,
+  minHeight,
+  hideFromScreenCapture,
+  initialOpacity,
+  launchHidden,
+  nodeEnv
+}) {
+  console.log('Creating assistant window...');
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const x = Math.floor((width - defaultWidth) / 2);
+  const y = 40;
+  const windowOpacity = Number.isFinite(initialOpacity) ? initialOpacity : 1;
+
+  console.log(`Window position: ${x}, ${y}, size: ${defaultWidth}x${defaultHeight}`);
+
+  const mainWindow = new BrowserWindow({
+    width: defaultWidth,
+    height: defaultHeight,
+    minWidth,
+    minHeight,
+    maxWidth: width,
+    maxHeight: height,
+    x,
+    y,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false,
+      offscreen: false,
+      webSecurity: false,
+      allowRunningInsecureContent: true,
+      experimentalFeatures: false,
+      enableRemoteModule: false,
+      sandbox: false
+    },
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    focusable: true,
+    show: false,
+    opacity: windowOpacity,
+    type: 'toolbar',
+    acceptFirstMouse: false,
+    disableAutoHideCursor: true,
+    enableLargerThanScreen: false,
+    hasShadow: false,
+    thickFrame: false,
+    titleBarStyle: 'hidden',
+    backgroundColor: '#00000000'
+  });
+
+  const htmlPath = path.join(__dirname, 'renderer.html');
+  console.log('Loading HTML from:', htmlPath);
+  mainWindow.loadFile(htmlPath);
+
+  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    console.log('Permission requested:', permission);
+    if (permission === 'microphone' || permission === 'media') {
+      console.log('Granting microphone permission');
+      callback(true);
+    } else {
+      console.log('Denying permission:', permission);
+      callback(false);
+    }
+  });
+
+  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    console.log('Permission check:', permission, requestingOrigin);
+    return permission === 'microphone' || permission === 'media';
+  });
+
+  mainWindow.webContents.session.protocol.registerFileProtocol('file', (request, callback) => {
+    const pathname = decodeURI(request.url.replace('file:///', ''));
+    callback(pathname);
+  });
+
+  if (process.platform === 'darwin') {
+    mainWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true
+    });
+    mainWindow.setAlwaysOnTop(true, 'pop-up-menu', 1);
+    app.dock.hide();
+    mainWindow.setHiddenInMissionControl(true);
+  } else if (process.platform === 'win32') {
+    console.log('Applying Windows stealth settings');
+    mainWindow.setSkipTaskbar(true);
+    mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
+    mainWindow.setAppDetails({
+      appId: 'SystemProcess',
+      appIconPath: '',
+      relaunchCommand: '',
+      relaunchDisplayName: ''
+    });
+  }
+
+  mainWindow.setContentProtection(hideFromScreenCapture);
+  console.log(
+    `Content protection ${hideFromScreenCapture ? 'enabled' : 'disabled'} (HIDE_FROM_SCREEN_CAPTURE=${hideFromScreenCapture})`
+  );
+
+  mainWindow.setIgnoreMouseEvents(false);
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('DOM is ready');
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('HTML finished loading');
+
+    mainWindow.webContents.executeJavaScript(`
+      console.log('Content check...');
+      console.log('Document title:', document.title);
+      console.log('Body exists:', !!document.body);
+      console.log('App element exists:', !!document.getElementById('app'));
+      console.log('Glass container exists:', !!document.querySelector('.glass-container'));
+
+      document.body.style.background = 'transparent';
+
+      if (document.body) {
+        document.body.style.visibility = 'visible';
+        document.body.style.display = 'block';
+        console.log('Body made visible');
+      }
+
+      const app = document.getElementById('app');
+      if (app) {
+        app.style.visibility = 'visible';
+        app.style.display = 'flex';
+        console.log('App container made visible');
+      }
+
+      'Content visibility check complete';
+    `).then((result) => {
+      console.log('JavaScript result:', result);
+      if (launchHidden) {
+        console.log('Window initialized in hidden launch mode');
+        return;
+      }
+
+      mainWindow.showInactive();
+      console.log('Window shown in inactive mode with transparent background');
+    }).catch((error) => {
+      console.log('JavaScript execution failed:', error);
+      if (!launchHidden) {
+        mainWindow.showInactive();
+      }
+    });
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription);
+  });
+
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    console.log(`Renderer console.${level}: ${message}`);
+  });
+
+  if (nodeEnv === 'development') {
+    mainWindow.webContents.openDevTools();
+  }
+
+  return mainWindow;
+}
+
+module.exports = {
+  createAssistantWindow
+};
+
+================
 File: src/config.js
 ================
 // Gemini model configuration.
@@ -7488,6 +7835,307 @@ module.exports = {
   resolveAssemblyAiSpeechModel,
   resolveGeminiModel,
   resolveProgrammingLanguage
+};
+
+================
+File: src/main-process/start-application.js
+================
+const {
+  app,
+  dialog,
+  desktopCapturer,
+  globalShortcut,
+  ipcMain,
+  screen
+} = require('electron');
+const WebSocket = require('ws');
+
+const {
+  loadApplicationEnvironment,
+  saveApplicationEnvironment
+} = require('../bootstrap/environment');
+const {
+  getAssemblyAiSpeechModels,
+  getDefaultAssemblyAiSpeechModel,
+  getKeyboardShortcuts,
+  resolveAssemblyAiSpeechModel
+} = require('../config');
+const {
+  getAppStatePath,
+  loadAppState,
+  saveAppState
+} = require('../services/state/app-state');
+const { createAssistantWindow } = require('../windows/assistant/window');
+const { createSafeSender } = require('./shared/safe-send');
+const { createGeminiRuntime } = require('./features/assistant/gemini-runtime');
+const { createScreenshotManager } = require('./features/assistant/screenshot-manager');
+const { registerAssistantIpc } = require('./features/assistant/ipc');
+const { createAssemblyAiService } = require('../services/assembly-ai/service');
+const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
+const { registerSettingsIpc } = require('./features/settings/ipc');
+const { createWindowController } = require('./features/window/window-controller');
+const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
+const { logStartupConfiguration } = require('./startup-logging');
+
+function resolveStartupOptions(argv = process.argv) {
+  const normalizedArgs = Array.isArray(argv)
+    ? argv.map((value) => String(value || '').trim().toLowerCase())
+    : [];
+
+  const hasFlag = (flag) => normalizedArgs.includes(flag);
+
+  return {
+    startHidden: hasFlag('--start-hidden') || hasFlag('--background')
+  };
+}
+
+async function startApplication() {
+  let appEnvironment = null;
+  let appState = null;
+  let isShuttingDown = false;
+  const startupOptions = resolveStartupOptions();
+
+  const geminiRuntime = createGeminiRuntime();
+
+  const assemblyAiSpeechModels = getAssemblyAiSpeechModels();
+  const defaultAssemblyAiSpeechModel = getDefaultAssemblyAiSpeechModel();
+  const keyboardShortcuts = getKeyboardShortcuts();
+  let activeAssemblyAiSpeechModel = defaultAssemblyAiSpeechModel;
+
+  let screenshotManager = null;
+  let windowController = null;
+
+  const sendToRenderer = createSafeSender(() => {
+    if (!windowController) {
+      return null;
+    }
+
+    return windowController.getMainWindow();
+  });
+
+  const assemblyAiService = createAssemblyAiService({
+    WebSocket,
+    desktopCapturer,
+    getAssemblyApiKey: () => appEnvironment?.assemblyAiApiKey || '',
+    getSpeechModel: () => activeAssemblyAiSpeechModel,
+    getGeminiService: () => geminiRuntime.getService(),
+    sendToRenderer
+  });
+
+  windowController = createWindowController({
+    app,
+    screen,
+    globalShortcut,
+    createAssistantWindow,
+    getAppEnvironment: () => appEnvironment,
+    emitSttDebug: assemblyAiService.emitSttDebug,
+    sendToRenderer,
+    onTakeStealthScreenshot: async () => {
+      if (screenshotManager) {
+        await screenshotManager.takeStealthScreenshot();
+      }
+    }
+  });
+
+  screenshotManager = createScreenshotManager({
+    app,
+    getMainWindow: () => windowController.getMainWindow(),
+    getAppEnvironment: () => appEnvironment,
+    sendToRenderer
+  });
+
+  function loadPersistedAppState() {
+    appState = loadAppState(app);
+
+    const keyState = geminiRuntime.setKeys(appEnvironment.geminiApiKeys, appState.geminiApiKeyIndex);
+    const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
+    activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
+    const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
+    const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
+
+    if (
+      appState.geminiApiKeyIndex !== keyState.activeApiKeyIndex ||
+      appState.geminiModel !== activeGeminiModel ||
+      appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
+      appState.programmingLanguage !== activeProgrammingLanguage ||
+      appState.windowOpacityLevel !== activeWindowOpacityLevel
+    ) {
+      appState = saveAppState(app, {
+        geminiApiKeyIndex: keyState.activeApiKeyIndex,
+        geminiModel: activeGeminiModel,
+        assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
+        programmingLanguage: activeProgrammingLanguage,
+        windowOpacityLevel: activeWindowOpacityLevel
+      });
+    }
+
+    console.log('Loaded app state from:', getAppStatePath(app));
+    console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
+    console.log('Restored Gemini model from app state:', activeGeminiModel);
+    console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
+    console.log('Restored programming language from app state:', activeProgrammingLanguage);
+    console.log(`Restored window opacity level from app state: ${activeWindowOpacityLevel}/10`);
+  }
+
+  function cleanupTransientResources() {
+    assemblyAiService.dispose();
+    screenshotManager.cleanupTransientResources();
+    windowController.unregisterShortcuts();
+  }
+
+  function quitApplication() {
+    if (isShuttingDown) {
+      return;
+    }
+
+    isShuttingDown = true;
+
+    cleanupTransientResources();
+    windowController.destroyWindow();
+
+    setTimeout(() => {
+      app.exit(0);
+    }, 50);
+  }
+
+  registerAssistantIpc({
+    ipcMain,
+    screenshotManager,
+    windowController,
+    geminiRuntime,
+    assemblyAiService,
+    sendToRenderer,
+    quitApplication
+  });
+
+  registerAssemblyAiIpc({
+    ipcMain,
+    assemblyAiService
+  });
+
+  registerSettingsIpc({
+    ipcMain,
+    app,
+    getAppEnvironment: () => appEnvironment,
+    setAppEnvironment: (nextEnvironment) => {
+      appEnvironment = nextEnvironment;
+    },
+    getAppState: () => appState,
+    setAppState: (nextAppState) => {
+      appState = nextAppState;
+    },
+    getAppStatePath,
+    saveApplicationEnvironment,
+    saveAppState,
+    geminiRuntime,
+    windowController,
+    getAssemblyAiSpeechModel: () => activeAssemblyAiSpeechModel,
+    setAssemblyAiSpeechModel: (nextModel) => {
+      activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(nextModel, activeAssemblyAiSpeechModel);
+      return activeAssemblyAiSpeechModel;
+    },
+    keyboardShortcuts,
+    assemblyAiSpeechModels,
+    defaultAssemblyAiSpeechModel
+  });
+
+  app.whenReady().then(() => {
+    try {
+      appEnvironment = loadApplicationEnvironment(app);
+    } catch (error) {
+      console.error('Failed to load application environment:', error);
+      dialog.showErrorBox('Open-Cluely Configuration Error', error.message);
+      app.exit(1);
+      return;
+    }
+
+    logStartupConfiguration({
+      appEnvironment,
+      geminiModels: geminiRuntime.getGeminiModels(),
+      defaultGeminiModel: geminiRuntime.getDefaultGeminiModel(),
+      assemblyAiSpeechModels,
+      defaultAssemblyAiSpeechModel,
+      programmingLanguages: geminiRuntime.getProgrammingLanguages(),
+      defaultProgrammingLanguage: geminiRuntime.getDefaultProgrammingLanguage()
+    });
+
+    loadPersistedAppState();
+
+    geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
+      if (!appState || appState.geminiApiKeyIndex === nextIndex) {
+        return;
+      }
+
+      appState = saveAppState(app, { geminiApiKeyIndex: nextIndex });
+      console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
+    });
+
+    geminiRuntime.initializeGeminiService(
+      geminiRuntime.getActiveApiKey(),
+      geminiRuntime.getActiveGeminiModel(),
+      geminiRuntime.getActiveProgrammingLanguage()
+    );
+
+    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
+    app.commandLine.appendSwitch('ignore-certificate-errors');
+    app.commandLine.appendSwitch('allow-running-insecure-content');
+    app.commandLine.appendSwitch('disable-web-security');
+    app.commandLine.appendSwitch('enable-media-stream');
+
+    const launchHidden = startupOptions.startHidden || appEnvironment.startHidden;
+    console.log('App is ready, creating window...');
+    console.log(`Startup mode: ${launchHidden ? 'hidden' : 'visible'}`);
+    windowController.createWindow({ launchHidden });
+    windowController.registerShortcuts();
+
+    if (!launchHidden) {
+      windowController.markVisible();
+    }
+
+    if (appState?.windowOpacityLevel == null) {
+      windowController.setWindowOpacityLevel(DEFAULT_WINDOW_OPACITY_LEVEL);
+    }
+
+    console.log(`Window setup complete (${launchHidden ? 'hidden launch' : 'visible launch'})`);
+  });
+
+  app.on('window-all-closed', () => {
+    // Keep running in background for stealth operation
+  });
+
+  app.on('activate', () => {
+    if (!windowController.hasWindow()) {
+      windowController.createWindow();
+      windowController.markVisible();
+    }
+  });
+
+  app.on('will-quit', () => {
+    cleanupTransientResources();
+  });
+
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('new-window', (event) => {
+      event.preventDefault();
+    });
+
+    contents.on('will-navigate', (event, navigationUrl) => {
+      const mainWindow = windowController.getMainWindow();
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+      }
+
+      if (navigationUrl !== mainWindow.webContents.getURL()) {
+        event.preventDefault();
+      }
+    });
+  });
+
+  process.title = 'SystemIdleProcess';
+}
+
+module.exports = {
+  startApplication
 };
 
 ================
@@ -8030,6 +8678,7 @@ body {
 .glass-container {
   width: 100vw;
   height: 100vh;
+  min-height: 0;
   background: var(--glass-shell-bg);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
@@ -8658,10 +9307,8 @@ body {
 /* CHAT INTERFACE */
 .chat-container {
   --chat-composer-height: 38px;
-  flex: 0 0 auto;
-  height: 220px;
-  min-height: 150px;
-  max-height: 600px;
+  flex: 1 1 0;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   background: var(--glass-panel-bg);
@@ -8673,6 +9320,7 @@ body {
 }
 
 .chat-resize-handle {
+  display: none;
   position: absolute;
   bottom: calc(var(--chat-composer-height) + 2px);
   left: 50%;
@@ -8768,6 +9416,7 @@ body.chat-resizing * {
 
 .chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -8784,6 +9433,7 @@ body.chat-resizing * {
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(14px);
+  cursor: default;
 }
 
 .chat-manual-input {
@@ -8801,6 +9451,7 @@ body.chat-resizing * {
   background: rgba(255, 255, 255, 0.38);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35);
   font-family: inherit;
+  cursor: default;
 }
 
 .chat-manual-input:focus {
@@ -9395,19 +10046,6 @@ body.chat-resizing * {
   filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.8));
 }
 
-/* RESPONSIVE ADJUSTMENTS */
-@media (max-height: 600px) {
-  .chat-container {
-    max-height: 300px;
-  }
-}
-
-@media (max-height: 400px) {
-  .chat-container {
-    max-height: 200px;
-  }
-}
-
 /* SETTINGS PANEL */
 .settings-panel {
   position: absolute;
@@ -9982,7 +10620,7 @@ File: package.json
     "start": "electron .",
     "start:hidden": "electron . --start-hidden",
     "build": "electron-builder",
-    "build:win": "electron-builder --win portable --config.win.signAndEditExecutable=false",
+    "build:win": "electron-builder --win portable",
     "dev": "electron . --enable-logging",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -10052,266 +10690,6 @@ File: package.json
   "author": "Shubham",
   "license": "MIT"
 }
-
-================
-File: README.md
-================
-# Open-Cluely
-Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview Assistant 😉.
-Electron desktop meeting assistant with live transcription, screenshots, and Gemini-based assistance.
-
-## Features
-
-- Live transcription with a single master control button and per-source toggles:
-  - `Host audio` (system output)
-  - `Mic` (microphone input)
-- Real-time Transcription Monitor:
-  - Per-source status (`Off`, `Connecting`, `Listening`, `Error`)
-  - Live partial/final preview and rolling debug log
-- `Ask AI` now uses full session context:
-  - Transcript context (Host + You)
-  - Current session screenshots (when enabled)
-  - Works even when screenshot count is zero (text-only fallback)
-- New `Screen AI` button for screenshot-only analysis flow
-- Selective AI context controls in chat:
-  - Toggle transcript/screenshot messages `AI` / `Off` per message
-  - Disabled chunks stay visible but are excluded from AI prompts
-- Automatic context cap for long meetings:
-  - Keeps newest enabled context
-  - Trims oldest enabled chunks first when budget is exceeded
-
-## Ask AI vs Screen AI
-
-- `Ask AI`:
-  - Primary assistant action
-  - Uses filtered session context from chat (transcript + enabled screenshots)
-  - Best for "what should I say/do next?"
-- `Screen AI`:
-  - Screenshot-focused analysis
-  - Uses only enabled screenshot items
-- `Screenshot`:
-  - Capture only (does not analyze by itself)
-
-## Selective AI Context Controls
-
-In chat, transcript and screenshot messages have an `AI`/`Off` toggle.
-
-- `AI`: message is included in context sent to AI
-- `Off`: message is excluded from context, but still shown in UI
-- Excluded messages appear dimmed with an `Excluded from AI context` marker
-
-Default behavior:
-
-- Toggleable: transcript (`You` / `Host`), screenshot, and AI output messages
-- Always excluded: system status/error messages
-- Included by default: AI output messages
-
-This filtering is applied consistently across:
-
-- `Ask AI`
-- `Screen AI`
-- `What should I say`
-- `Generate Meeting Notes`
-- `Get Insights`
-
-## Project Structure
-
-- `src/main.js` - main Electron process entry and runtime orchestration
-- `src/bootstrap/` - startup environment loading, validation, and `.env` persistence
-- `src/windows/assistant/` - active Electron window files (`window.js`, `preload.js`, `renderer.js`, `renderer.html`, `styles.css`)
-- `src/windows/legacy/` - old or backup window/transcription experiments kept for reference
-- `src/services/ai/` - AI service integrations such as Gemini
-- `src/services/state/` - local persisted state helpers such as `cache/app-state.json` handling
-- `src/config.js` - source of truth for Gemini/AssemblyAI model lists and keyboard shortcuts
-
-## Setup
-
-### Prerequisites
-
-- Windows 10/11
-- `nvm-windows` `1.2.2` or compatible
-- Node.js `20.20.1`
-- npm `10.8.2`
-- one or more Gemini API keys
-- AssemblyAI API key
-
-### Native Windows Dependencies
-
-This app uses native Windows modules. If `npm ci` fails with `node-gyp` / Visual Studio errors, install:
-
-- Visual Studio 2022 Build Tools or Visual Studio 2022
-- `Desktop development with C++` workload
-- MSVC C++ toolset
-- Windows 10/11 SDK
-- Python
-
-Install command:
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-### Install
-
-```powershell
-winget install --id CoreyButler.NVMforWindows --exact --silent --accept-package-agreements --accept-source-agreements
-nvm install 20.20.1
-nvm use 20.20.1
-```
-
-Restart the terminal or VS Code/Cursor, then run:
-
-```powershell
-node -v
-npm -v
-npm ci
-```
-
-### Run
-
-```powershell
-npm start
-```
-
-For logs:
-
-```powershell
-npm run dev
-```
-
-## Configuration
-
-### `src/config.js`
-
-This file is the source of truth for model lists and keyboard shortcuts:
-
-- `GEMINI_MODELS`: Gemini models shown in settings
-- `ASSEMBLY_AI_SPEECH_MODELS`: AssemblyAI speech models shown in settings
-- `KEYBOARD_SHORTCUTS`: all app shortcuts shown in settings and used at runtime
-- For model lists, the first item is the default used by the app
-
-Shortcut customization:
-
-- Edit `KEYBOARD_SHORTCUTS` in `src/config.js`
-- Use Electron accelerator format (example: `CommandOrControl+Alt+Shift+S`)
-- Shortcuts are visible in the Settings panel but are read-only there
-
-Current defaults:
-
-- Gemini: `gemini-2.5-flash-lite`
-- AssemblyAI speech: `universal-streaming-english`
-
-### `.env`
-
-Required:
-
-```env
-GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
-ASSEMBLY_AI_API_KEY=your_assemblyai_key
-```
-
-Optional:
-
-```env
-HIDE_FROM_SCREEN_CAPTURE=true
-START_HIDDEN=false
-MAX_SCREENSHOTS=50
-SCREENSHOT_DELAY=300
-NODE_ENV=production
-NODE_OPTIONS=--max-old-space-size=4096
-```
-
-Notes:
-
-- `GEMINI_API_KEY` accepts comma-separated keys in strict order.
-- On quota/auth failure, the app retries the same request with the next key.
-- After a full cycle where all keys fail, the app returns an "all keys unavailable" error.
-- `GEMINI_MODEL` is not read from `.env`
-- available AssemblyAI speech models are not controlled from `.env`
-- `HIDE_FROM_SCREEN_CAPTURE=false` allows the window to appear in screen share / screenshots
-- `START_HIDDEN=true` starts the app in background mode (window stays hidden until toggled)
-
-### App State
-
-Runtime selections are persisted in:
-
-```text
-cache/app-state.json
-```
-
-Stored values:
-
-- active Gemini API key index
-- selected Gemini model
-- selected AssemblyAI speech model
-
-## Build
-
-Use:
-
-```powershell
-npm run build:win
-```
-
-Output:
-
-```text
-dist/GoogleChrome.exe
-```
-
-If build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
-
-Run the packaged app directly (no IDE/terminal needed) by double-clicking:
-
-```text
-dist/GoogleChrome.exe
-```
-
-Background launch options:
-
-- set `START_HIDDEN=true` in `.env` before building, or
-- launch with flag: `GoogleChrome.exe --start-hidden`
-
-## Scripts
-
-- `npm start` - run the app
-- `npm run start:hidden` - run from source in hidden/background mode
-- `npm run dev` - run with logs
-- `npm run build:win` - build portable Windows executable (`dist/GoogleChrome.exe`)
-
-## Repomix
-
-To recreate the merged single-file codebase snapshot (`repomix-output.txt`), run:
-
-```powershell
-npx repomix . --style plain -o repomix-output.txt
-```
-
-Optional (avoid packing the output file itself when experimenting with other output names):
-
-```powershell
-npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
-```
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
-| `Ctrl+Alt+Shift+S` | Capture screenshot |
-| `Ctrl+Alt+Shift+A` | Ask AI (full session context) |
-| `Ctrl+Alt+Shift+X` | Emergency hide |
-| `Ctrl+Alt+Shift+H` | Toggle opacity |
-| `Ctrl+Alt+Shift+Left` | Move window left |
-| `Ctrl+Alt+Shift+Right` | Move window right |
-| `Ctrl+Alt+Shift+Up` | Move window top |
-| `Ctrl+Alt+Shift+Down` | Move window bottom |
-
-These values come from `src/config.js`.
-
-## Note
-
-Use this tool only where recording, transcription, and AI assistance are allowed.
 
 ================
 File: src/windows/assistant/renderer.html
@@ -10606,6 +10984,8 @@ File: src/windows/assistant/renderer.html
 ================
 File: src/windows/assistant/renderer.js
 ================
+/// <reference path="./renderer-globals.d.ts" />
+
 import {
     canToggleAiForMessageType as canToggleAiForMessageTypeRule,
     defaultIncludeInAiForMessageType as defaultIncludeInAiForMessageTypeRule,
@@ -10617,6 +10997,10 @@ import {
 import { createMessageStore } from './renderer/features/ai-context/message-store.js';
 import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
 import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/features/ai-context/toggle-ui.js';
+import { createChatUiManager } from './renderer/features/chat/chat-ui-manager.js';
+import { createWindowAdjustmentManager } from './renderer/features/layout/window-adjustments.js';
+import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
+
 import {
     createTranscriptionSourceState,
     normalizeSource as normalizeAssemblySource,
@@ -10716,7 +11100,6 @@ const chatMessagesElement = document.getElementById('chat-messages');
 const chatComposer = document.getElementById('chat-composer');
 const chatManualInput = document.getElementById('chat-manual-input');
 const chatManualSend = document.getElementById('chat-manual-send');
-const chatResizeHandle = document.getElementById('chat-resize-handle');
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
@@ -10764,17 +11147,36 @@ const settingsShortcutsList = document.getElementById('settings-shortcuts-list')
 let startTime = Date.now();
 let timerInterval;
 const MIN_WINDOW_WIDTH = 600;
-const MIN_WINDOW_HEIGHT = 250;
-const MIN_CHAT_HEIGHT = 150;
+const MIN_WINDOW_HEIGHT = 380;
 const MAX_CHAT_INPUT_HEIGHT = 88;
 
-let activeWindowResize = null;
-let pendingWindowBounds = null;
-let windowResizeFrame = null;
-let activeChatResize = null;
 let isCloseConfirmationOpen = false;
-let configuredKeyboardShortcuts = [];
-const shortcutBindingsById = new Map();
+const shortcutManager = createShortcutManager({ settingsShortcutsList });
+const windowAdjustmentManager = createWindowAdjustmentManager({
+    windowResizeHandles,
+    chatContainer,
+    minWindowWidth: MIN_WINDOW_WIDTH,
+    minWindowHeight: MIN_WINDOW_HEIGHT,
+    onViewportResize: () => {
+        autoResizeManualInput();
+    }
+});
+const chatUiManager = createChatUiManager({
+    chatContainer,
+    chatMessagesElement,
+    chatComposer,
+    chatManualInput,
+    chatManualSend,
+    messageStore,
+    maxChatInputHeight: MAX_CHAT_INPUT_HEIGHT,
+    escapeHtml: (value) => escapeHtml(value),
+    updateUi: () => updateUI(),
+    onMessagesChanged: (messages) => {
+        chatMessagesArray = messages;
+    },
+    showFeedback: (message, type) => showFeedback(message, type),
+    addMonitorLog: (...args) => addMonitorLog(...args)
+});
 
 // Initialize
 async function init() {
@@ -10803,7 +11205,7 @@ async function init() {
     const app = document.getElementById('app');
     if (app) {
         app.style.visibility = 'visible';
-        app.style.display = 'block';
+        app.style.display = 'flex';
     }
 
     console.log('Renderer initialized - Ready for live transcription!');
@@ -10894,238 +11296,12 @@ function toggleThemeMode() {
     applyTheme(nextTheme, { persist: true, announce: true });
 }
 
-function normalizeShortcutToken(token) {
-    const normalized = String(token || '').trim().toLowerCase();
-    const aliasMap = {
-        left: 'arrowleft',
-        right: 'arrowright',
-        up: 'arrowup',
-        down: 'arrowdown',
-        escape: 'escape',
-        esc: 'escape',
-        enter: 'enter',
-        return: 'enter',
-        plus: '+',
-        space: ' '
-    };
-
-    if (Object.prototype.hasOwnProperty.call(aliasMap, normalized)) {
-        return aliasMap[normalized];
-    }
-
-    return normalized;
-}
-
-function parseAcceleratorBinding(accelerator) {
-    if (typeof accelerator !== 'string' || accelerator.trim().length === 0) {
-        return null;
-    }
-
-    const tokens = accelerator
-        .split('+')
-        .map((token) => token.trim())
-        .filter(Boolean);
-
-    if (tokens.length === 0) {
-        return null;
-    }
-
-    const binding = {
-        ctrl: false,
-        meta: false,
-        ctrlOrMeta: false,
-        alt: false,
-        shift: false,
-        key: ''
-    };
-
-    tokens.forEach((token) => {
-        const normalized = String(token).toLowerCase();
-        switch (normalized) {
-            case 'commandorcontrol':
-                binding.ctrlOrMeta = true;
-                break;
-            case 'ctrl':
-            case 'control':
-                binding.ctrl = true;
-                break;
-            case 'command':
-            case 'cmd':
-            case 'meta':
-            case 'super':
-                binding.meta = true;
-                break;
-            case 'alt':
-            case 'option':
-                binding.alt = true;
-                break;
-            case 'shift':
-                binding.shift = true;
-                break;
-            default:
-                binding.key = normalizeShortcutToken(normalized);
-                break;
-        }
-    });
-
-    if (!binding.key) {
-        return null;
-    }
-
-    return binding;
-}
-
-function normalizeKeyboardShortcutDefinition(shortcut) {
-    if (!shortcut || typeof shortcut !== 'object') {
-        return null;
-    }
-
-    const id = typeof shortcut.id === 'string' ? shortcut.id.trim() : '';
-    const accelerator = typeof shortcut.accelerator === 'string' ? shortcut.accelerator.trim() : '';
-    if (!id || !accelerator) {
-        return null;
-    }
-
-    const buttonLabel = typeof shortcut.buttonLabel === 'string' && shortcut.buttonLabel.trim()
-        ? shortcut.buttonLabel.trim()
-        : id;
-    const description = typeof shortcut.description === 'string' ? shortcut.description.trim() : '';
-
-    return {
-        id,
-        accelerator,
-        buttonLabel,
-        description
-    };
-}
-
-function setConfiguredKeyboardShortcuts(shortcuts) {
-    const normalizedShortcuts = Array.isArray(shortcuts)
-        ? shortcuts
-            .map((shortcut) => normalizeKeyboardShortcutDefinition(shortcut))
-            .filter(Boolean)
-        : [];
-
-    configuredKeyboardShortcuts = normalizedShortcuts;
-    shortcutBindingsById.clear();
-
-    normalizedShortcuts.forEach((shortcut) => {
-        const parsedBinding = parseAcceleratorBinding(shortcut.accelerator);
-        if (parsedBinding) {
-            shortcutBindingsById.set(shortcut.id, parsedBinding);
-        }
-    });
-
-    renderKeyboardShortcutsInSettings();
-}
-
-function getShortcutBinding(shortcutId) {
-    return shortcutBindingsById.get(shortcutId) || null;
+function applySettingsShortcutConfig(settings) {
+    shortcutManager.applySettingsShortcutConfig(settings);
 }
 
 function isShortcutPressed(event, shortcutId) {
-    const binding = getShortcutBinding(shortcutId);
-    if (!binding) {
-        return false;
-    }
-
-    const eventKey = normalizeShortcutToken(event.key);
-    if (eventKey !== binding.key) {
-        return false;
-    }
-
-    if (binding.ctrlOrMeta) {
-        if (!event.ctrlKey && !event.metaKey) {
-            return false;
-        }
-    } else {
-        if (event.ctrlKey !== binding.ctrl || event.metaKey !== binding.meta) {
-            return false;
-        }
-    }
-
-    return event.altKey === binding.alt && event.shiftKey === binding.shift;
-}
-
-function formatShortcutTokenForDisplay(token) {
-    const normalized = String(token || '').trim().toLowerCase();
-    const displayMap = {
-        commandorcontrol: navigator.platform.toLowerCase().includes('mac') ? 'Cmd' : 'Ctrl',
-        command: 'Cmd',
-        cmd: 'Cmd',
-        control: 'Ctrl',
-        ctrl: 'Ctrl',
-        alt: navigator.platform.toLowerCase().includes('mac') ? 'Option' : 'Alt',
-        option: 'Option',
-        shift: 'Shift',
-        left: 'Left',
-        right: 'Right',
-        up: 'Up',
-        down: 'Down'
-    };
-
-    if (Object.prototype.hasOwnProperty.call(displayMap, normalized)) {
-        return displayMap[normalized];
-    }
-
-    if (normalized.length === 1) {
-        return normalized.toUpperCase();
-    }
-
-    return token;
-}
-
-function formatShortcutForDisplay(accelerator) {
-    return String(accelerator || '')
-        .split('+')
-        .map((token) => token.trim())
-        .filter(Boolean)
-        .map((token) => formatShortcutTokenForDisplay(token))
-        .join('+');
-}
-
-function renderKeyboardShortcutsInSettings() {
-    if (!settingsShortcutsList) {
-        return;
-    }
-
-    settingsShortcutsList.innerHTML = '';
-
-    if (!configuredKeyboardShortcuts.length) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'settings-shortcuts-empty';
-        emptyState.textContent = 'No shortcuts configured.';
-        settingsShortcutsList.appendChild(emptyState);
-        return;
-    }
-
-    configuredKeyboardShortcuts.forEach((shortcut) => {
-        const row = document.createElement('div');
-        row.className = 'settings-shortcut-row';
-
-        const buttonLabel = document.createElement('span');
-        buttonLabel.className = 'settings-shortcut-button';
-        buttonLabel.textContent = shortcut.buttonLabel;
-        if (shortcut.description) {
-            buttonLabel.title = shortcut.description;
-        }
-
-        const shortcutValue = document.createElement('span');
-        shortcutValue.className = 'settings-shortcut-key';
-        shortcutValue.textContent = formatShortcutForDisplay(shortcut.accelerator);
-
-        row.appendChild(buttonLabel);
-        row.appendChild(shortcutValue);
-        settingsShortcutsList.appendChild(row);
-    });
-}
-
-function applySettingsShortcutConfig(settings) {
-    if (!settings || settings.error) {
-        return;
-    }
-
-    setConfiguredKeyboardShortcuts(settings.keyboardShortcuts);
+    return shortcutManager.isShortcutPressed(event, shortcutId);
 }
 
 async function loadShortcutConfig() {
@@ -11142,220 +11318,7 @@ async function loadShortcutConfig() {
 }
 
 function setupWindowAdjustments() {
-    setupWindowResizeHandles();
-    setupChatResizeHandle();
-    window.addEventListener('resize', () => {
-        autoResizeManualInput();
-    });
-}
-
-function setupWindowResizeHandles() {
-    if (!window.electronAPI || !windowResizeHandles.length) {
-        return;
-    }
-
-    windowResizeHandles.forEach((handle) => {
-        handle.addEventListener('pointerdown', startWindowResize);
-    });
-}
-
-async function startWindowResize(event) {
-    if (!window.electronAPI?.getWindowBounds || !window.electronAPI?.setWindowBounds) {
-        return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const handleElement = event.currentTarget;
-    if (!handleElement) {
-        return;
-    }
-
-    const direction = handleElement.dataset.resizeHandle;
-    const pointerId = event.pointerId;
-    const startScreenX = event.screenX;
-    const startScreenY = event.screenY;
-    const startBounds = await window.electronAPI.getWindowBounds();
-    if (!startBounds || startBounds.error) {
-        console.error('Failed to get initial window bounds:', startBounds?.error);
-        return;
-    }
-
-    activeWindowResize = {
-        direction,
-        pointerId,
-        startScreenX,
-        startScreenY,
-        startBounds,
-        handleElement
-    };
-
-    document.body.classList.add('window-resizing');
-    handleElement.setPointerCapture?.(pointerId);
-
-    document.addEventListener('pointermove', onWindowResizeMove);
-    document.addEventListener('pointerup', stopWindowResize);
-    document.addEventListener('pointercancel', stopWindowResize);
-}
-
-function onWindowResizeMove(event) {
-    if (!activeWindowResize || event.pointerId !== activeWindowResize.pointerId) {
-        return;
-    }
-
-    event.preventDefault();
-
-    const deltaX = event.screenX - activeWindowResize.startScreenX;
-    const deltaY = event.screenY - activeWindowResize.startScreenY;
-    const nextBounds = calculateWindowResizeBounds(
-        activeWindowResize.startBounds,
-        activeWindowResize.direction,
-        deltaX,
-        deltaY
-    );
-
-    scheduleWindowResize(nextBounds);
-}
-
-function calculateWindowResizeBounds(startBounds, direction, deltaX, deltaY) {
-    let { x, y, width, height } = startBounds;
-
-    if (direction.includes('e')) {
-        width = Math.max(MIN_WINDOW_WIDTH, startBounds.width + deltaX);
-    }
-
-    if (direction.includes('s')) {
-        height = Math.max(MIN_WINDOW_HEIGHT, startBounds.height + deltaY);
-    }
-
-    if (direction.includes('w')) {
-        const nextWidth = Math.max(MIN_WINDOW_WIDTH, startBounds.width - deltaX);
-        x = startBounds.x + (startBounds.width - nextWidth);
-        width = nextWidth;
-    }
-
-    if (direction.includes('n')) {
-        const nextHeight = Math.max(MIN_WINDOW_HEIGHT, startBounds.height - deltaY);
-        y = startBounds.y + (startBounds.height - nextHeight);
-        height = nextHeight;
-    }
-
-    return {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height)
-    };
-}
-
-function scheduleWindowResize(bounds) {
-    pendingWindowBounds = bounds;
-    if (windowResizeFrame) {
-        return;
-    }
-
-    windowResizeFrame = window.requestAnimationFrame(async () => {
-        windowResizeFrame = null;
-        const nextBounds = pendingWindowBounds;
-        pendingWindowBounds = null;
-
-        if (!nextBounds) {
-            return;
-        }
-
-        const result = await window.electronAPI.setWindowBounds(nextBounds);
-        if (result && result.error) {
-            console.error('Failed to set window bounds:', result.error);
-        }
-    });
-}
-
-function stopWindowResize(event) {
-    if (!activeWindowResize) {
-        return;
-    }
-
-    if (event.pointerId && event.pointerId !== activeWindowResize.pointerId) {
-        return;
-    }
-
-    activeWindowResize.handleElement?.releasePointerCapture?.(activeWindowResize.pointerId);
-    activeWindowResize = null;
-    pendingWindowBounds = null;
-
-    if (windowResizeFrame) {
-        window.cancelAnimationFrame(windowResizeFrame);
-        windowResizeFrame = null;
-    }
-
-    document.body.classList.remove('window-resizing');
-    document.removeEventListener('pointermove', onWindowResizeMove);
-    document.removeEventListener('pointerup', stopWindowResize);
-    document.removeEventListener('pointercancel', stopWindowResize);
-}
-
-function setupChatResizeHandle() {
-    if (!chatContainer || !chatResizeHandle) {
-        return;
-    }
-
-    chatResizeHandle.addEventListener('pointerdown', startChatResize);
-}
-
-function startChatResize(event) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    activeChatResize = {
-        pointerId: event.pointerId,
-        startClientY: event.clientY,
-        startHeight: chatContainer.getBoundingClientRect().height
-    };
-
-    document.body.classList.add('chat-resizing');
-    chatResizeHandle.setPointerCapture?.(event.pointerId);
-
-    document.addEventListener('pointermove', onChatResizeMove);
-    document.addEventListener('pointerup', stopChatResize);
-    document.addEventListener('pointercancel', stopChatResize);
-}
-
-function onChatResizeMove(event) {
-    if (!activeChatResize || event.pointerId !== activeChatResize.pointerId) {
-        return;
-    }
-
-    event.preventDefault();
-
-    const deltaY = event.clientY - activeChatResize.startClientY;
-    const mainInterface = document.querySelector('.main-interface');
-    const monitorSection = document.getElementById('transcription-monitor');
-    const reservedHeight =
-        (mainInterface?.getBoundingClientRect().height || 0) +
-        (monitorSection?.getBoundingClientRect().height || 0) +
-        56;
-    const maxChatHeight = Math.max(MIN_CHAT_HEIGHT, window.innerHeight - reservedHeight);
-    const nextHeight = clamp(activeChatResize.startHeight + deltaY, MIN_CHAT_HEIGHT, maxChatHeight);
-
-    chatContainer.style.height = `${Math.round(nextHeight)}px`;
-}
-
-function stopChatResize(event) {
-    if (!activeChatResize) {
-        return;
-    }
-
-    if (event.pointerId && event.pointerId !== activeChatResize.pointerId) {
-        return;
-    }
-
-    chatResizeHandle.releasePointerCapture?.(activeChatResize.pointerId);
-    activeChatResize = null;
-    document.body.classList.remove('chat-resizing');
-    document.removeEventListener('pointermove', onChatResizeMove);
-    document.removeEventListener('pointerup', stopChatResize);
-    document.removeEventListener('pointercancel', stopChatResize);
+    windowAdjustmentManager.setupWindowAdjustments();
 }
 
 function sourceLabel(source) {
@@ -12393,157 +12356,20 @@ async function copyToClipboard() {
 }
 
 // Chat message management
-function formatResponse(text) {
-    let formatted = text
-        .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n/g, '<br>');
-
-    return formatted;
-}
-
 function addChatMessage(type, content, options = {}) {
-    if (!chatMessagesElement) return;
-
-    const timestampDate = new Date();
-    const record = messageStore.add(type, content, {
-        id: options.id,
-        timestamp: timestampDate,
-        canToggleAi: options.canToggleAi,
-        includeInAi: options.includeInAi,
-        screenshotId: options.screenshotId
-    });
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${type}-message`;
-    messageDiv.dataset.messageId = record.id;
-    if (record.canToggleAi) {
-        messageDiv.classList.add('ai-toggleable');
-        messageDiv.classList.add(record.includeInAi ? 'ai-included' : 'ai-excluded');
-    }
-
-    const timestamp = timestampDate.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-
-    let icon = '\u2139\uFE0F';
-    let label = '';
-    let contentClass = 'message-content';
-    let safeContent = escapeHtml(content);
-
-    switch (type) {
-        case 'voice':
-        case 'voice-mic':
-            icon = '\u{1F3A4}';
-            label = 'You';
-            break;
-
-        case 'voice-system':
-            icon = '\u{1F50A}';
-            label = 'Host';
-            break;
-
-        case 'screenshot':
-            icon = '\u{1F4F8}';
-            break;
-
-        case 'ai-response':
-            icon = '\u{1F916}';
-            contentClass = 'message-content ai-response';
-            safeContent = formatResponse(content);
-            break;
-
-        case 'system':
-            icon = '\u2139\uFE0F';
-            contentClass = 'message-content system-message';
-            break;
-    }
-
-    const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
-    const toggleHtml = record.canToggleAi
-        ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? 'AI' : 'Off'}</button>`
-        : '';
-    const exclusionHtml = record.canToggleAi
-        ? '<div class="ai-excluded-note">Excluded from AI context</div>'
-        : '';
-
-    const messageContent = `
-        <div class="message-header">
-            <span class="message-icon">${icon}</span>
-            ${labelHtml}
-            ${toggleHtml}
-            <span class="message-time">${timestamp}</span>
-        </div>
-        <div class="${contentClass}">${exclusionHtml}${safeContent}</div>
-    `;
-
-    messageDiv.innerHTML = messageContent;
-    chatMessagesElement.appendChild(messageDiv);
-
-    chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
-
-    chatMessagesArray = messageStore.getMessages();
-
-    // Update UI to enable/disable buttons based on content
-    updateUI();
-
-    return record;
-}
-
-function updateChatComposerHeight() {
-    if (!chatContainer || !chatComposer) {
-        return;
-    }
-
-    const composerHeight = Math.max(0, Math.round(chatComposer.getBoundingClientRect().height));
-    if (composerHeight > 0) {
-        chatContainer.style.setProperty('--chat-composer-height', `${composerHeight}px`);
-    }
+    return chatUiManager.addChatMessage(type, content, options);
 }
 
 function autoResizeManualInput() {
-    if (!chatManualInput) {
-        return;
-    }
-
-    chatManualInput.style.height = 'auto';
-    const nextHeight = Math.min(chatManualInput.scrollHeight, MAX_CHAT_INPUT_HEIGHT);
-    chatManualInput.style.height = `${Math.max(24, nextHeight)}px`;
-    chatManualInput.style.overflowY = chatManualInput.scrollHeight > MAX_CHAT_INPUT_HEIGHT ? 'auto' : 'hidden';
-    updateChatComposerHeight();
+    chatUiManager.autoResizeManualInput();
 }
 
 function updateManualComposerState() {
-    if (!chatManualInput || !chatManualSend) {
-        return;
-    }
-
-    chatManualSend.disabled = String(chatManualInput.value || '').trim().length === 0;
+    chatUiManager.updateManualComposerState();
 }
 
 function submitManualContextMessage() {
-    if (!chatManualInput) {
-        return;
-    }
-
-    const text = String(chatManualInput.value || '').trim();
-    if (!text) {
-        showFeedback('Type a message first', 'error');
-        return;
-    }
-
-    addChatMessage('voice-mic', text);
-    addMonitorLog('info', 'manual-context-added', 'Manual context message added', 'mic', {
-        chars: text.length
-    });
-    showFeedback('Manual context added', 'success');
-
-    chatManualInput.value = '';
-    autoResizeManualInput();
-    updateManualComposerState();
-    chatManualInput.focus();
+    chatUiManager.submitManualContextMessage();
 }
 
 // Timer
@@ -12883,6 +12709,243 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
+================
+File: README.md
+================
+# Open-Cluely
+
+Open-Cluely is an Electron desktop copilot for technical interviews and live meetings. It combines AssemblyAI streaming transcription, screenshot capture, and Gemini-powered responses in a compact always-on-top window.
+
+Use it only in environments where recording, transcription, screenshots, and AI assistance are allowed.
+
+## Features
+
+- Dual-source live transcription for host/system audio and microphone input, with per-source toggles and a live monitor.
+- `Ask AI` uses the current transcript bundle, manual notes, and any enabled screenshots, with text-only fallback when no screenshots are selected.
+- `Screen AI` runs screenshot-focused analysis from the screenshots currently included in AI context.
+- Per-message `AI` / `Off` controls let you keep transcript chunks, screenshots, and prior AI replies visible while excluding them from future prompts.
+- Built-in actions for response suggestions, meeting notes, and conversation insights.
+- Multiple Gemini API keys are supported as a comma-separated list, with automatic failover on quota or authentication errors.
+- Settings support Gemini model selection, AssemblyAI speech model selection, programming language preference, and window opacity.
+- Session state is persisted to `cache/app-state.json`, and screenshot retention is bounded by `MAX_SCREENSHOTS`.
+
+## Installation
+
+### Requirements
+
+- Windows 10/11 is the primary development target for this repo.
+- Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
+- npm `10+`
+- At least one Gemini API key
+- One AssemblyAI API key
+
+### Setup
+
+```powershell
+nvm install 20.20.1
+nvm use 20.20.1
+npm ci
+Copy-Item .env.example .env
+```
+
+Populate `.env` before the first run:
+
+```env
+GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
+ASSEMBLY_AI_API_KEY=your_assemblyai_key
+```
+
+Start the app:
+
+```powershell
+npm start
+```
+
+Useful variants:
+
+```powershell
+npm run dev
+npm run start:hidden
+```
+
+### Recommended For Windows Use
+
+For day-to-day use on Windows, prefer building the portable app and running the generated `.exe` instead of launching from source every time.
+
+```powershell
+npm run build:win
+```
+
+This creates:
+
+```text
+dist/GoogleChrome.exe
+```
+
+You can then run the packaged app directly by double-clicking `dist/GoogleChrome.exe`.
+
+### Native Windows Build Tools
+
+This app depends on native modules. If `npm ci` fails with `node-gyp` or Visual Studio toolchain errors, install the C++ build tools and Python:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `GEMINI_API_KEY` | Yes | Comma-separated keys are allowed. The runtime rotates to the next key when it hits quota/auth failures. |
+| `ASSEMBLY_AI_API_KEY` | Yes | Used for streaming STT and audio transcription endpoints. |
+| `HIDE_FROM_SCREEN_CAPTURE` | No | Defaults to `true`. Controls `BrowserWindow.setContentProtection(...)`. |
+| `START_HIDDEN` | No | Defaults to `false`. Also available at runtime via `npm run start:hidden` or `--start-hidden`. |
+| `MAX_SCREENSHOTS` | No | Defaults to `50`. Old screenshots are deleted when the limit is exceeded. |
+| `SCREENSHOT_DELAY` | No | Defaults to `300` ms. Delay used while briefly hiding the window before capture. |
+| `NODE_ENV` | No | Defaults to `production`. `development` opens DevTools automatically. |
+| `NODE_OPTIONS` | No | Defaults to `--max-old-space-size=4096`. |
+
+### Source-Of-Truth Config
+
+[`src/config.js`](./src/config.js) defines the app's configurable lists and defaults:
+
+- Gemini models
+- AssemblyAI speech models
+- Programming language options for code-oriented prompts
+- Global keyboard shortcuts
+
+The first item in each model/language list is treated as the default.
+
+### Persisted Files
+
+- In development, state is written to `cache/app-state.json` at the repo root. Portable builds create the same `cache/app-state.json` structure next to the executable.
+- Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
+- Saving settings from the UI writes API-key values back to `.env` and selection state back to `cache/app-state.json`.
+
+## Basic Workflow
+
+1. Launch the app and confirm your API keys and models in Settings.
+2. Start transcription and enable whichever sources you need: `Host`, `Mic`, or both.
+3. Take screenshots when visual context matters.
+4. Use `Ask AI` for transcript-plus-screen context, or `Screen AI` for screenshot-only analysis.
+5. Toggle noisy messages to `Off` before asking AI again so the next prompt stays focused.
+
+## Folder Structure
+
+```text
+src/
+  bootstrap/             Environment loading, validation, and persistence
+  main-process/          Electron startup, IPC wiring, window control, assistant runtime
+  services/
+    ai/                  Gemini service wrapper and prompt builders
+    assembly-ai/         Streaming STT service and transcript history merging
+    state/               App-state load/save helpers
+  windows/
+    assistant/           Active window, preload bridge, renderer, and renderer feature modules
+    legacy/              Older experimental files kept out of the active flow
+assets/                  Build icons and packaging assets
+cache/                   Generated app state in development
+.stealth_screenshots/    Session screenshots in development
+dist/                    Packaged build output
+repomix-output.txt       Single-file repository snapshot for AI/code review tooling
+```
+
+## Default Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
+| `Ctrl+Alt+Shift+S` | Capture screenshot |
+| `Ctrl+Alt+Shift+A` | Ask AI with current session context |
+| `Ctrl+Alt+Shift+X` | Emergency hide |
+| `Ctrl+Alt+Shift+H` | Toggle stealth opacity mode |
+| `Ctrl+Alt+Shift+Left` | Move window left |
+| `Ctrl+Alt+Shift+Right` | Move window right |
+| `Ctrl+Alt+Shift+Up` | Move window to top |
+| `Ctrl+Alt+Shift+Down` | Move window to bottom |
+
+## Scripts
+
+- `npm start` runs the app from source.
+- `npm run start:hidden` launches it in background mode from source.
+- `npm run dev` enables Electron logging.
+- `npm run build:win` creates the portable Windows executable.
+- `npm run build` runs the default `electron-builder` flow.
+
+## Build
+
+The recommended Windows build is the portable executable:
+
+```powershell
+npm run build:win
+```
+
+Expected output:
+
+```text
+dist/GoogleChrome.exe
+```
+
+Notes:
+
+- This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
+- `.env` is bundled as an extra resource during packaging.
+- The current Windows build is configured as a portable `x64` target with:
+  - Product name: `Google Chrome (2)`
+  - Executable name: `GoogleChrome.exe`
+  - App ID: `com.google.chrome`
+  - Publisher name: `Google LLC`
+- If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
+- The repo already includes [`assets/chrome.ico`](./assets/chrome.ico) for the Windows target. Add `assets/chrome.icns` and `assets/chrome.png` before relying on the macOS or Linux targets defined in `package.json`.
+
+### Running The Built App
+
+After building:
+
+1. Open the `dist/` folder.
+2. Run `GoogleChrome.exe`.
+3. If you want background launch behavior, either set `START_HIDDEN=true` before building or launch with:
+
+```powershell
+.\dist\GoogleChrome.exe --start-hidden
+```
+
+### Build Checks
+
+After packaging, verify:
+
+- `dist/GoogleChrome.exe` exists
+- the executable shows the Chrome icon
+- the app launches correctly without needing `npm start`
+
+For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md).
+
+## Good Practices
+
+- Keep `src/config.js` as the single source of truth for model lists, programming languages, and keyboard shortcuts.
+- When adding or changing environment variables, update all three places together: [`src/bootstrap/environment.js`](./src/bootstrap/environment.js), [`.env.example`](./.env.example), and this README.
+- Preserve Electron boundaries: renderer code should go through `preload` and IPC, not import main-process modules directly.
+- Add new UI logic under `src/windows/assistant/renderer/features/` and new domain logic under `src/services/` or `src/main-process/features/`.
+- Treat [`src/windows/legacy/`](./src/windows/legacy/) as reference material unless you are intentionally reviving an old experiment.
+- Re-test both `npm start` and the relevant packaging path when changing startup flow, window behavior, screenshots, IPC, or global shortcuts.
+- Keep real keys out of Git. Use `.env`, and rely on `.env.example` for the documented contract.
+
+## Repomix Snapshot
+
+To regenerate the packed repository snapshot:
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt
+```
+
+If you want to exclude generated artifacts while experimenting:
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
+```
 
 ================
 File: src/main.js
