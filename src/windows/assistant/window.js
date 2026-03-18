@@ -10,6 +10,7 @@ function createAssistantWindow({
   minHeight,
   hideFromScreenCapture,
   initialOpacity,
+  launchHidden,
   nodeEnv
 }) {
   console.log('Creating assistant window...');
@@ -146,12 +147,18 @@ function createAssistantWindow({
       'Content visibility check complete';
     `).then((result) => {
       console.log('JavaScript result:', result);
-      mainWindow.show();
-      mainWindow.focus();
-      console.log('Window shown with transparent background');
+      if (launchHidden) {
+        console.log('Window initialized in hidden launch mode');
+        return;
+      }
+
+      mainWindow.showInactive();
+      console.log('Window shown in inactive mode with transparent background');
     }).catch((error) => {
       console.log('JavaScript execution failed:', error);
-      mainWindow.show();
+      if (!launchHidden) {
+        mainWindow.showInactive();
+      }
     });
   });
 

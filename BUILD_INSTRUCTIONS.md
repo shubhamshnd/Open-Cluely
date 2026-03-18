@@ -39,7 +39,7 @@ d:\Open-Cluely\assets\
 
 ### For Windows (Portable EXE):
 ```bash
-npm run build
+npm run build:win
 ```
 
 This will create: `dist/GoogleChrome.exe`
@@ -48,7 +48,7 @@ This will create: `dist/GoogleChrome.exe`
 
 **Portable (recommended for stealth):**
 ```bash
-npm run build -- --win portable
+npm run build:win
 ```
 - Creates: `dist/GoogleChrome.exe`
 - No installation required
@@ -86,6 +86,7 @@ The app is configured to:
 - Show as "Google Chrome (2)" in Task Manager
 - Be published by "Google LLC" (in properties)
 - Use portable mode (no installation)
+- Support hidden launch mode via `START_HIDDEN=true` or `--start-hidden`
 
 ## Build Configuration Details
 
@@ -202,12 +203,11 @@ To share the app:
 
 To rebuild after changes:
 ```bash
-npm run build
+npm run build:win
 ```
 
 This will overwrite the previous build in `dist/`.
 
 ---
 
-**Built with:** Electron + Google Gemini AI
 **Version:** 1.0.0

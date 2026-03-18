@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 
 const OPTIONAL_ENV_DEFAULTS = Object.freeze({
   HIDE_FROM_SCREEN_CAPTURE: 'true',
+  START_HIDDEN: 'false',
   MAX_SCREENSHOTS: '50',
   SCREENSHOT_DELAY: '300',
   NODE_ENV: 'production',
@@ -77,6 +78,10 @@ function normalizeApplicationEnvironment(source = {}) {
       source.HIDE_FROM_SCREEN_CAPTURE ?? source.hideFromScreenCapture,
       parseBoolean(OPTIONAL_ENV_DEFAULTS.HIDE_FROM_SCREEN_CAPTURE, true)
     ),
+    startHidden: parseBoolean(
+      source.START_HIDDEN ?? source.startHidden,
+      parseBoolean(OPTIONAL_ENV_DEFAULTS.START_HIDDEN, false)
+    ),
     maxScreenshots: parsePositiveInteger(
       source.MAX_SCREENSHOTS ?? source.maxScreenshots,
       parsePositiveInteger(OPTIONAL_ENV_DEFAULTS.MAX_SCREENSHOTS, 50)
@@ -94,6 +99,7 @@ function syncProcessEnvironment(environment) {
   process.env.GEMINI_API_KEY = environment.geminiApiKey;
   process.env.ASSEMBLY_AI_API_KEY = environment.assemblyAiApiKey;
   process.env.HIDE_FROM_SCREEN_CAPTURE = String(environment.hideFromScreenCapture);
+  process.env.START_HIDDEN = String(environment.startHidden);
   process.env.MAX_SCREENSHOTS = String(environment.maxScreenshots);
   process.env.SCREENSHOT_DELAY = String(environment.screenshotDelay);
   process.env.NODE_ENV = environment.nodeEnv;
@@ -147,6 +153,11 @@ function buildEnvironmentFileContent(environment) {
     '# true = hide this app from screen sharing/screen capture',
     '# false = allow this app to appear in screen sharing/screen capture',
     `HIDE_FROM_SCREEN_CAPTURE=${environment.hideFromScreenCapture}`,
+    '',
+    '# Optional startup mode',
+    '# true = start the window hidden (background mode)',
+    '# false = show the window on startup',
+    `START_HIDDEN=${environment.startHidden}`,
     '',
     '# Optional screenshot settings',
     `MAX_SCREENSHOTS=${environment.maxScreenshots}`,

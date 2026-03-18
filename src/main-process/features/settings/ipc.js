@@ -33,6 +33,7 @@
       assemblyAiSpeechModel: getAssemblyAiSpeechModel(),
       keyboardShortcuts,
       hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+      startHidden: appEnvironment.startHidden,
       windowOpacityLevel: windowController.getWindowOpacityLevel()
     };
   });
@@ -51,6 +52,7 @@
         geminiApiKey: settings.geminiApiKey || '',
         assemblyAiApiKey: settings.assemblyAiApiKey || '',
         hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+        startHidden: appEnvironment.startHidden,
         maxScreenshots: appEnvironment.maxScreenshots,
         screenshotDelay: appEnvironment.screenshotDelay,
         nodeEnv: appEnvironment.nodeEnv,

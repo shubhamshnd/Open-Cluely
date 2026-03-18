@@ -177,7 +177,7 @@ function createWindowController({
     });
   }
 
-  function createWindow() {
+  function createWindow({ launchHidden = false } = {}) {
     const appEnvironment = getAppEnvironment();
     mainWindow = createAssistantWindow({
       app,
@@ -187,12 +187,13 @@ function createWindowController({
       minWidth: WINDOW_MIN_WIDTH,
       minHeight: WINDOW_MIN_HEIGHT,
       hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
-      initialOpacity: getVisibleWindowOpacity(),
+      initialOpacity: launchHidden ? getStealthWindowOpacity() : getVisibleWindowOpacity(),
+      launchHidden,
       nodeEnv: appEnvironment.nodeEnv
     });
 
     attachWindowRecoveryHandlers();
-    isVisible = true;
+    isVisible = !launchHidden;
     return mainWindow;
   }
 
@@ -256,6 +257,9 @@ function createWindowController({
 
     const stealthModeEnabled = isVisible;
     isVisible = !stealthModeEnabled;
+    if (isVisible && !mainWindow.isVisible()) {
+      mainWindow.showInactive();
+    }
     applyWindowOpacity();
     sendToRenderer('set-stealth-mode', stealthModeEnabled);
   }
@@ -403,6 +407,9 @@ function createWindowController({
 
   function markVisible() {
     isVisible = true;
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.showInactive();
+    }
     applyWindowOpacity();
   }
 

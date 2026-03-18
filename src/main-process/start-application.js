@@ -35,10 +35,23 @@ const { createWindowController } = require('./features/window/window-controller'
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
 const { logStartupConfiguration } = require('./startup-logging');
 
+function resolveStartupOptions(argv = process.argv) {
+  const normalizedArgs = Array.isArray(argv)
+    ? argv.map((value) => String(value || '').trim().toLowerCase())
+    : [];
+
+  const hasFlag = (flag) => normalizedArgs.includes(flag);
+
+  return {
+    startHidden: hasFlag('--start-hidden') || hasFlag('--background')
+  };
+}
+
 async function startApplication() {
   let appEnvironment = null;
   let appState = null;
   let isShuttingDown = false;
+  const startupOptions = resolveStartupOptions();
 
   const geminiRuntime = createGeminiRuntime();
 
@@ -227,16 +240,21 @@ async function startApplication() {
     app.commandLine.appendSwitch('disable-web-security');
     app.commandLine.appendSwitch('enable-media-stream');
 
+    const launchHidden = startupOptions.startHidden || appEnvironment.startHidden;
     console.log('App is ready, creating window...');
-    windowController.createWindow();
+    console.log(`Startup mode: ${launchHidden ? 'hidden' : 'visible'}`);
+    windowController.createWindow({ launchHidden });
     windowController.registerShortcuts();
-    windowController.markVisible();
+
+    if (!launchHidden) {
+      windowController.markVisible();
+    }
 
     if (appState?.windowOpacityLevel == null) {
       windowController.setWindowOpacityLevel(DEFAULT_WINDOW_OPACITY_LEVEL);
     }
 
-    console.log('Window setup complete - will show after content loads');
+    console.log(`Window setup complete (${launchHidden ? 'hidden launch' : 'visible launch'})`);
   });
 
   app.on('window-all-closed', () => {
@@ -246,6 +264,7 @@ async function startApplication() {
   app.on('activate', () => {
     if (!windowController.hasWindow()) {
       windowController.createWindow();
+      windowController.markVisible();
     }
   });
 

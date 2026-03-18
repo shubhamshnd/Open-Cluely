@@ -156,6 +156,7 @@ Optional:
 
 ```env
 HIDE_FROM_SCREEN_CAPTURE=true
+START_HIDDEN=false
 MAX_SCREENSHOTS=50
 SCREENSHOT_DELAY=300
 NODE_ENV=production
@@ -170,6 +171,7 @@ Notes:
 - `GEMINI_MODEL` is not read from `.env`
 - available AssemblyAI speech models are not controlled from `.env`
 - `HIDE_FROM_SCREEN_CAPTURE=false` allows the window to appear in screen share / screenshots
+- `START_HIDDEN=true` starts the app in background mode (window stays hidden until toggled)
 
 ### App State
 
@@ -190,7 +192,7 @@ Stored values:
 Use:
 
 ```powershell
-npm run build -- --config.win.signAndEditExecutable=false
+npm run build:win
 ```
 
 Output:
@@ -201,11 +203,23 @@ dist/GoogleChrome.exe
 
 If build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
 
+Run the packaged app directly (no IDE/terminal needed) by double-clicking:
+
+```text
+dist/GoogleChrome.exe
+```
+
+Background launch options:
+
+- set `START_HIDDEN=true` in `.env` before building, or
+- launch with flag: `GoogleChrome.exe --start-hidden`
+
 ## Scripts
 
 - `npm start` - run the app
+- `npm run start:hidden` - run from source in hidden/background mode
 - `npm run dev` - run with logs
-- `npm run build -- --config.win.signAndEditExecutable=false` - build Windows executable
+- `npm run build:win` - build portable Windows executable (`dist/GoogleChrome.exe`)
 
 ## Repomix
 
