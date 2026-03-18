@@ -4,6 +4,12 @@ Open-Cluely is an Electron desktop copilot for technical interviews and live mee
 
 Use it only in environments where recording, transcription, screenshots, and AI assistance are allowed.
 
+Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview Assistant 😉
+
+## Looks
+<img width="1071" height="834" alt="image" src="https://github.com/user-attachments/assets/9ede4cd0-937c-4438-83df-0c1a4938c774" />
+<img width="1088" height="854" alt="image" src="https://github.com/user-attachments/assets/ef57eb8d-95a5-41d6-ba27-395c8b7d41ad" />
+
 ## Features
 
 - Dual-source live transcription for host/system audio and microphone input, with per-source toggles and a live monitor.
