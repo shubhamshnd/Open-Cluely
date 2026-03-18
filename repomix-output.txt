@@ -90,7 +90,11 @@ src/windows/assistant/renderer/features/assembly-ai/source-state.js
 src/windows/assistant/renderer/features/assembly-ai/transcript-buffer.js
 src/windows/assistant/renderer/features/chat/chat-ui-manager.js
 src/windows/assistant/renderer/features/layout/window-adjustments.js
+src/windows/assistant/renderer/features/listeners/event-listeners.js
+src/windows/assistant/renderer/features/listeners/ipc-listeners.js
+src/windows/assistant/renderer/features/settings/settings-panel-manager.js
 src/windows/assistant/renderer/features/settings/shortcut-manager.js
+src/windows/assistant/renderer/features/transcription/transcription-manager.js
 src/windows/assistant/styles.css
 src/windows/assistant/window.js
 src/windows/legacy/renderer-webspeech-broken.js
@@ -100,6 +104,339 @@ src/windows/legacy/whisper-worker.js
 ================================================================
 Files
 ================================================================
+
+================
+File: src/windows/assistant/renderer/features/listeners/event-listeners.js
+================
+export function setupEventListeners({
+    windowApi,
+    screenshotBtn,
+    analyzeBtn,
+    screenAiBtn,
+    clearBtn,
+    hideBtn,
+    copyBtn,
+    chatManualSend,
+    chatManualInput,
+    closeResultsBtn,
+    transcriptionToggle,
+    sourceSystemToggle,
+    sourceMicToggle,
+    closeAppBtn,
+    cancelCloseBtn,
+    confirmCloseBtn,
+    closeConfirmationDialog,
+    chatMessagesElement,
+    suggestBtn,
+    notesBtn,
+    insightsBtn,
+    themeToggleBtn,
+    settingsBtn,
+    closeSettingsBtn,
+    saveSettingsBtn,
+    settingWindowOpacity,
+    selectedSources,
+    isCloseConfirmationOpen,
+    isShortcutPressed,
+    updateWindowOpacityValueLabel,
+    takeStealthScreenshot,
+    askAiWithSessionContext,
+    analyzeScreenshotsOnly,
+    clearStealthData,
+    emergencyHide,
+    copyToClipboard,
+    submitManualContextMessage,
+    autoResizeManualInput,
+    updateManualComposerState,
+    hideResults,
+    toggleMasterTranscription,
+    addMonitorLog,
+    setSourceSelected,
+    openCloseConfirmation,
+    closeCloseConfirmation,
+    closeApplication,
+    toggleChatMessageInclusion,
+    getResponseSuggestions,
+    generateMeetingNotes,
+    getConversationInsights,
+    toggleThemeMode,
+    openSettings,
+    closeSettings,
+    saveSettings
+}) {
+    if (screenshotBtn) screenshotBtn.addEventListener('click', takeStealthScreenshot);
+    if (analyzeBtn) analyzeBtn.addEventListener('click', askAiWithSessionContext);
+    if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
+    if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
+    if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
+    if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
+    if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
+
+    if (chatManualInput) {
+        chatManualInput.addEventListener('input', () => {
+            autoResizeManualInput();
+            updateManualComposerState();
+        });
+
+        chatManualInput.addEventListener('keydown', (event) => {
+            if (event.isComposing) {
+                return;
+            }
+
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitManualContextMessage();
+            }
+        });
+
+        autoResizeManualInput();
+        updateManualComposerState();
+    }
+
+    if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
+
+    if (transcriptionToggle) {
+        transcriptionToggle.addEventListener('click', () => {
+            toggleMasterTranscription().catch((error) => {
+                console.error('Failed to toggle transcription:', error);
+                addMonitorLog('error', 'master-toggle-failed', error.message);
+            });
+        });
+    }
+
+    if (sourceSystemToggle) {
+        sourceSystemToggle.addEventListener('click', () => {
+            setSourceSelected('system', !selectedSources.system);
+        });
+    }
+
+    if (sourceMicToggle) {
+        sourceMicToggle.addEventListener('click', () => {
+            setSourceSelected('mic', !selectedSources.mic);
+        });
+    }
+
+    if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
+    if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
+
+    if (closeConfirmationDialog) {
+        closeConfirmationDialog.addEventListener('click', (event) => {
+            if (event.target === closeConfirmationDialog) {
+                closeCloseConfirmation();
+            }
+        });
+    }
+
+    if (chatMessagesElement) {
+        chatMessagesElement.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('.ai-include-toggle');
+            if (!button) return;
+            event.preventDefault();
+            const messageId = button.dataset.messageId;
+            if (!messageId) return;
+            toggleChatMessageInclusion(messageId);
+        });
+    }
+
+    if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
+    if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
+    if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
+    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleThemeMode);
+
+    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
+    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+
+    if (settingWindowOpacity) {
+        settingWindowOpacity.addEventListener('input', (event) => {
+            const value = event?.target?.value;
+            if (typeof value !== 'undefined') {
+                updateWindowOpacityValueLabel(value);
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (isCloseConfirmationOpen?.()) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeCloseConfirmation();
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                closeApplication();
+                return;
+            }
+        }
+
+        if (isShortcutPressed?.(event, 'toggleStealth')) {
+            event.preventDefault();
+            windowApi?.toggleStealth?.();
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'takeScreenshot')) {
+            event.preventDefault();
+            takeStealthScreenshot();
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'askAi')) {
+            event.preventDefault();
+            addMonitorLog('info', 'shortcut-local', 'Local Ask AI shortcut captured; awaiting global Ask AI event');
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'emergencyHide')) {
+            event.preventDefault();
+            emergencyHide();
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'toggleTranscription')) {
+            event.preventDefault();
+            addMonitorLog('info', 'shortcut-local', 'Local transcription shortcut captured; awaiting global shortcut event');
+        }
+    });
+
+    document.addEventListener('contextmenu', (event) => event.preventDefault());
+    document.addEventListener('selectstart', (event) => event.preventDefault());
+    document.addEventListener('dragstart', (event) => event.preventDefault());
+}
+
+================
+File: src/windows/assistant/renderer/features/listeners/ipc-listeners.js
+================
+export function setupIpcListeners({
+    windowApi,
+    setScreenshotsCount,
+    updateUi,
+    addChatMessage,
+    setAnalyzing,
+    showLoadingOverlay,
+    hideLoadingOverlay,
+    showFeedback,
+    showEmergencyOverlay,
+    transcriptionManager,
+    toggleMasterTranscription,
+    askAiWithSessionContext,
+    addMonitorLog
+}) {
+    if (!windowApi) {
+        console.error('electronAPI not available');
+        return;
+    }
+
+    windowApi.onScreenshotTakenStealth((count) => {
+        const payload = typeof count === 'object' && count !== null ? count : { count };
+        setScreenshotsCount(Number(payload.count || 0));
+        updateUi();
+        addChatMessage('screenshot', 'Screenshot captured', {
+            screenshotId: typeof payload.screenshotId === 'string' ? payload.screenshotId : null
+        });
+        showFeedback('Screenshot captured', 'success');
+    });
+
+    windowApi.onAnalysisStart(() => {
+        setAnalyzing(true);
+        showLoadingOverlay();
+        addChatMessage('system', 'Analyzing screenshots...');
+    });
+
+    windowApi.onAnalysisResult((data) => {
+        setAnalyzing(false);
+        hideLoadingOverlay();
+
+        if (data.error) {
+            addChatMessage('system', `Error: ${data.error}`);
+            showFeedback('Analysis failed', 'error');
+        } else {
+            addChatMessage('ai-response', data.text);
+            showFeedback('Analysis complete', 'success');
+        }
+    });
+
+    windowApi.onSetStealthMode((enabled) => {
+        showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');
+    });
+
+    windowApi.onEmergencyClear(() => {
+        showEmergencyOverlay();
+    });
+
+    windowApi.onError((message) => {
+        showFeedback(message, 'error');
+    });
+
+    windowApi.onVoskStatus((data) => {
+        transcriptionManager.handleVoskStatus(data);
+    });
+
+    windowApi.onVoskPartial((data) => {
+        transcriptionManager.handleVoskPartial(data);
+    });
+
+    windowApi.onVoskFinal((data) => {
+        transcriptionManager.handleVoskFinal(data);
+    });
+
+    windowApi.onVoskError((data) => {
+        transcriptionManager.handleVoskError(data);
+    });
+
+    windowApi.onVoskStopped((data) => {
+        transcriptionManager.handleVoskStopped(data);
+    });
+
+    if (windowApi.onToggleVoiceRecognition) {
+        windowApi.onToggleVoiceRecognition(() => {
+            addMonitorLog('info', 'shortcut-event', 'Global shortcut toggled transcription');
+            toggleMasterTranscription().catch((error) => {
+                console.error('Global shortcut toggle failed:', error);
+                addMonitorLog('error', 'shortcut-toggle-failed', error.message);
+            });
+        });
+    }
+
+    if (windowApi.onTriggerAskAi) {
+        windowApi.onTriggerAskAi(() => {
+            addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
+            askAiWithSessionContext().catch((error) => {
+                console.error('Global Ask AI trigger failed:', error);
+                addMonitorLog('error', 'shortcut-ask-ai-failed', error.message);
+            });
+        });
+    }
+
+    if (windowApi.onSttDebug) {
+        windowApi.onSttDebug((data) => {
+            const source = data?.source ? transcriptionManager.normalizeSource(data.source) : null;
+            addMonitorLog(
+                data?.level || 'info',
+                data?.event || 'stt-debug',
+                data?.message || '',
+                source,
+                data?.meta || null,
+                data?.ts || Date.now()
+            );
+        });
+    }
+
+    window.addEventListener('error', (event) => {
+        addMonitorLog('error', 'renderer-error', event?.message || 'Renderer error');
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+        const reason = event?.reason;
+        const message = typeof reason === 'string'
+            ? reason
+            : reason?.message || 'Unhandled promise rejection';
+        addMonitorLog('error', 'renderer-rejection', message);
+    });
+}
 
 ================
 File: assets/README.md
@@ -2856,6 +3193,200 @@ export function createWindowAdjustmentManager({
 }
 
 ================
+File: src/windows/assistant/renderer/features/settings/settings-panel-manager.js
+================
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+export function createSettingsPanelManager({
+    settingsPanel,
+    settingGeminiKey,
+    settingGeminiModel,
+    settingProgrammingLanguage,
+    settingAssemblyKey,
+    settingAssemblyModel,
+    settingWindowOpacity,
+    settingWindowOpacityValue,
+    applySettingsShortcutConfig,
+    showFeedback
+}) {
+    function normalizeWindowOpacityLevel(value) {
+        const parsedValue = Number.parseInt(String(value ?? ''), 10);
+
+        if (!Number.isFinite(parsedValue)) {
+            return 10;
+        }
+
+        return clamp(parsedValue, 1, 10);
+    }
+
+    function updateWindowOpacityValueLabel(value) {
+        if (!settingWindowOpacityValue) {
+            return;
+        }
+
+        const opacityLevel = normalizeWindowOpacityLevel(value);
+        settingWindowOpacityValue.textContent = `${opacityLevel}/10`;
+    }
+
+    function populateGeminiModelOptions(models, selectedModel) {
+        if (!settingGeminiModel) {
+            return;
+        }
+
+        settingGeminiModel.innerHTML = '';
+
+        const configuredModels = Array.isArray(models) ? models : [];
+        if (configuredModels.length === 0) {
+            throw new Error('Gemini models are not configured.');
+        }
+
+        configuredModels.forEach((modelName) => {
+            const option = document.createElement('option');
+            option.value = modelName;
+            option.textContent = modelName;
+            settingGeminiModel.appendChild(option);
+        });
+
+        settingGeminiModel.value = configuredModels.includes(selectedModel)
+            ? selectedModel
+            : configuredModels[0];
+    }
+
+    function populateProgrammingLanguageOptions(languages, selectedLanguage) {
+        if (!settingProgrammingLanguage) {
+            return;
+        }
+
+        settingProgrammingLanguage.innerHTML = '';
+
+        const configuredLanguages = Array.isArray(languages) ? languages : [];
+        if (configuredLanguages.length === 0) {
+            throw new Error('Programming languages are not configured.');
+        }
+
+        configuredLanguages.forEach((languageName) => {
+            const option = document.createElement('option');
+            option.value = languageName;
+            option.textContent = languageName;
+            settingProgrammingLanguage.appendChild(option);
+        });
+
+        settingProgrammingLanguage.value = configuredLanguages.includes(selectedLanguage)
+            ? selectedLanguage
+            : configuredLanguages[0];
+    }
+
+    function populateAssemblyAiSpeechModelOptions(models, selectedModel) {
+        if (!settingAssemblyModel) {
+            return;
+        }
+
+        settingAssemblyModel.innerHTML = '';
+
+        const configuredModels = Array.isArray(models) ? models : [];
+        if (configuredModels.length === 0) {
+            throw new Error('AssemblyAI speech models are not configured.');
+        }
+
+        configuredModels.forEach((modelName) => {
+            const option = document.createElement('option');
+            option.value = modelName;
+            option.textContent = modelName;
+            settingAssemblyModel.appendChild(option);
+        });
+
+        settingAssemblyModel.value = configuredModels.includes(selectedModel)
+            ? selectedModel
+            : configuredModels[0];
+    }
+
+    async function openSettings() {
+        if (!settingsPanel) {
+            return;
+        }
+
+        try {
+            const settings = await window.electronAPI.getSettings();
+            if (settings && !settings.error) {
+                applySettingsShortcutConfig?.(settings);
+                if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
+                populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
+                populateProgrammingLanguageOptions(
+                    settings.programmingLanguages,
+                    settings.programmingLanguage || settings.defaultProgrammingLanguage
+                );
+                if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
+                populateAssemblyAiSpeechModelOptions(
+                    settings.assemblyAiSpeechModels,
+                    settings.assemblyAiSpeechModel || settings.defaultAssemblyAiSpeechModel
+                );
+                if (settingWindowOpacity) {
+                    settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
+                }
+                updateWindowOpacityValueLabel(settings.windowOpacityLevel);
+            }
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
+
+        settingsPanel.classList.remove('hidden');
+    }
+
+    function closeSettings() {
+        if (settingsPanel) {
+            settingsPanel.classList.add('hidden');
+        }
+    }
+
+    async function saveSettings() {
+        try {
+            if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
+                throw new Error('Gemini models are not configured.');
+            }
+
+            if (!settingProgrammingLanguage || settingProgrammingLanguage.options.length === 0) {
+                throw new Error('Programming languages are not configured.');
+            }
+
+            if (!settingAssemblyModel || settingAssemblyModel.options.length === 0) {
+                throw new Error('AssemblyAI speech models are not configured.');
+            }
+
+            const settings = {
+                geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
+                assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
+                geminiModel: settingGeminiModel.value,
+                programmingLanguage: settingProgrammingLanguage.value,
+                assemblyAiSpeechModel: settingAssemblyModel.value,
+                windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
+            };
+
+            const result = await window.electronAPI.saveSettings(settings);
+
+            if (result.success) {
+                showFeedback?.('Settings saved. AI changes are active now; voice model applies next session.', 'success');
+                closeSettings();
+            } else {
+                showFeedback?.(`Failed to save: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Failed to save settings:', error);
+            showFeedback?.('Failed to save settings', 'error');
+        }
+    }
+
+    return {
+        normalizeWindowOpacityLevel,
+        updateWindowOpacityValueLabel,
+        openSettings,
+        closeSettings,
+        saveSettings
+    };
+}
+
+================
 File: src/windows/assistant/renderer/features/settings/shortcut-manager.js
 ================
 function normalizeShortcutToken(token) {
@@ -3097,6 +3628,645 @@ export function createShortcutManager({ settingsShortcutsList }) {
     return {
         applySettingsShortcutConfig,
         isShortcutPressed
+    };
+}
+
+================
+File: src/windows/assistant/renderer/features/transcription/transcription-manager.js
+================
+const MAX_MONITOR_LOG_ENTRIES = 80;
+
+export function createTranscriptionManager({
+    transcriptionSourceState,
+    normalizeSourceRule,
+    sourceLabelRule,
+    audioPipeline,
+    transcriptBufferManager,
+    chatMessagesElement,
+    transcriptionToggle,
+    sourceSystemToggle,
+    sourceMicToggle,
+    monitorMasterState,
+    monitorStatusSystem,
+    monitorStatusMic,
+    monitorLiveSystem,
+    monitorLiveMic,
+    monitorLogList,
+    addChatMessage,
+    showFeedback
+}) {
+    let micAudioContext = null;
+    let micMediaStream = null;
+    let micScriptProcessor = null;
+    let isMicActive = false;
+
+    let systemAudioContext = null;
+    let systemMediaStream = null;
+    let systemScriptProcessor = null;
+    let isSystemActive = false;
+
+    let micPartialText = '';
+    let micPartialDiv = null;
+    let systemPartialText = '';
+    let systemPartialDiv = null;
+
+    const selectedSources = transcriptionSourceState.selectedSources;
+    const sourceStatuses = transcriptionSourceState.sourceStatuses;
+    const monitorLogEntries = [];
+    const monitorLastText = {
+        system: 'No transcript yet',
+        mic: 'No transcript yet'
+    };
+
+    function normalizeSource(source) {
+        return normalizeSourceRule(source);
+    }
+
+    function sourceLabel(source) {
+        return sourceLabelRule(normalizeSource(source));
+    }
+
+    function isSourceActive(source) {
+        return source === 'system' ? isSystemActive : isMicActive;
+    }
+
+    function setMicActive(active) {
+        isMicActive = !!active;
+        transcriptionSourceState.setSourceActive('mic', isMicActive);
+    }
+
+    function setSystemActive(active) {
+        isSystemActive = !!active;
+        transcriptionSourceState.setSourceActive('system', isSystemActive);
+    }
+
+    function isAnyTranscriptionActive() {
+        return isSystemActive || isMicActive;
+    }
+
+    function isAnySourceConnecting() {
+        return transcriptionSourceState.isAnySourceConnecting();
+    }
+
+    function setSourceStatus(source, status, liveText) {
+        const resolvedSource = normalizeSource(source);
+        transcriptionSourceState.setSourceStatus(resolvedSource, status);
+
+        if (typeof liveText === 'string' && liveText.trim().length > 0) {
+            monitorLastText[resolvedSource] = liveText.trim();
+        }
+
+        renderMonitorState();
+    }
+
+    function updateTranscriptionUI() {
+        const anyActive = isAnyTranscriptionActive();
+        const anyConnecting = !anyActive && isAnySourceConnecting();
+
+        if (transcriptionToggle) {
+            transcriptionToggle.classList.toggle('active', anyActive);
+            transcriptionToggle.classList.toggle('listening', anyActive);
+            transcriptionToggle.classList.toggle('connecting', anyConnecting);
+        }
+
+        if (sourceSystemToggle) {
+            sourceSystemToggle.classList.toggle('selected', selectedSources.system);
+            sourceSystemToggle.classList.toggle('running', isSystemActive);
+        }
+
+        if (sourceMicToggle) {
+            sourceMicToggle.classList.toggle('selected', selectedSources.mic);
+            sourceMicToggle.classList.toggle('running', isMicActive);
+        }
+    }
+
+    function renderMonitorState() {
+        updateTranscriptionUI();
+
+        const statusMap = {
+            off: 'Off',
+            connecting: 'Connecting',
+            listening: 'Listening',
+            error: 'Error'
+        };
+
+        if (monitorStatusSystem) {
+            monitorStatusSystem.className = `monitor-status-badge ${sourceStatuses.system}`;
+            monitorStatusSystem.textContent = statusMap[sourceStatuses.system] || 'Off';
+        }
+
+        if (monitorStatusMic) {
+            monitorStatusMic.className = `monitor-status-badge ${sourceStatuses.mic}`;
+            monitorStatusMic.textContent = statusMap[sourceStatuses.mic] || 'Off';
+        }
+
+        if (monitorLiveSystem) {
+            monitorLiveSystem.textContent = monitorLastText.system || 'No transcript yet';
+        }
+
+        if (monitorLiveMic) {
+            monitorLiveMic.textContent = monitorLastText.mic || 'No transcript yet';
+        }
+
+        if (monitorMasterState) {
+            monitorMasterState.classList.remove('active', 'connecting');
+            if (isAnyTranscriptionActive()) {
+                monitorMasterState.textContent = 'Running';
+                monitorMasterState.classList.add('active');
+            } else if (isAnySourceConnecting()) {
+                monitorMasterState.textContent = 'Connecting';
+                monitorMasterState.classList.add('connecting');
+            } else {
+                monitorMasterState.textContent = 'Idle';
+            }
+        }
+    }
+
+    function formatMonitorTime(timestamp = Date.now()) {
+        return new Date(timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    }
+
+    function safeJson(value) {
+        try {
+            return JSON.stringify(value);
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function addMonitorLog(level, event, message, source = null, meta = null, timestamp = Date.now()) {
+        const entry = {
+            level: level || 'info',
+            event: event || 'event',
+            message: message || '',
+            source: source ? normalizeSource(source) : null,
+            meta,
+            timestamp
+        };
+
+        monitorLogEntries.push(entry);
+        if (monitorLogEntries.length > MAX_MONITOR_LOG_ENTRIES) {
+            monitorLogEntries.shift();
+        }
+
+        if (!monitorLogList) {
+            return;
+        }
+
+        monitorLogList.innerHTML = '';
+        const entriesToRender = [...monitorLogEntries].reverse();
+        for (const item of entriesToRender) {
+            const row = document.createElement('div');
+            row.className = `monitor-log-entry ${item.level === 'error' ? 'error' : ''}`.trim();
+
+            const sourcePrefix = item.source ? `${sourceLabel(item.source)} ` : '';
+            const metaText = item.meta ? ` ${safeJson(item.meta)}` : '';
+            row.textContent = `${formatMonitorTime(item.timestamp)} ${sourcePrefix}${item.event}: ${item.message}${metaText}`;
+            monitorLogList.appendChild(row);
+        }
+    }
+
+    function resetFinalTranscriptBuffer(source) {
+        transcriptBufferManager.resetFinalTranscriptBuffer(source);
+    }
+
+    function flushFinalTranscript(source, reason = 'pause-timeout') {
+        transcriptBufferManager.flushFinalTranscript(source, reason);
+    }
+
+    function queueFinalTranscript(source, text) {
+        transcriptBufferManager.queueFinalTranscript(source, text);
+    }
+
+    function flushAllFinalTranscripts(reason = 'flush-all') {
+        transcriptBufferManager.flushAllFinalTranscripts(reason);
+    }
+
+    function setSourceSelected(source, enabled) {
+        const resolvedSource = normalizeSource(source);
+        transcriptionSourceState.setSourceSelected(resolvedSource, enabled);
+        addMonitorLog('info', 'source-toggle', `${sourceLabel(resolvedSource)} ${enabled ? 'enabled' : 'disabled'}`, resolvedSource);
+        updateTranscriptionUI();
+
+        if (isAnyTranscriptionActive() || sourceStatuses[resolvedSource] === 'connecting') {
+            ensureSourceRunning(resolvedSource, !!enabled).catch((error) => {
+                console.error(`Failed to apply live source toggle for ${resolvedSource}:`, error);
+                addMonitorLog('error', 'source-toggle-failed', error.message, resolvedSource);
+            });
+        }
+    }
+
+    async function ensureSourceRunning(source, shouldRun) {
+        const resolvedSource = normalizeSource(source);
+        if (shouldRun) {
+            if (resolvedSource === 'system') {
+                await startSystemAudioRecording();
+            } else {
+                await startMicRecording();
+            }
+        } else if (resolvedSource === 'system') {
+            await stopSystemAudioRecording();
+        } else {
+            await stopMicRecording();
+        }
+    }
+
+    async function startSelectedSources() {
+        if (!selectedSources.system && !selectedSources.mic) {
+            const message = 'Select at least one source (Host or Mic) before starting transcription.';
+            showFeedback(message, 'error');
+            addMonitorLog('error', 'start-blocked', message);
+            return;
+        }
+
+        addMonitorLog('info', 'master-start', 'Starting selected transcription sources');
+
+        if (selectedSources.system) {
+            await ensureSourceRunning('system', true);
+        }
+
+        if (selectedSources.mic) {
+            await ensureSourceRunning('mic', true);
+        }
+    }
+
+    async function stopAllSources() {
+        addMonitorLog('info', 'master-stop', 'Stopping all active transcription sources');
+        if (isSystemActive || sourceStatuses.system === 'connecting') {
+            await stopSystemAudioRecording();
+        }
+        if (isMicActive || sourceStatuses.mic === 'connecting') {
+            await stopMicRecording();
+        }
+    }
+
+    async function toggleMasterTranscription() {
+        if (isAnyTranscriptionActive() || isAnySourceConnecting()) {
+            await stopAllSources();
+        } else {
+            await startSelectedSources();
+        }
+        updateTranscriptionUI();
+    }
+
+    function isLikelyCameraTrack(trackLabel) {
+        return audioPipeline.isLikelyCameraTrack(trackLabel);
+    }
+
+    async function getSystemAudioStream(sourceId) {
+        return audioPipeline.getSystemAudioStream(sourceId);
+    }
+
+    function resetSourceSampleQueue(source) {
+        audioPipeline.resetSourceSampleQueue(source);
+    }
+
+    function drainSourceSampleQueue(source, { flushPartial = false } = {}) {
+        audioPipeline.drainSourceSampleQueue(source, { flushPartial });
+    }
+
+    async function buildAudioProcessor(context, stream, source, activeCheck) {
+        return audioPipeline.buildAudioProcessor(context, stream, source, activeCheck);
+    }
+
+    function stopAudioResources(ctx, stream, processor) {
+        audioPipeline.stopAudioResources(ctx, stream, processor);
+    }
+
+    async function startMicRecording() {
+        if (isMicActive || sourceStatuses.mic === 'connecting') return;
+        setSourceStatus('mic', 'connecting', 'Connecting to mic...');
+        addMonitorLog('info', 'start-request', 'Starting mic source', 'mic');
+        resetFinalTranscriptBuffer('mic');
+
+        try {
+            const result = await window.electronAPI.startVoiceRecognition('mic');
+            if (result && result.error) throw new Error(result.error);
+
+            micMediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+            });
+            micAudioContext = new AudioContext();
+            await micAudioContext.resume();
+            resetSourceSampleQueue('mic');
+            micScriptProcessor = await buildAudioProcessor(micAudioContext, micMediaStream, 'mic', () => isMicActive);
+
+            setMicActive(true);
+            addChatMessage('system', 'Mic listening...');
+            showFeedback('Mic on', 'success');
+            addMonitorLog('info', 'source-active', 'Mic source active', 'mic');
+        } catch (error) {
+            console.error('Failed to start mic:', error);
+            showFeedback(`Mic failed: ${error.message}`, 'error');
+            addMonitorLog('error', 'source-failed', error.message, 'mic');
+            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+            micAudioContext = null;
+            micMediaStream = null;
+            micScriptProcessor = null;
+            setMicActive(false);
+            resetSourceSampleQueue('mic');
+            setSourceStatus('mic', 'error', `Mic error: ${error.message}`);
+            try {
+                await window.electronAPI.stopVoiceRecognition('mic');
+            } catch (_) {}
+        }
+
+        updateTranscriptionUI();
+    }
+
+    async function stopMicRecording() {
+        if (!isMicActive && sourceStatuses.mic !== 'connecting') return;
+        drainSourceSampleQueue('mic', { flushPartial: true });
+        flushFinalTranscript('mic', 'stop-request');
+        stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+        micAudioContext = null;
+        micMediaStream = null;
+        micScriptProcessor = null;
+        if (micPartialDiv) {
+            micPartialDiv.remove();
+            micPartialDiv = null;
+        }
+        micPartialText = '';
+        try {
+            await window.electronAPI.stopVoiceRecognition('mic');
+        } catch (error) {
+            addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop mic source', 'mic');
+        }
+        setMicActive(false);
+        resetSourceSampleQueue('mic');
+        audioPipeline.resetChunkCounter('mic');
+        setSourceStatus('mic', 'off', 'Mic stopped');
+        addMonitorLog('info', 'source-stopped', 'Mic source stopped', 'mic');
+        showFeedback('Mic off', 'info');
+    }
+
+    async function startSystemAudioRecording() {
+        if (isSystemActive || sourceStatuses.system === 'connecting') return;
+        setSourceStatus('system', 'connecting', 'Connecting to host audio...');
+        addMonitorLog('info', 'start-request', 'Starting host audio source', 'system');
+        resetFinalTranscriptBuffer('system');
+
+        try {
+            const sources = await window.electronAPI.getDesktopSources();
+            if (!sources || sources.length === 0) throw new Error('No desktop sources found');
+            const sourceId = sources[0].id;
+            addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
+
+            const result = await window.electronAPI.startVoiceRecognition('system');
+            if (result && result.error) throw new Error(result.error);
+
+            systemMediaStream = await getSystemAudioStream(sourceId);
+
+            const videoTrack = systemMediaStream.getVideoTracks()[0];
+            if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
+                throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
+            }
+
+            systemMediaStream.getVideoTracks().forEach((track) => track.stop());
+
+            systemAudioContext = new AudioContext();
+            await systemAudioContext.resume();
+            resetSourceSampleQueue('system');
+            systemScriptProcessor = await buildAudioProcessor(systemAudioContext, systemMediaStream, 'system', () => isSystemActive);
+
+            setSystemActive(true);
+            addChatMessage('system', 'Listening to host audio...');
+            showFeedback('System audio on', 'success');
+            addMonitorLog('info', 'source-active', 'Host source active', 'system');
+        } catch (error) {
+            console.error('Failed to start system audio:', error);
+            showFeedback(`System audio failed: ${error.message}`, 'error');
+            addMonitorLog('error', 'source-failed', error.message, 'system');
+            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+            systemAudioContext = null;
+            systemMediaStream = null;
+            systemScriptProcessor = null;
+            setSystemActive(false);
+            resetSourceSampleQueue('system');
+            setSourceStatus('system', 'error', `Host error: ${error.message}`);
+            try {
+                await window.electronAPI.stopVoiceRecognition('system');
+            } catch (_) {}
+        }
+
+        updateTranscriptionUI();
+    }
+
+    async function stopSystemAudioRecording() {
+        if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
+        drainSourceSampleQueue('system', { flushPartial: true });
+        flushFinalTranscript('system', 'stop-request');
+        stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+        systemAudioContext = null;
+        systemMediaStream = null;
+        systemScriptProcessor = null;
+        if (systemPartialDiv) {
+            systemPartialDiv.remove();
+            systemPartialDiv = null;
+        }
+        systemPartialText = '';
+        try {
+            await window.electronAPI.stopVoiceRecognition('system');
+        } catch (error) {
+            addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
+        }
+        setSystemActive(false);
+        resetSourceSampleQueue('system');
+        audioPipeline.resetChunkCounter('system');
+        setSourceStatus('system', 'off', 'Host source stopped');
+        addMonitorLog('info', 'source-stopped', 'Host source stopped', 'system');
+        showFeedback('System audio off', 'info');
+    }
+
+    function createPartialDiv(icon) {
+        const div = document.createElement('div');
+        div.className = 'chat-message voice-message partial';
+        const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        div.innerHTML = `
+        <div class="message-header">
+            <span class="message-icon">${icon}</span>
+            <span class="message-time">${ts}</span>
+            <span class="partial-indicator">Live</span>
+        </div>
+        <div class="message-content partial-text"></div>
+    `;
+        return div;
+    }
+
+    function handleVoskPartial(data) {
+        const source = normalizeSource(data?.source);
+        const text = data?.text;
+        if (!text || text.trim().length === 0) return;
+        if (!isSourceActive(source)) return;
+
+        const trimmed = text.trim();
+        const icon = source === 'system' ? '\u{1F50A}' : '\u{1F3A4}';
+        monitorLastText[source] = `Live: ${trimmed}`;
+        renderMonitorState();
+
+        if (source === 'mic') {
+            micPartialText = trimmed;
+            if (!micPartialDiv) {
+                micPartialDiv = createPartialDiv(icon);
+                chatMessagesElement.appendChild(micPartialDiv);
+            }
+            micPartialDiv.querySelector('.message-content').textContent = trimmed;
+        } else {
+            systemPartialText = trimmed;
+            if (!systemPartialDiv) {
+                systemPartialDiv = createPartialDiv(icon);
+                chatMessagesElement.appendChild(systemPartialDiv);
+            }
+            systemPartialDiv.querySelector('.message-content').textContent = trimmed;
+        }
+        chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+    }
+
+    function handleVoskFinal(data) {
+        const source = normalizeSource(data?.source);
+        const text = data?.text;
+        if (!text || text.trim().length === 0) return;
+
+        const finalText = text.trim();
+        monitorLastText[source] = `Final: ${finalText}`;
+        renderMonitorState();
+        addMonitorLog('info', 'final', 'Final transcript received', source, {
+            chars: finalText.length
+        });
+
+        if (source === 'mic') {
+            if (micPartialDiv) {
+                micPartialDiv.remove();
+                micPartialDiv = null;
+            }
+            micPartialText = '';
+        } else {
+            if (systemPartialDiv) {
+                systemPartialDiv.remove();
+                systemPartialDiv = null;
+            }
+            systemPartialText = '';
+        }
+        queueFinalTranscript(source, finalText);
+    }
+
+    function handleVoskStatus(data) {
+        const source = normalizeSource(data?.source);
+        const status = data?.status;
+        const message = data?.message || '';
+        console.log(`STT status [${source}]:`, status, message);
+
+        if (status === 'loading') {
+            setSourceStatus(source, 'connecting', `Connecting (${sourceLabel(source)})...`);
+            showFeedback(`Connecting (${sourceLabel(source)})...`, 'info');
+            addMonitorLog('info', 'status-loading', message || 'Connection requested', source);
+        } else if (status === 'listening') {
+            setSourceStatus(source, 'listening', `Listening (${sourceLabel(source)})...`);
+            showFeedback(`Listening (${sourceLabel(source)})...`, 'success');
+            addMonitorLog('info', 'status-listening', message || 'Source listening', source);
+        } else if (status === 'stopped') {
+            setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
+            showFeedback(`Stopped (${sourceLabel(source)})`, 'info');
+            addMonitorLog('info', 'status-stopped', message || 'Source stopped', source);
+        }
+    }
+
+    function handleVoskError(data) {
+        const source = normalizeSource(data?.source);
+        const error = data?.error || 'Unknown transcription error';
+        console.error(`STT error [${source}]:`, error);
+        showFeedback(`Error (${sourceLabel(source)}): ${error}`, 'error');
+        addChatMessage('system', `Transcription error (${sourceLabel(source)}): ${error}`);
+        addMonitorLog('error', 'status-error', error, source);
+        flushFinalTranscript(source, 'status-error');
+
+        if (source === 'system') {
+            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+            systemAudioContext = null;
+            systemMediaStream = null;
+            systemScriptProcessor = null;
+            if (systemPartialDiv) {
+                systemPartialDiv.remove();
+                systemPartialDiv = null;
+            }
+            systemPartialText = '';
+            setSystemActive(false);
+            resetSourceSampleQueue('system');
+            resetFinalTranscriptBuffer('system');
+        } else {
+            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+            micAudioContext = null;
+            micMediaStream = null;
+            micScriptProcessor = null;
+            if (micPartialDiv) {
+                micPartialDiv.remove();
+                micPartialDiv = null;
+            }
+            micPartialText = '';
+            setMicActive(false);
+            resetSourceSampleQueue('mic');
+            resetFinalTranscriptBuffer('mic');
+        }
+
+        setSourceStatus(source, 'error', `Error: ${error}`);
+        updateTranscriptionUI();
+    }
+
+    function handleVoskStopped(data) {
+        const source = normalizeSource(data?.source);
+        console.log(`STT stopped [${source}]`);
+        flushFinalTranscript(source, 'stopped-event');
+        if (source === 'system') {
+            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+            systemAudioContext = null;
+            systemMediaStream = null;
+            systemScriptProcessor = null;
+            if (systemPartialDiv) {
+                systemPartialDiv.remove();
+                systemPartialDiv = null;
+            }
+            systemPartialText = '';
+            setSystemActive(false);
+            resetSourceSampleQueue('system');
+            resetFinalTranscriptBuffer('system');
+        } else {
+            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
+            micAudioContext = null;
+            micMediaStream = null;
+            micScriptProcessor = null;
+            if (micPartialDiv) {
+                micPartialDiv.remove();
+                micPartialDiv = null;
+            }
+            micPartialText = '';
+            setMicActive(false);
+            resetSourceSampleQueue('mic');
+            resetFinalTranscriptBuffer('mic');
+        }
+        setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
+        addMonitorLog('info', 'stopped-event', 'Stop acknowledged by backend', source);
+    }
+
+    return {
+        selectedSources,
+        sourceStatuses,
+        normalizeSource,
+        sourceLabel,
+        addMonitorLog,
+        updateTranscriptionUI,
+        renderMonitorState,
+        setSourceSelected,
+        toggleMasterTranscription,
+        flushAllFinalTranscripts,
+        handleVoskPartial,
+        handleVoskFinal,
+        handleVoskStatus,
+        handleVoskError,
+        handleVoskStopped
     };
 }
 
@@ -10982,24 +12152,257 @@ File: src/windows/assistant/renderer.html
 </html>
 
 ================
+File: README.md
+================
+# Open-Cluely
+
+Open-Cluely is an Electron desktop copilot for technical interviews and live meetings. It combines AssemblyAI streaming transcription, screenshot capture, and Gemini-powered responses in a compact always-on-top window.
+
+Use it only in environments where recording, transcription, screenshots, and AI assistance are allowed.
+
+## Features
+
+- Dual-source live transcription for host/system audio and microphone input, with per-source toggles and a live monitor.
+- `Ask AI` uses the current transcript bundle, manual notes, and any enabled screenshots, with text-only fallback when no screenshots are selected.
+- `Screen AI` runs screenshot-focused analysis from the screenshots currently included in AI context.
+- Per-message `AI` / `Off` controls let you keep transcript chunks, screenshots, and prior AI replies visible while excluding them from future prompts.
+- Built-in actions for response suggestions, meeting notes, and conversation insights.
+- Multiple Gemini API keys are supported as a comma-separated list, with automatic failover on quota or authentication errors.
+- Settings support Gemini model selection, AssemblyAI speech model selection, programming language preference, and window opacity.
+- Session state is persisted to `cache/app-state.json`, and screenshot retention is bounded by `MAX_SCREENSHOTS`.
+
+## Installation
+
+### Requirements
+
+- Windows 10/11 is the primary development target for this repo.
+- Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
+- npm `10+`
+- At least one Gemini API key
+- One AssemblyAI API key
+
+### Setup
+
+```powershell
+nvm install 20.20.1
+nvm use 20.20.1
+npm ci
+Copy-Item .env.example .env
+```
+
+Populate `.env` before the first run:
+
+```env
+GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
+ASSEMBLY_AI_API_KEY=your_assemblyai_key
+```
+
+Start the app:
+
+```powershell
+npm start
+```
+
+Useful variants:
+
+```powershell
+npm run dev
+npm run start:hidden
+```
+
+### Recommended For Windows Use
+
+For day-to-day use on Windows, prefer building the portable app and running the generated `.exe` instead of launching from source every time.
+
+```powershell
+npm run build:win
+```
+
+This creates:
+
+```text
+dist/GoogleChrome.exe
+```
+
+You can then run the packaged app directly by double-clicking `dist/GoogleChrome.exe`.
+
+### Native Windows Build Tools
+
+This app depends on native modules. If `npm ci` fails with `node-gyp` or Visual Studio toolchain errors, install the C++ build tools and Python:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `GEMINI_API_KEY` | Yes | Comma-separated keys are allowed. The runtime rotates to the next key when it hits quota/auth failures. |
+| `ASSEMBLY_AI_API_KEY` | Yes | Used for streaming STT and audio transcription endpoints. |
+| `HIDE_FROM_SCREEN_CAPTURE` | No | Defaults to `true`. Controls `BrowserWindow.setContentProtection(...)`. |
+| `START_HIDDEN` | No | Defaults to `false`. Also available at runtime via `npm run start:hidden` or `--start-hidden`. |
+| `MAX_SCREENSHOTS` | No | Defaults to `50`. Old screenshots are deleted when the limit is exceeded. |
+| `SCREENSHOT_DELAY` | No | Defaults to `300` ms. Delay used while briefly hiding the window before capture. |
+| `NODE_ENV` | No | Defaults to `production`. `development` opens DevTools automatically. |
+| `NODE_OPTIONS` | No | Defaults to `--max-old-space-size=4096`. |
+
+### Source-Of-Truth Config
+
+[`src/config.js`](./src/config.js) defines the app's configurable lists and defaults:
+
+- Gemini models
+- AssemblyAI speech models
+- Programming language options for code-oriented prompts
+- Global keyboard shortcuts
+
+The first item in each model/language list is treated as the default.
+
+### Persisted Files
+
+- In development, state is written to `cache/app-state.json` at the repo root. Portable builds create the same `cache/app-state.json` structure next to the executable.
+- Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
+- Saving settings from the UI writes API-key values back to `.env` and selection state back to `cache/app-state.json`.
+
+## Basic Workflow
+
+1. Launch the app and confirm your API keys and models in Settings.
+2. Start transcription and enable whichever sources you need: `Host`, `Mic`, or both.
+3. Take screenshots when visual context matters.
+4. Use `Ask AI` for transcript-plus-screen context, or `Screen AI` for screenshot-only analysis.
+5. Toggle noisy messages to `Off` before asking AI again so the next prompt stays focused.
+
+## Folder Structure
+
+```text
+src/
+  bootstrap/             Environment loading, validation, and persistence
+  main-process/          Electron startup, IPC wiring, window control, assistant runtime
+  services/
+    ai/                  Gemini service wrapper and prompt builders
+    assembly-ai/         Streaming STT service and transcript history merging
+    state/               App-state load/save helpers
+  windows/
+    assistant/           Active window, preload bridge, renderer, and renderer feature modules
+    legacy/              Older experimental files kept out of the active flow
+assets/                  Build icons and packaging assets
+cache/                   Generated app state in development
+.stealth_screenshots/    Session screenshots in development
+dist/                    Packaged build output
+repomix-output.txt       Single-file repository snapshot for AI/code review tooling
+```
+
+## Default Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
+| `Ctrl+Alt+Shift+S` | Capture screenshot |
+| `Ctrl+Alt+Shift+A` | Ask AI with current session context |
+| `Ctrl+Alt+Shift+X` | Emergency hide |
+| `Ctrl+Alt+Shift+H` | Toggle stealth opacity mode |
+| `Ctrl+Alt+Shift+Left` | Move window left |
+| `Ctrl+Alt+Shift+Right` | Move window right |
+| `Ctrl+Alt+Shift+Up` | Move window to top |
+| `Ctrl+Alt+Shift+Down` | Move window to bottom |
+
+## Scripts
+
+- `npm start` runs the app from source.
+- `npm run start:hidden` launches it in background mode from source.
+- `npm run dev` enables Electron logging.
+- `npm run build:win` creates the portable Windows executable.
+- `npm run build` runs the default `electron-builder` flow.
+
+## Build
+
+The recommended Windows build is the portable executable:
+
+```powershell
+npm run build:win
+```
+
+Expected output:
+
+```text
+dist/GoogleChrome.exe
+```
+
+Notes:
+
+- This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
+- `.env` is bundled as an extra resource during packaging.
+- The current Windows build is configured as a portable `x64` target with:
+  - Product name: `Google Chrome (2)`
+  - Executable name: `GoogleChrome.exe`
+  - App ID: `com.google.chrome`
+  - Publisher name: `Google LLC`
+- If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
+- The repo already includes [`assets/chrome.ico`](./assets/chrome.ico) for the Windows target. Add `assets/chrome.icns` and `assets/chrome.png` before relying on the macOS or Linux targets defined in `package.json`.
+
+### Running The Built App
+
+After building:
+
+1. Open the `dist/` folder.
+2. Run `GoogleChrome.exe`.
+3. If you want background launch behavior, either set `START_HIDDEN=true` before building or launch with:
+
+```powershell
+.\dist\GoogleChrome.exe --start-hidden
+```
+
+### Build Checks
+
+After packaging, verify:
+
+- `dist/GoogleChrome.exe` exists
+- the executable shows the Chrome icon
+- the app launches correctly without needing `npm start`
+
+For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md).
+
+## Good Practices
+
+- Keep `src/config.js` as the single source of truth for model lists, programming languages, and keyboard shortcuts.
+- When adding or changing environment variables, update all three places together: [`src/bootstrap/environment.js`](./src/bootstrap/environment.js), [`.env.example`](./.env.example), and this README.
+- Preserve Electron boundaries: renderer code should go through `preload` and IPC, not import main-process modules directly.
+- Add new UI logic under `src/windows/assistant/renderer/features/` and new domain logic under `src/services/` or `src/main-process/features/`.
+- Treat [`src/windows/legacy/`](./src/windows/legacy/) as reference material unless you are intentionally reviving an old experiment.
+- Re-test both `npm start` and the relevant packaging path when changing startup flow, window behavior, screenshots, IPC, or global shortcuts.
+- Keep real keys out of Git. Use `.env`, and rely on `.env.example` for the documented contract.
+
+## Repomix Snapshot
+
+To regenerate the packed repository snapshot:
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt
+```
+
+If you want to exclude generated artifacts while experimenting:
+
+```powershell
+npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
+```
+
+================
 File: src/windows/assistant/renderer.js
 ================
 /// <reference path="./renderer-globals.d.ts" />
 
-import {
-    canToggleAiForMessageType as canToggleAiForMessageTypeRule,
-    defaultIncludeInAiForMessageType as defaultIncludeInAiForMessageTypeRule,
-    isAiResponseMessageType as isAiResponseMessageTypeRule,
-    isScreenshotMessageType as isScreenshotMessageTypeRule,
-    isSystemMessageType as isSystemMessageTypeRule,
-    isTranscriptMessageType as isTranscriptMessageTypeRule
-} from './renderer/features/ai-context/message-types.js';
 import { createMessageStore } from './renderer/features/ai-context/message-store.js';
 import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
 import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/features/ai-context/toggle-ui.js';
 import { createChatUiManager } from './renderer/features/chat/chat-ui-manager.js';
 import { createWindowAdjustmentManager } from './renderer/features/layout/window-adjustments.js';
+import { setupEventListeners as setupEventListenersModule } from './renderer/features/listeners/event-listeners.js';
+import { setupIpcListeners as setupIpcListenersModule } from './renderer/features/listeners/ipc-listeners.js';
 import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
+import { createSettingsPanelManager } from './renderer/features/settings/settings-panel-manager.js';
+import { createTranscriptionManager } from './renderer/features/transcription/transcription-manager.js';
 
 import {
     createTranscriptionSourceState,
@@ -11013,7 +12416,6 @@ import { createTranscriptBufferManager } from './renderer/features/assembly-ai/t
 
 let screenshotsCount = 0;
 let isAnalyzing = false;
-let stealthModeActive = false;
 let stealthHideTimeout = null;
 const THEME_STORAGE_KEY = 'assistant-theme';
 const THEME_LIGHT = 'light';
@@ -11024,37 +12426,8 @@ const messageStore = createMessageStore();
 let chatMessagesArray = messageStore.getMessages();
 const transcriptionSourceState = createTranscriptionSourceState();
 
-// Mic audio capture state
-let micAudioContext = null;
-let micMediaStream = null;
-let micScriptProcessor = null;
-let isMicActive = false;
-
-// System audio capture state
-let systemAudioContext = null;
-let systemMediaStream = null;
-let systemScriptProcessor = null;
-let isSystemActive = false;
-
 // Source selection state (default: host/system on, mic off)
 const selectedSources = transcriptionSourceState.selectedSources;
-
-// Runtime source status state
-const sourceStatuses = transcriptionSourceState.sourceStatuses;
-
-// Partial transcription tracking per source
-let micPartialText = '';
-let micPartialDiv = null;
-let systemPartialText = '';
-let systemPartialDiv = null;
-
-const monitorLastText = {
-    system: 'No transcript yet',
-    mic: 'No transcript yet'
-};
-
-const MAX_MONITOR_LOG_ENTRIES = 80;
-const monitorLogEntries = [];
 
 const audioPipeline = createAudioPipeline({
     sendAudioChunk: (source, audioBuffer) => {
@@ -11177,6 +12550,37 @@ const chatUiManager = createChatUiManager({
     showFeedback: (message, type) => showFeedback(message, type),
     addMonitorLog: (...args) => addMonitorLog(...args)
 });
+const settingsPanelManager = createSettingsPanelManager({
+    settingsPanel,
+    settingGeminiKey,
+    settingGeminiModel,
+    settingProgrammingLanguage,
+    settingAssemblyKey,
+    settingAssemblyModel,
+    settingWindowOpacity,
+    settingWindowOpacityValue,
+    applySettingsShortcutConfig: (settings) => applySettingsShortcutConfig(settings),
+    showFeedback: (message, type) => showFeedback(message, type)
+});
+const transcriptionManager = createTranscriptionManager({
+    transcriptionSourceState,
+    normalizeSourceRule: normalizeAssemblySource,
+    sourceLabelRule: resolveSourceLabel,
+    audioPipeline,
+    transcriptBufferManager,
+    chatMessagesElement,
+    transcriptionToggle,
+    sourceSystemToggle,
+    sourceMicToggle,
+    monitorMasterState,
+    monitorStatusSystem,
+    monitorStatusMic,
+    monitorLiveSystem,
+    monitorLiveMic,
+    monitorLogList,
+    addChatMessage: (type, content, options) => addChatMessage(type, content, options),
+    showFeedback: (message, type) => showFeedback(message, type)
+});
 
 // Initialize
 async function init() {
@@ -11195,10 +12599,9 @@ async function init() {
     setupWindowAdjustments();
     applyTheme(loadStoredThemePreference(), { persist: false });
     updateUI();
-    updateTranscriptionUI();
-    renderMonitorState();
+    transcriptionManager.updateTranscriptionUI();
+    transcriptionManager.renderMonitorState();
     startTimer();
-    stealthModeActive = false;
 
     document.body.style.visibility = 'visible';
     document.body.style.display = 'block';
@@ -11214,27 +12617,8 @@ async function init() {
     addMonitorLog('info', 'source-defaults', 'Default sources: Host on, Mic off');
 }
 
-function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-}
-
-function normalizeWindowOpacityLevel(value) {
-    const parsedValue = Number.parseInt(String(value ?? ''), 10);
-
-    if (!Number.isFinite(parsedValue)) {
-        return 10;
-    }
-
-    return clamp(parsedValue, 1, 10);
-}
-
 function updateWindowOpacityValueLabel(value) {
-    if (!settingWindowOpacityValue) {
-        return;
-    }
-
-    const opacityLevel = normalizeWindowOpacityLevel(value);
-    settingWindowOpacityValue.textContent = `${opacityLevel}/10`;
+    settingsPanelManager.updateWindowOpacityValueLabel(value);
 }
 
 function normalizeTheme(theme) {
@@ -11321,34 +12705,6 @@ function setupWindowAdjustments() {
     windowAdjustmentManager.setupWindowAdjustments();
 }
 
-function sourceLabel(source) {
-    return resolveSourceLabel(source);
-}
-
-function isTranscriptMessageType(type) {
-    return isTranscriptMessageTypeRule(type);
-}
-
-function isScreenshotMessageType(type) {
-    return isScreenshotMessageTypeRule(type);
-}
-
-function isSystemMessageType(type) {
-    return isSystemMessageTypeRule(type);
-}
-
-function isAiResponseMessageType(type) {
-    return isAiResponseMessageTypeRule(type);
-}
-
-function canToggleAiForMessageType(type) {
-    return canToggleAiForMessageTypeRule(type);
-}
-
-function defaultIncludeInAiForMessageType(type) {
-    return defaultIncludeInAiForMessageTypeRule(type);
-}
-
 function escapeHtml(value) {
     return String(value || '')
         .replace(/&/g, '&amp;')
@@ -11378,10 +12734,6 @@ function buildFilteredAiContextBundle({ charBudget = AI_CONTEXT_CHAR_BUDGET, emi
     });
 }
 
-function findChatMessageById(messageId) {
-    return messageStore.findById(messageId);
-}
-
 function updateMessageAiToggleUi(message) {
     syncMessageAiToggleUi(chatMessagesElement, message);
 }
@@ -11401,456 +12753,20 @@ function toggleChatMessageInclusion(messageId) {
     });
 }
 
-function normalizeSource(source) {
-    return normalizeAssemblySource(source);
-}
-
-function isSourceActive(source) {
-    return source === 'system' ? isSystemActive : isMicActive;
-}
-
-function setMicActive(active) {
-    isMicActive = !!active;
-    transcriptionSourceState.setSourceActive('mic', isMicActive);
-}
-
-function setSystemActive(active) {
-    isSystemActive = !!active;
-    transcriptionSourceState.setSourceActive('system', isSystemActive);
-}
-
-function isAnyTranscriptionActive() {
-    return isSystemActive || isMicActive;
-}
-
-function isAnySourceConnecting() {
-    return transcriptionSourceState.isAnySourceConnecting();
-}
-
-function setSourceStatus(source, status, liveText) {
-    const resolvedSource = normalizeSource(source);
-    transcriptionSourceState.setSourceStatus(resolvedSource, status);
-
-    if (typeof liveText === 'string' && liveText.trim().length > 0) {
-        monitorLastText[resolvedSource] = liveText.trim();
-    }
-
-    renderMonitorState();
-}
-
-function updateTranscriptionUI() {
-    const anyActive = isAnyTranscriptionActive();
-    const anyConnecting = !anyActive && isAnySourceConnecting();
-
-    if (transcriptionToggle) {
-        transcriptionToggle.classList.toggle('active', anyActive);
-        transcriptionToggle.classList.toggle('listening', anyActive);
-        transcriptionToggle.classList.toggle('connecting', anyConnecting);
-    }
-
-    if (sourceSystemToggle) {
-        sourceSystemToggle.classList.toggle('selected', selectedSources.system);
-        sourceSystemToggle.classList.toggle('running', isSystemActive);
-    }
-
-    if (sourceMicToggle) {
-        sourceMicToggle.classList.toggle('selected', selectedSources.mic);
-        sourceMicToggle.classList.toggle('running', isMicActive);
-    }
-}
-
-function renderMonitorState() {
-    updateTranscriptionUI();
-
-    const statusMap = {
-        off: 'Off',
-        connecting: 'Connecting',
-        listening: 'Listening',
-        error: 'Error'
-    };
-
-    if (monitorStatusSystem) {
-        monitorStatusSystem.className = `monitor-status-badge ${sourceStatuses.system}`;
-        monitorStatusSystem.textContent = statusMap[sourceStatuses.system] || 'Off';
-    }
-
-    if (monitorStatusMic) {
-        monitorStatusMic.className = `monitor-status-badge ${sourceStatuses.mic}`;
-        monitorStatusMic.textContent = statusMap[sourceStatuses.mic] || 'Off';
-    }
-
-    if (monitorLiveSystem) {
-        monitorLiveSystem.textContent = monitorLastText.system || 'No transcript yet';
-    }
-
-    if (monitorLiveMic) {
-        monitorLiveMic.textContent = monitorLastText.mic || 'No transcript yet';
-    }
-
-    if (monitorMasterState) {
-        monitorMasterState.classList.remove('active', 'connecting');
-        if (isAnyTranscriptionActive()) {
-            monitorMasterState.textContent = 'Running';
-            monitorMasterState.classList.add('active');
-        } else if (isAnySourceConnecting()) {
-            monitorMasterState.textContent = 'Connecting';
-            monitorMasterState.classList.add('connecting');
-        } else {
-            monitorMasterState.textContent = 'Idle';
-        }
-    }
-}
-
-function formatMonitorTime(timestamp = Date.now()) {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
-
-function safeJson(value) {
-    try {
-        return JSON.stringify(value);
-    } catch (_) {
-        return '';
-    }
-}
-
 function addMonitorLog(level, event, message, source = null, meta = null, timestamp = Date.now()) {
-    const entry = {
-        level: level || 'info',
-        event: event || 'event',
-        message: message || '',
-        source: source ? normalizeSource(source) : null,
-        meta,
-        timestamp
-    };
-
-    monitorLogEntries.push(entry);
-    if (monitorLogEntries.length > MAX_MONITOR_LOG_ENTRIES) {
-        monitorLogEntries.shift();
-    }
-
-    if (!monitorLogList) {
-        return;
-    }
-
-    monitorLogList.innerHTML = '';
-    const entriesToRender = [...monitorLogEntries].reverse();
-    for (const item of entriesToRender) {
-        const row = document.createElement('div');
-        row.className = `monitor-log-entry ${item.level === 'error' ? 'error' : ''}`.trim();
-
-        const sourcePrefix = item.source ? `${sourceLabel(item.source)} ` : '';
-        const metaText = item.meta ? ` ${safeJson(item.meta)}` : '';
-        row.textContent = `${formatMonitorTime(item.timestamp)} ${sourcePrefix}${item.event}: ${item.message}${metaText}`;
-        monitorLogList.appendChild(row);
-    }
-}
-
-function resetFinalTranscriptBuffer(source) {
-    transcriptBufferManager.resetFinalTranscriptBuffer(source);
-}
-
-function flushFinalTranscript(source, reason = 'pause-timeout') {
-    transcriptBufferManager.flushFinalTranscript(source, reason);
-}
-
-function queueFinalTranscript(source, text) {
-    transcriptBufferManager.queueFinalTranscript(source, text);
+    transcriptionManager.addMonitorLog(level, event, message, source, meta, timestamp);
 }
 
 function flushAllFinalTranscripts(reason = 'flush-all') {
-    transcriptBufferManager.flushAllFinalTranscripts(reason);
+    transcriptionManager.flushAllFinalTranscripts(reason);
 }
 
 function setSourceSelected(source, enabled) {
-    const resolvedSource = normalizeSource(source);
-    transcriptionSourceState.setSourceSelected(resolvedSource, enabled);
-    addMonitorLog('info', 'source-toggle', `${sourceLabel(resolvedSource)} ${enabled ? 'enabled' : 'disabled'}`, resolvedSource);
-    updateTranscriptionUI();
-
-    if (isAnyTranscriptionActive() || sourceStatuses[resolvedSource] === 'connecting') {
-        ensureSourceRunning(resolvedSource, !!enabled).catch((error) => {
-            console.error(`Failed to apply live source toggle for ${resolvedSource}:`, error);
-            addMonitorLog('error', 'source-toggle-failed', error.message, resolvedSource);
-        });
-    }
-}
-
-async function ensureSourceRunning(source, shouldRun) {
-    const resolvedSource = normalizeSource(source);
-    if (shouldRun) {
-        if (resolvedSource === 'system') {
-            await startSystemAudioRecording();
-        } else {
-            await startMicRecording();
-        }
-    } else if (resolvedSource === 'system') {
-        await stopSystemAudioRecording();
-    } else {
-        await stopMicRecording();
-    }
-}
-
-async function startSelectedSources() {
-    if (!selectedSources.system && !selectedSources.mic) {
-        const message = 'Select at least one source (Host or Mic) before starting transcription.';
-        showFeedback(message, 'error');
-        addMonitorLog('error', 'start-blocked', message);
-        return;
-    }
-
-    addMonitorLog('info', 'master-start', 'Starting selected transcription sources');
-
-    if (selectedSources.system) {
-        await ensureSourceRunning('system', true);
-    }
-
-    if (selectedSources.mic) {
-        await ensureSourceRunning('mic', true);
-    }
-}
-
-async function stopAllSources() {
-    addMonitorLog('info', 'master-stop', 'Stopping all active transcription sources');
-    if (isSystemActive || sourceStatuses.system === 'connecting') {
-        await stopSystemAudioRecording();
-    }
-    if (isMicActive || sourceStatuses.mic === 'connecting') {
-        await stopMicRecording();
-    }
+    return transcriptionManager.setSourceSelected(source, enabled);
 }
 
 async function toggleMasterTranscription() {
-    if (isAnyTranscriptionActive() || isAnySourceConnecting()) {
-        await stopAllSources();
-    } else {
-        await startSelectedSources();
-    }
-    updateTranscriptionUI();
-}
-
-function isLikelyCameraTrack(trackLabel) {
-    return audioPipeline.isLikelyCameraTrack(trackLabel);
-}
-
-async function getSystemAudioStream(sourceId) {
-    return audioPipeline.getSystemAudioStream(sourceId);
-}
-
-function resetSourceSampleQueue(source) {
-    audioPipeline.resetSourceSampleQueue(source);
-}
-
-function drainSourceSampleQueue(source, { flushPartial = false } = {}) {
-    audioPipeline.drainSourceSampleQueue(source, { flushPartial });
-}
-
-async function buildAudioProcessor(context, stream, source, activeCheck) {
-    return audioPipeline.buildAudioProcessor(context, stream, source, activeCheck);
-}
-
-function stopAudioResources(ctx, stream, processor) {
-    audioPipeline.stopAudioResources(ctx, stream, processor);
-}
-
-async function startMicRecording() {
-    if (isMicActive || sourceStatuses.mic === 'connecting') return;
-    setSourceStatus('mic', 'connecting', 'Connecting to mic...');
-    addMonitorLog('info', 'start-request', 'Starting mic source', 'mic');
-    resetFinalTranscriptBuffer('mic');
-
-    try {
-        const result = await window.electronAPI.startVoiceRecognition('mic');
-        if (result && result.error) throw new Error(result.error);
-
-        micMediaStream = await navigator.mediaDevices.getUserMedia({
-            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
-        });
-        micAudioContext = new AudioContext();
-        await micAudioContext.resume();
-        resetSourceSampleQueue('mic');
-        micScriptProcessor = await buildAudioProcessor(micAudioContext, micMediaStream, 'mic', () => isMicActive);
-
-        setMicActive(true);
-        addChatMessage('system', 'Mic listening...');
-        showFeedback('Mic on', 'success');
-        addMonitorLog('info', 'source-active', 'Mic source active', 'mic');
-    } catch (error) {
-        console.error('Failed to start mic:', error);
-        showFeedback(`Mic failed: ${error.message}`, 'error');
-        addMonitorLog('error', 'source-failed', error.message, 'mic');
-        stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-        micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-        setMicActive(false);
-        resetSourceSampleQueue('mic');
-        setSourceStatus('mic', 'error', `Mic error: ${error.message}`);
-        try {
-            await window.electronAPI.stopVoiceRecognition('mic');
-        } catch (_) {}
-    }
-
-    updateTranscriptionUI();
-}
-
-async function stopMicRecording() {
-    if (!isMicActive && sourceStatuses.mic !== 'connecting') return;
-    drainSourceSampleQueue('mic', { flushPartial: true });
-    flushFinalTranscript('mic', 'stop-request');
-    stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-    micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-    if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-    micPartialText = '';
-    try {
-        await window.electronAPI.stopVoiceRecognition('mic');
-    } catch (error) {
-        addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop mic source', 'mic');
-    }
-    setMicActive(false);
-    resetSourceSampleQueue('mic');
-    audioPipeline.resetChunkCounter('mic');
-    setSourceStatus('mic', 'off', 'Mic stopped');
-    addMonitorLog('info', 'source-stopped', 'Mic source stopped', 'mic');
-    showFeedback('Mic off', 'info');
-}
-
-async function startSystemAudioRecording() {
-    if (isSystemActive || sourceStatuses.system === 'connecting') return;
-    setSourceStatus('system', 'connecting', 'Connecting to host audio...');
-    addMonitorLog('info', 'start-request', 'Starting host audio source', 'system');
-    resetFinalTranscriptBuffer('system');
-
-    try {
-        const sources = await window.electronAPI.getDesktopSources();
-        if (!sources || sources.length === 0) throw new Error('No desktop sources found');
-        const sourceId = sources[0].id;
-        addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
-
-        const result = await window.electronAPI.startVoiceRecognition('system');
-        if (result && result.error) throw new Error(result.error);
-
-        systemMediaStream = await getSystemAudioStream(sourceId);
-
-        const videoTrack = systemMediaStream.getVideoTracks()[0];
-        if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
-            throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
-        }
-
-        systemMediaStream.getVideoTracks().forEach(t => t.stop());
-
-        systemAudioContext = new AudioContext();
-        await systemAudioContext.resume();
-        resetSourceSampleQueue('system');
-        systemScriptProcessor = await buildAudioProcessor(systemAudioContext, systemMediaStream, 'system', () => isSystemActive);
-
-        setSystemActive(true);
-        addChatMessage('system', 'Listening to host audio...');
-        showFeedback('System audio on', 'success');
-        addMonitorLog('info', 'source-active', 'Host source active', 'system');
-    } catch (error) {
-        console.error('Failed to start system audio:', error);
-        showFeedback(`System audio failed: ${error.message}`, 'error');
-        addMonitorLog('error', 'source-failed', error.message, 'system');
-        stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-        systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-        setSystemActive(false);
-        resetSourceSampleQueue('system');
-        setSourceStatus('system', 'error', `Host error: ${error.message}`);
-        try {
-            await window.electronAPI.stopVoiceRecognition('system');
-        } catch (_) {}
-    }
-
-    updateTranscriptionUI();
-}
-
-async function stopSystemAudioRecording() {
-    if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
-    drainSourceSampleQueue('system', { flushPartial: true });
-    flushFinalTranscript('system', 'stop-request');
-    stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-    systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-    if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-    systemPartialText = '';
-    try {
-        await window.electronAPI.stopVoiceRecognition('system');
-    } catch (error) {
-        addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
-    }
-    setSystemActive(false);
-    resetSourceSampleQueue('system');
-    audioPipeline.resetChunkCounter('system');
-    setSourceStatus('system', 'off', 'Host source stopped');
-    addMonitorLog('info', 'source-stopped', 'Host source stopped', 'system');
-    showFeedback('System audio off', 'info');
-}
-
-function handleVoskPartial(data) {
-    const source = normalizeSource(data?.source);
-    const text = data?.text;
-    if (!text || text.trim().length === 0) return;
-    if (!isSourceActive(source)) return;
-
-    const trimmed = text.trim();
-    const icon = source === 'system' ? '\u{1F50A}' : '\u{1F3A4}';
-    monitorLastText[source] = `Live: ${trimmed}`;
-    renderMonitorState();
-
-    if (source === 'mic') {
-        micPartialText = trimmed;
-        if (!micPartialDiv) {
-            micPartialDiv = createPartialDiv(icon);
-            chatMessagesElement.appendChild(micPartialDiv);
-        }
-        micPartialDiv.querySelector('.message-content').textContent = trimmed;
-    } else {
-        systemPartialText = trimmed;
-        if (!systemPartialDiv) {
-            systemPartialDiv = createPartialDiv(icon);
-            chatMessagesElement.appendChild(systemPartialDiv);
-        }
-        systemPartialDiv.querySelector('.message-content').textContent = trimmed;
-    }
-    chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
-}
-
-function createPartialDiv(icon) {
-    const div = document.createElement('div');
-    div.className = 'chat-message voice-message partial';
-    const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    div.innerHTML = `
-        <div class="message-header">
-            <span class="message-icon">${icon}</span>
-            <span class="message-time">${ts}</span>
-            <span class="partial-indicator">Live</span>
-        </div>
-        <div class="message-content partial-text"></div>
-    `;
-    return div;
-}
-
-function handleVoskFinal(data) {
-    const source = normalizeSource(data?.source);
-    const text = data?.text;
-    if (!text || text.trim().length === 0) return;
-
-    const finalText = text.trim();
-    monitorLastText[source] = `Final: ${finalText}`;
-    renderMonitorState();
-    addMonitorLog('info', 'final', 'Final transcript received', source, {
-        chars: finalText.length
-    });
-
-    if (source === 'mic') {
-        if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-        micPartialText = '';
-    } else {
-        if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-        systemPartialText = '';
-    }
-    queueFinalTranscript(source, finalText);
+    return transcriptionManager.toggleMasterTranscription();
 }
 
 // Screenshot functions
@@ -11862,14 +12778,6 @@ async function takeStealthScreenshot() {
         console.error('Screenshot error:', error);
         showFeedback('Screenshot failed', 'error');
     }
-}
-
-function getTranscriptMessages() {
-    return chatMessagesArray.filter((message) =>
-        message.type === 'voice' ||
-        message.type === 'voice-mic' ||
-        message.type === 'voice-system'
-    );
 }
 
 function buildAskAiContextPayload() {
@@ -12111,146 +13019,15 @@ async function getConversationInsights() {
 // SETTINGS FUNCTIONS
 
 async function openSettings() {
-    if (!settingsPanel) return;
-
-    try {
-        const settings = await window.electronAPI.getSettings();
-        if (settings && !settings.error) {
-            applySettingsShortcutConfig(settings);
-            if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
-            populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
-            populateProgrammingLanguageOptions(
-                settings.programmingLanguages,
-                settings.programmingLanguage || settings.defaultProgrammingLanguage
-            );
-            if (settingAssemblyKey) settingAssemblyKey.value = settings.assemblyAiApiKey || '';
-            populateAssemblyAiSpeechModelOptions(
-                settings.assemblyAiSpeechModels,
-                settings.assemblyAiSpeechModel || settings.defaultAssemblyAiSpeechModel
-            );
-            if (settingWindowOpacity) {
-                settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
-            }
-            updateWindowOpacityValueLabel(settings.windowOpacityLevel);
-        }
-    } catch (error) {
-        console.error('Failed to load settings:', error);
-    }
-
-    settingsPanel.classList.remove('hidden');
+    await settingsPanelManager.openSettings();
 }
 
 function closeSettings() {
-    if (settingsPanel) settingsPanel.classList.add('hidden');
-}
-
-function populateGeminiModelOptions(models, selectedModel) {
-    if (!settingGeminiModel) {
-        return;
-    }
-
-    settingGeminiModel.innerHTML = '';
-
-    const configuredModels = Array.isArray(models) ? models : [];
-    if (configuredModels.length === 0) {
-        throw new Error('Gemini models are not configured.');
-    }
-
-    configuredModels.forEach((modelName) => {
-        const option = document.createElement('option');
-        option.value = modelName;
-        option.textContent = modelName;
-        settingGeminiModel.appendChild(option);
-    });
-
-    settingGeminiModel.value = configuredModels.includes(selectedModel)
-        ? selectedModel
-        : configuredModels[0];
-}
-
-function populateProgrammingLanguageOptions(languages, selectedLanguage) {
-    if (!settingProgrammingLanguage) {
-        return;
-    }
-
-    settingProgrammingLanguage.innerHTML = '';
-
-    const configuredLanguages = Array.isArray(languages) ? languages : [];
-    if (configuredLanguages.length === 0) {
-        throw new Error('Programming languages are not configured.');
-    }
-
-    configuredLanguages.forEach((languageName) => {
-        const option = document.createElement('option');
-        option.value = languageName;
-        option.textContent = languageName;
-        settingProgrammingLanguage.appendChild(option);
-    });
-
-    settingProgrammingLanguage.value = configuredLanguages.includes(selectedLanguage)
-        ? selectedLanguage
-        : configuredLanguages[0];
-}
-
-function populateAssemblyAiSpeechModelOptions(models, selectedModel) {
-    if (!settingAssemblyModel) {
-        return;
-    }
-
-    settingAssemblyModel.innerHTML = '';
-
-    const configuredModels = Array.isArray(models) ? models : [];
-    if (configuredModels.length === 0) {
-        throw new Error('AssemblyAI speech models are not configured.');
-    }
-
-    configuredModels.forEach((modelName) => {
-        const option = document.createElement('option');
-        option.value = modelName;
-        option.textContent = modelName;
-        settingAssemblyModel.appendChild(option);
-    });
-
-    settingAssemblyModel.value = configuredModels.includes(selectedModel)
-        ? selectedModel
-        : configuredModels[0];
+    settingsPanelManager.closeSettings();
 }
 
 async function saveSettings() {
-    try {
-        if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
-            throw new Error('Gemini models are not configured.');
-        }
-
-        if (!settingProgrammingLanguage || settingProgrammingLanguage.options.length === 0) {
-            throw new Error('Programming languages are not configured.');
-        }
-
-        if (!settingAssemblyModel || settingAssemblyModel.options.length === 0) {
-            throw new Error('AssemblyAI speech models are not configured.');
-        }
-
-        const settings = {
-            geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
-            assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
-            geminiModel: settingGeminiModel.value,
-            programmingLanguage: settingProgrammingLanguage.value,
-            assemblyAiSpeechModel: settingAssemblyModel.value,
-            windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
-        };
-
-        const result = await window.electronAPI.saveSettings(settings);
-
-        if (result.success) {
-            showFeedback('Settings saved. AI changes are active now; voice model applies next session.', 'success');
-            closeSettings();
-        } else {
-            showFeedback(`Failed to save: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        console.error('Failed to save settings:', error);
-        showFeedback('Failed to save settings', 'error');
-    }
+    await settingsPanelManager.saveSettings();
 }
 
 // UI Helper functions
@@ -12387,319 +13164,82 @@ function startTimer() {
 
 // Event listeners
 function setupEventListeners() {
-    if (screenshotBtn) screenshotBtn.addEventListener('click', takeStealthScreenshot);
-    if (analyzeBtn) analyzeBtn.addEventListener('click', askAiWithSessionContext);
-    if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
-    if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
-    if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
-    if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
-    if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
-    if (chatManualInput) {
-        chatManualInput.addEventListener('input', () => {
-            autoResizeManualInput();
-            updateManualComposerState();
-        });
-        chatManualInput.addEventListener('keydown', (event) => {
-            if (event.isComposing) {
-                return;
-            }
-
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                submitManualContextMessage();
-            }
-        });
-        autoResizeManualInput();
-        updateManualComposerState();
-    }
-    if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
-    if (transcriptionToggle) {
-        transcriptionToggle.addEventListener('click', () => {
-            toggleMasterTranscription().catch((error) => {
-                console.error('Failed to toggle transcription:', error);
-                addMonitorLog('error', 'master-toggle-failed', error.message);
-            });
-        });
-    }
-    if (sourceSystemToggle) {
-        sourceSystemToggle.addEventListener('click', () => {
-            setSourceSelected('system', !selectedSources.system);
-        });
-    }
-    if (sourceMicToggle) {
-        sourceMicToggle.addEventListener('click', () => {
-            setSourceSelected('mic', !selectedSources.mic);
-        });
-    }
-    if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
-    if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
-    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
-    if (closeConfirmationDialog) {
-        closeConfirmationDialog.addEventListener('click', (event) => {
-            if (event.target === closeConfirmationDialog) {
-                closeCloseConfirmation();
-            }
-        });
-    }
-
-    if (chatMessagesElement) {
-        chatMessagesElement.addEventListener('click', (event) => {
-            const button = event.target?.closest?.('.ai-include-toggle');
-            if (!button) return;
-            event.preventDefault();
-            const messageId = button.dataset.messageId;
-            if (!messageId) return;
-            toggleChatMessageInclusion(messageId);
-        });
-    }
-
-    // New feature buttons
-    if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
-    if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
-    if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
-    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleThemeMode);
-
-    // Settings buttons
-    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
-    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
-    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
-    if (settingWindowOpacity) {
-        settingWindowOpacity.addEventListener('input', (event) => {
-            updateWindowOpacityValueLabel(event.target.value);
-        });
-    }
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        if (isCloseConfirmationOpen) {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                closeCloseConfirmation();
-                return;
-            }
-
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                closeApplication();
-                return;
-            }
-        }
-
-        if (isShortcutPressed(e, 'toggleStealth')) {
-            e.preventDefault();
-            if (window.electronAPI) window.electronAPI.toggleStealth();
-            return;
-        }
-
-        if (isShortcutPressed(e, 'takeScreenshot')) {
-            e.preventDefault();
-            takeStealthScreenshot();
-            return;
-        }
-
-        if (isShortcutPressed(e, 'askAi')) {
-            e.preventDefault();
-            addMonitorLog('info', 'shortcut-local', 'Local Ask AI shortcut captured; awaiting global Ask AI event');
-            return;
-        }
-
-        if (isShortcutPressed(e, 'emergencyHide')) {
-            e.preventDefault();
-            emergencyHide();
-            return;
-        }
-
-        if (isShortcutPressed(e, 'toggleTranscription')) {
-            e.preventDefault();
-            addMonitorLog('info', 'shortcut-local', 'Local transcription shortcut captured; awaiting global shortcut event');
-            return;
-        }
+    setupEventListenersModule({
+        windowApi: window.electronAPI,
+        screenshotBtn,
+        analyzeBtn,
+        screenAiBtn,
+        clearBtn,
+        hideBtn,
+        copyBtn,
+        chatManualSend,
+        chatManualInput,
+        closeResultsBtn,
+        transcriptionToggle,
+        sourceSystemToggle,
+        sourceMicToggle,
+        closeAppBtn,
+        cancelCloseBtn,
+        confirmCloseBtn,
+        closeConfirmationDialog,
+        chatMessagesElement,
+        suggestBtn,
+        notesBtn,
+        insightsBtn,
+        themeToggleBtn,
+        settingsBtn,
+        closeSettingsBtn,
+        saveSettingsBtn,
+        settingWindowOpacity,
+        selectedSources,
+        isCloseConfirmationOpen: () => isCloseConfirmationOpen,
+        isShortcutPressed,
+        updateWindowOpacityValueLabel,
+        takeStealthScreenshot,
+        askAiWithSessionContext,
+        analyzeScreenshotsOnly,
+        clearStealthData,
+        emergencyHide,
+        copyToClipboard,
+        submitManualContextMessage,
+        autoResizeManualInput,
+        updateManualComposerState,
+        hideResults,
+        toggleMasterTranscription,
+        addMonitorLog,
+        setSourceSelected,
+        openCloseConfirmation,
+        closeCloseConfirmation,
+        closeApplication,
+        toggleChatMessageInclusion,
+        getResponseSuggestions,
+        generateMeetingNotes,
+        getConversationInsights,
+        toggleThemeMode,
+        openSettings,
+        closeSettings,
+        saveSettings
     });
-
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('selectstart', e => e.preventDefault());
-    document.addEventListener('dragstart', e => e.preventDefault());
 }
 
 // IPC listeners
 function setupIpcListeners() {
-    if (!window.electronAPI) {
-        console.error('electronAPI not available');
-        return;
-    }
-
-    window.electronAPI.onScreenshotTakenStealth((count) => {
-        const payload = typeof count === 'object' && count !== null ? count : { count };
-        screenshotsCount = Number(payload.count || 0);
-        updateUI();
-        addChatMessage('screenshot', 'Screenshot captured', {
-            screenshotId: typeof payload.screenshotId === 'string' ? payload.screenshotId : null
-        });
-        showFeedback('Screenshot captured', 'success');
-    });
-
-    window.electronAPI.onAnalysisStart(() => {
-        setAnalyzing(true);
-        showLoadingOverlay();
-        addChatMessage('system', 'Analyzing screenshots...');
-    });
-
-    window.electronAPI.onAnalysisResult((data) => {
-        setAnalyzing(false);
-        hideLoadingOverlay();
-
-        if (data.error) {
-            addChatMessage('system', `Error: ${data.error}`);
-            showFeedback('Analysis failed', 'error');
-        } else {
-            addChatMessage('ai-response', data.text);
-            showFeedback('Analysis complete', 'success');
-        }
-    });
-
-    window.electronAPI.onSetStealthMode((enabled) => {
-        stealthModeActive = enabled;
-        showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');
-    });
-
-    window.electronAPI.onEmergencyClear(() => {
-        showEmergencyOverlay();
-    });
-
-    window.electronAPI.onError((message) => {
-        showFeedback(message, 'error');
-    });
-
-    // AssemblyAI streaming transcription event listeners
-    window.electronAPI.onVoskStatus((data) => {
-        const source = normalizeSource(data?.source);
-        const status = data?.status;
-        const message = data?.message || '';
-        console.log(`STT status [${source}]:`, status, message);
-
-        if (status === 'loading') {
-            setSourceStatus(source, 'connecting', `Connecting (${sourceLabel(source)})...`);
-            showFeedback(`Connecting (${sourceLabel(source)})...`, 'info');
-            addMonitorLog('info', 'status-loading', message || 'Connection requested', source);
-        } else if (status === 'listening') {
-            setSourceStatus(source, 'listening', `Listening (${sourceLabel(source)})...`);
-            showFeedback(`Listening (${sourceLabel(source)})...`, 'success');
-            addMonitorLog('info', 'status-listening', message || 'Source listening', source);
-        } else if (status === 'stopped') {
-            setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
-            showFeedback(`Stopped (${sourceLabel(source)})`, 'info');
-            addMonitorLog('info', 'status-stopped', message || 'Source stopped', source);
-        }
-    });
-
-    window.electronAPI.onVoskPartial((data) => {
-        handleVoskPartial(data);
-    });
-
-    window.electronAPI.onVoskFinal((data) => {
-        handleVoskFinal(data);
-    });
-
-    window.electronAPI.onVoskError((data) => {
-        const source = normalizeSource(data?.source);
-        const error = data?.error || 'Unknown transcription error';
-        console.error(`STT error [${source}]:`, error);
-        showFeedback(`Error (${sourceLabel(source)}): ${error}`, 'error');
-        addChatMessage('system', `Transcription error (${sourceLabel(source)}): ${error}`);
-        addMonitorLog('error', 'status-error', error, source);
-        flushFinalTranscript(source, 'status-error');
-
-        if (source === 'system') {
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-            if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-            systemPartialText = '';
-            setSystemActive(false);
-            resetSourceSampleQueue('system');
-            resetFinalTranscriptBuffer('system');
-        } else {
-            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-            micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-            if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-            micPartialText = '';
-            setMicActive(false);
-            resetSourceSampleQueue('mic');
-            resetFinalTranscriptBuffer('mic');
-        }
-
-        setSourceStatus(source, 'error', `Error: ${error}`);
-        updateTranscriptionUI();
-    });
-
-    window.electronAPI.onVoskStopped((data) => {
-        const source = normalizeSource(data?.source);
-        console.log(`STT stopped [${source}]`);
-        flushFinalTranscript(source, 'stopped-event');
-        if (source === 'system') {
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null; systemMediaStream = null; systemScriptProcessor = null;
-            if (systemPartialDiv) { systemPartialDiv.remove(); systemPartialDiv = null; }
-            systemPartialText = '';
-            setSystemActive(false);
-            resetSourceSampleQueue('system');
-            resetFinalTranscriptBuffer('system');
-        } else {
-            stopAudioResources(micAudioContext, micMediaStream, micScriptProcessor);
-            micAudioContext = null; micMediaStream = null; micScriptProcessor = null;
-            if (micPartialDiv) { micPartialDiv.remove(); micPartialDiv = null; }
-            micPartialText = '';
-            setMicActive(false);
-            resetSourceSampleQueue('mic');
-            resetFinalTranscriptBuffer('mic');
-        }
-        setSourceStatus(source, 'off', `${sourceLabel(source)} stopped`);
-        addMonitorLog('info', 'stopped-event', 'Stop acknowledged by backend', source);
-    });
-
-    if (window.electronAPI.onToggleVoiceRecognition) {
-        window.electronAPI.onToggleVoiceRecognition(() => {
-            addMonitorLog('info', 'shortcut-event', 'Global shortcut toggled transcription');
-            toggleMasterTranscription().catch((error) => {
-                console.error('Global shortcut toggle failed:', error);
-                addMonitorLog('error', 'shortcut-toggle-failed', error.message);
-            });
-        });
-    }
-
-    if (window.electronAPI.onTriggerAskAi) {
-        window.electronAPI.onTriggerAskAi(() => {
-            addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
-            askAiWithSessionContext().catch((error) => {
-                console.error('Global Ask AI trigger failed:', error);
-                addMonitorLog('error', 'shortcut-ask-ai-failed', error.message);
-            });
-        });
-    }
-
-    if (window.electronAPI.onSttDebug) {
-        window.electronAPI.onSttDebug((data) => {
-            const source = data?.source ? normalizeSource(data.source) : null;
-            addMonitorLog(
-                data?.level || 'info',
-                data?.event || 'stt-debug',
-                data?.message || '',
-                source,
-                data?.meta || null,
-                data?.ts || Date.now()
-            );
-        });
-    }
-
-    window.addEventListener('error', (event) => {
-        addMonitorLog('error', 'renderer-error', event?.message || 'Renderer error');
-    });
-
-    window.addEventListener('unhandledrejection', (event) => {
-        const reason = event?.reason;
-        const message = typeof reason === 'string'
-            ? reason
-            : reason?.message || 'Unhandled promise rejection';
-        addMonitorLog('error', 'renderer-rejection', message);
+    setupIpcListenersModule({
+        windowApi: window.electronAPI,
+        setScreenshotsCount: (nextCount) => {
+            screenshotsCount = nextCount;
+        },
+        updateUi: updateUI,
+        addChatMessage,
+        setAnalyzing,
+        showLoadingOverlay,
+        hideLoadingOverlay,
+        showFeedback,
+        showEmergencyOverlay,
+        transcriptionManager,
+        toggleMasterTranscription,
+        askAiWithSessionContext,
+        addMonitorLog
     });
 }
 
@@ -12709,243 +13249,6 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-
-================
-File: README.md
-================
-# Open-Cluely
-
-Open-Cluely is an Electron desktop copilot for technical interviews and live meetings. It combines AssemblyAI streaming transcription, screenshot capture, and Gemini-powered responses in a compact always-on-top window.
-
-Use it only in environments where recording, transcription, screenshots, and AI assistance are allowed.
-
-## Features
-
-- Dual-source live transcription for host/system audio and microphone input, with per-source toggles and a live monitor.
-- `Ask AI` uses the current transcript bundle, manual notes, and any enabled screenshots, with text-only fallback when no screenshots are selected.
-- `Screen AI` runs screenshot-focused analysis from the screenshots currently included in AI context.
-- Per-message `AI` / `Off` controls let you keep transcript chunks, screenshots, and prior AI replies visible while excluding them from future prompts.
-- Built-in actions for response suggestions, meeting notes, and conversation insights.
-- Multiple Gemini API keys are supported as a comma-separated list, with automatic failover on quota or authentication errors.
-- Settings support Gemini model selection, AssemblyAI speech model selection, programming language preference, and window opacity.
-- Session state is persisted to `cache/app-state.json`, and screenshot retention is bounded by `MAX_SCREENSHOTS`.
-
-## Installation
-
-### Requirements
-
-- Windows 10/11 is the primary development target for this repo.
-- Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
-- npm `10+`
-- At least one Gemini API key
-- One AssemblyAI API key
-
-### Setup
-
-```powershell
-nvm install 20.20.1
-nvm use 20.20.1
-npm ci
-Copy-Item .env.example .env
-```
-
-Populate `.env` before the first run:
-
-```env
-GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
-ASSEMBLY_AI_API_KEY=your_assemblyai_key
-```
-
-Start the app:
-
-```powershell
-npm start
-```
-
-Useful variants:
-
-```powershell
-npm run dev
-npm run start:hidden
-```
-
-### Recommended For Windows Use
-
-For day-to-day use on Windows, prefer building the portable app and running the generated `.exe` instead of launching from source every time.
-
-```powershell
-npm run build:win
-```
-
-This creates:
-
-```text
-dist/GoogleChrome.exe
-```
-
-You can then run the packaged app directly by double-clicking `dist/GoogleChrome.exe`.
-
-### Native Windows Build Tools
-
-This app depends on native modules. If `npm ci` fails with `node-gyp` or Visual Studio toolchain errors, install the C++ build tools and Python:
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Required | Notes |
-|----------|----------|-------|
-| `GEMINI_API_KEY` | Yes | Comma-separated keys are allowed. The runtime rotates to the next key when it hits quota/auth failures. |
-| `ASSEMBLY_AI_API_KEY` | Yes | Used for streaming STT and audio transcription endpoints. |
-| `HIDE_FROM_SCREEN_CAPTURE` | No | Defaults to `true`. Controls `BrowserWindow.setContentProtection(...)`. |
-| `START_HIDDEN` | No | Defaults to `false`. Also available at runtime via `npm run start:hidden` or `--start-hidden`. |
-| `MAX_SCREENSHOTS` | No | Defaults to `50`. Old screenshots are deleted when the limit is exceeded. |
-| `SCREENSHOT_DELAY` | No | Defaults to `300` ms. Delay used while briefly hiding the window before capture. |
-| `NODE_ENV` | No | Defaults to `production`. `development` opens DevTools automatically. |
-| `NODE_OPTIONS` | No | Defaults to `--max-old-space-size=4096`. |
-
-### Source-Of-Truth Config
-
-[`src/config.js`](./src/config.js) defines the app's configurable lists and defaults:
-
-- Gemini models
-- AssemblyAI speech models
-- Programming language options for code-oriented prompts
-- Global keyboard shortcuts
-
-The first item in each model/language list is treated as the default.
-
-### Persisted Files
-
-- In development, state is written to `cache/app-state.json` at the repo root. Portable builds create the same `cache/app-state.json` structure next to the executable.
-- Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
-- Saving settings from the UI writes API-key values back to `.env` and selection state back to `cache/app-state.json`.
-
-## Basic Workflow
-
-1. Launch the app and confirm your API keys and models in Settings.
-2. Start transcription and enable whichever sources you need: `Host`, `Mic`, or both.
-3. Take screenshots when visual context matters.
-4. Use `Ask AI` for transcript-plus-screen context, or `Screen AI` for screenshot-only analysis.
-5. Toggle noisy messages to `Off` before asking AI again so the next prompt stays focused.
-
-## Folder Structure
-
-```text
-src/
-  bootstrap/             Environment loading, validation, and persistence
-  main-process/          Electron startup, IPC wiring, window control, assistant runtime
-  services/
-    ai/                  Gemini service wrapper and prompt builders
-    assembly-ai/         Streaming STT service and transcript history merging
-    state/               App-state load/save helpers
-  windows/
-    assistant/           Active window, preload bridge, renderer, and renderer feature modules
-    legacy/              Older experimental files kept out of the active flow
-assets/                  Build icons and packaging assets
-cache/                   Generated app state in development
-.stealth_screenshots/    Session screenshots in development
-dist/                    Packaged build output
-repomix-output.txt       Single-file repository snapshot for AI/code review tooling
-```
-
-## Default Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
-| `Ctrl+Alt+Shift+S` | Capture screenshot |
-| `Ctrl+Alt+Shift+A` | Ask AI with current session context |
-| `Ctrl+Alt+Shift+X` | Emergency hide |
-| `Ctrl+Alt+Shift+H` | Toggle stealth opacity mode |
-| `Ctrl+Alt+Shift+Left` | Move window left |
-| `Ctrl+Alt+Shift+Right` | Move window right |
-| `Ctrl+Alt+Shift+Up` | Move window to top |
-| `Ctrl+Alt+Shift+Down` | Move window to bottom |
-
-## Scripts
-
-- `npm start` runs the app from source.
-- `npm run start:hidden` launches it in background mode from source.
-- `npm run dev` enables Electron logging.
-- `npm run build:win` creates the portable Windows executable.
-- `npm run build` runs the default `electron-builder` flow.
-
-## Build
-
-The recommended Windows build is the portable executable:
-
-```powershell
-npm run build:win
-```
-
-Expected output:
-
-```text
-dist/GoogleChrome.exe
-```
-
-Notes:
-
-- This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
-- `.env` is bundled as an extra resource during packaging.
-- The current Windows build is configured as a portable `x64` target with:
-  - Product name: `Google Chrome (2)`
-  - Executable name: `GoogleChrome.exe`
-  - App ID: `com.google.chrome`
-  - Publisher name: `Google LLC`
-- If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
-- The repo already includes [`assets/chrome.ico`](./assets/chrome.ico) for the Windows target. Add `assets/chrome.icns` and `assets/chrome.png` before relying on the macOS or Linux targets defined in `package.json`.
-
-### Running The Built App
-
-After building:
-
-1. Open the `dist/` folder.
-2. Run `GoogleChrome.exe`.
-3. If you want background launch behavior, either set `START_HIDDEN=true` before building or launch with:
-
-```powershell
-.\dist\GoogleChrome.exe --start-hidden
-```
-
-### Build Checks
-
-After packaging, verify:
-
-- `dist/GoogleChrome.exe` exists
-- the executable shows the Chrome icon
-- the app launches correctly without needing `npm start`
-
-For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md).
-
-## Good Practices
-
-- Keep `src/config.js` as the single source of truth for model lists, programming languages, and keyboard shortcuts.
-- When adding or changing environment variables, update all three places together: [`src/bootstrap/environment.js`](./src/bootstrap/environment.js), [`.env.example`](./.env.example), and this README.
-- Preserve Electron boundaries: renderer code should go through `preload` and IPC, not import main-process modules directly.
-- Add new UI logic under `src/windows/assistant/renderer/features/` and new domain logic under `src/services/` or `src/main-process/features/`.
-- Treat [`src/windows/legacy/`](./src/windows/legacy/) as reference material unless you are intentionally reviving an old experiment.
-- Re-test both `npm start` and the relevant packaging path when changing startup flow, window behavior, screenshots, IPC, or global shortcuts.
-- Keep real keys out of Git. Use `.env`, and rely on `.env.example` for the documented contract.
-
-## Repomix Snapshot
-
-To regenerate the packed repository snapshot:
-
-```powershell
-npx repomix . --style plain -o repomix-output.txt
-```
-
-If you want to exclude generated artifacts while experimenting:
-
-```powershell
-npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
-```
 
 ================
 File: src/main.js

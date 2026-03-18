@@ -1,18 +1,12 @@
 ﻿/// <reference path="./renderer-globals.d.ts" />
 
-import {
-    canToggleAiForMessageType as canToggleAiForMessageTypeRule,
-    defaultIncludeInAiForMessageType as defaultIncludeInAiForMessageTypeRule,
-    isAiResponseMessageType as isAiResponseMessageTypeRule,
-    isScreenshotMessageType as isScreenshotMessageTypeRule,
-    isSystemMessageType as isSystemMessageTypeRule,
-    isTranscriptMessageType as isTranscriptMessageTypeRule
-} from './renderer/features/ai-context/message-types.js';
 import { createMessageStore } from './renderer/features/ai-context/message-store.js';
 import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
 import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/features/ai-context/toggle-ui.js';
 import { createChatUiManager } from './renderer/features/chat/chat-ui-manager.js';
 import { createWindowAdjustmentManager } from './renderer/features/layout/window-adjustments.js';
+import { setupEventListeners as setupEventListenersModule } from './renderer/features/listeners/event-listeners.js';
+import { setupIpcListeners as setupIpcListenersModule } from './renderer/features/listeners/ipc-listeners.js';
 import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
 import { createSettingsPanelManager } from './renderer/features/settings/settings-panel-manager.js';
 import { createTranscriptionManager } from './renderer/features/transcription/transcription-manager.js';
@@ -29,7 +23,6 @@ import { createTranscriptBufferManager } from './renderer/features/assembly-ai/t
 
 let screenshotsCount = 0;
 let isAnalyzing = false;
-let stealthModeActive = false;
 let stealthHideTimeout = null;
 const THEME_STORAGE_KEY = 'assistant-theme';
 const THEME_LIGHT = 'light';
@@ -213,10 +206,9 @@ async function init() {
     setupWindowAdjustments();
     applyTheme(loadStoredThemePreference(), { persist: false });
     updateUI();
-    updateTranscriptionUI();
-    renderMonitorState();
+    transcriptionManager.updateTranscriptionUI();
+    transcriptionManager.renderMonitorState();
     startTimer();
-    stealthModeActive = false;
 
     document.body.style.visibility = 'visible';
     document.body.style.display = 'block';
@@ -320,34 +312,6 @@ function setupWindowAdjustments() {
     windowAdjustmentManager.setupWindowAdjustments();
 }
 
-function sourceLabel(source) {
-    return transcriptionManager.sourceLabel(source);
-}
-
-function isTranscriptMessageType(type) {
-    return isTranscriptMessageTypeRule(type);
-}
-
-function isScreenshotMessageType(type) {
-    return isScreenshotMessageTypeRule(type);
-}
-
-function isSystemMessageType(type) {
-    return isSystemMessageTypeRule(type);
-}
-
-function isAiResponseMessageType(type) {
-    return isAiResponseMessageTypeRule(type);
-}
-
-function canToggleAiForMessageType(type) {
-    return canToggleAiForMessageTypeRule(type);
-}
-
-function defaultIncludeInAiForMessageType(type) {
-    return defaultIncludeInAiForMessageTypeRule(type);
-}
-
 function escapeHtml(value) {
     return String(value || '')
         .replace(/&/g, '&amp;')
@@ -377,10 +341,6 @@ function buildFilteredAiContextBundle({ charBudget = AI_CONTEXT_CHAR_BUDGET, emi
     });
 }
 
-function findChatMessageById(messageId) {
-    return messageStore.findById(messageId);
-}
-
 function updateMessageAiToggleUi(message) {
     syncMessageAiToggleUi(chatMessagesElement, message);
 }
@@ -400,18 +360,6 @@ function toggleChatMessageInclusion(messageId) {
     });
 }
 
-function normalizeSource(source) {
-    return transcriptionManager.normalizeSource(source);
-}
-
-function updateTranscriptionUI() {
-    transcriptionManager.updateTranscriptionUI();
-}
-
-function renderMonitorState() {
-    transcriptionManager.renderMonitorState();
-}
-
 function addMonitorLog(level, event, message, source = null, meta = null, timestamp = Date.now()) {
     transcriptionManager.addMonitorLog(level, event, message, source, meta, timestamp);
 }
@@ -428,14 +376,6 @@ async function toggleMasterTranscription() {
     return transcriptionManager.toggleMasterTranscription();
 }
 
-function handleVoskFinal(data) {
-    transcriptionManager.handleVoskFinal(data);
-}
-
-function handleVoskPartial(data) {
-    transcriptionManager.handleVoskPartial(data);
-}
-
 // Screenshot functions
 async function takeStealthScreenshot() {
     try {
@@ -445,14 +385,6 @@ async function takeStealthScreenshot() {
         console.error('Screenshot error:', error);
         showFeedback('Screenshot failed', 'error');
     }
-}
-
-function getTranscriptMessages() {
-    return chatMessagesArray.filter((message) =>
-        message.type === 'voice' ||
-        message.type === 'voice-mic' ||
-        message.type === 'voice-system'
-    );
 }
 
 function buildAskAiContextPayload() {
@@ -839,254 +771,82 @@ function startTimer() {
 
 // Event listeners
 function setupEventListeners() {
-    if (screenshotBtn) screenshotBtn.addEventListener('click', takeStealthScreenshot);
-    if (analyzeBtn) analyzeBtn.addEventListener('click', askAiWithSessionContext);
-    if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
-    if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
-    if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
-    if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
-    if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
-    if (chatManualInput) {
-        chatManualInput.addEventListener('input', () => {
-            autoResizeManualInput();
-            updateManualComposerState();
-        });
-        chatManualInput.addEventListener('keydown', (event) => {
-            if (event.isComposing) {
-                return;
-            }
-
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                submitManualContextMessage();
-            }
-        });
-        autoResizeManualInput();
-        updateManualComposerState();
-    }
-    if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
-    if (transcriptionToggle) {
-        transcriptionToggle.addEventListener('click', () => {
-            toggleMasterTranscription().catch((error) => {
-                console.error('Failed to toggle transcription:', error);
-                addMonitorLog('error', 'master-toggle-failed', error.message);
-            });
-        });
-    }
-    if (sourceSystemToggle) {
-        sourceSystemToggle.addEventListener('click', () => {
-            setSourceSelected('system', !selectedSources.system);
-        });
-    }
-    if (sourceMicToggle) {
-        sourceMicToggle.addEventListener('click', () => {
-            setSourceSelected('mic', !selectedSources.mic);
-        });
-    }
-    if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
-    if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
-    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
-    if (closeConfirmationDialog) {
-        closeConfirmationDialog.addEventListener('click', (event) => {
-            if (event.target === closeConfirmationDialog) {
-                closeCloseConfirmation();
-            }
-        });
-    }
-
-    if (chatMessagesElement) {
-        chatMessagesElement.addEventListener('click', (event) => {
-            const button = event.target?.closest?.('.ai-include-toggle');
-            if (!button) return;
-            event.preventDefault();
-            const messageId = button.dataset.messageId;
-            if (!messageId) return;
-            toggleChatMessageInclusion(messageId);
-        });
-    }
-
-    // New feature buttons
-    if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
-    if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
-    if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
-    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleThemeMode);
-
-    // Settings buttons
-    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
-    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
-    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
-    if (settingWindowOpacity) {
-        settingWindowOpacity.addEventListener('input', (event) => {
-            updateWindowOpacityValueLabel(event.target.value);
-        });
-    }
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        if (isCloseConfirmationOpen) {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                closeCloseConfirmation();
-                return;
-            }
-
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                closeApplication();
-                return;
-            }
-        }
-
-        if (isShortcutPressed(e, 'toggleStealth')) {
-            e.preventDefault();
-            if (window.electronAPI) window.electronAPI.toggleStealth();
-            return;
-        }
-
-        if (isShortcutPressed(e, 'takeScreenshot')) {
-            e.preventDefault();
-            takeStealthScreenshot();
-            return;
-        }
-
-        if (isShortcutPressed(e, 'askAi')) {
-            e.preventDefault();
-            addMonitorLog('info', 'shortcut-local', 'Local Ask AI shortcut captured; awaiting global Ask AI event');
-            return;
-        }
-
-        if (isShortcutPressed(e, 'emergencyHide')) {
-            e.preventDefault();
-            emergencyHide();
-            return;
-        }
-
-        if (isShortcutPressed(e, 'toggleTranscription')) {
-            e.preventDefault();
-            addMonitorLog('info', 'shortcut-local', 'Local transcription shortcut captured; awaiting global shortcut event');
-            return;
-        }
+    setupEventListenersModule({
+        windowApi: window.electronAPI,
+        screenshotBtn,
+        analyzeBtn,
+        screenAiBtn,
+        clearBtn,
+        hideBtn,
+        copyBtn,
+        chatManualSend,
+        chatManualInput,
+        closeResultsBtn,
+        transcriptionToggle,
+        sourceSystemToggle,
+        sourceMicToggle,
+        closeAppBtn,
+        cancelCloseBtn,
+        confirmCloseBtn,
+        closeConfirmationDialog,
+        chatMessagesElement,
+        suggestBtn,
+        notesBtn,
+        insightsBtn,
+        themeToggleBtn,
+        settingsBtn,
+        closeSettingsBtn,
+        saveSettingsBtn,
+        settingWindowOpacity,
+        selectedSources,
+        isCloseConfirmationOpen: () => isCloseConfirmationOpen,
+        isShortcutPressed,
+        updateWindowOpacityValueLabel,
+        takeStealthScreenshot,
+        askAiWithSessionContext,
+        analyzeScreenshotsOnly,
+        clearStealthData,
+        emergencyHide,
+        copyToClipboard,
+        submitManualContextMessage,
+        autoResizeManualInput,
+        updateManualComposerState,
+        hideResults,
+        toggleMasterTranscription,
+        addMonitorLog,
+        setSourceSelected,
+        openCloseConfirmation,
+        closeCloseConfirmation,
+        closeApplication,
+        toggleChatMessageInclusion,
+        getResponseSuggestions,
+        generateMeetingNotes,
+        getConversationInsights,
+        toggleThemeMode,
+        openSettings,
+        closeSettings,
+        saveSettings
     });
-
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('selectstart', e => e.preventDefault());
-    document.addEventListener('dragstart', e => e.preventDefault());
 }
 
 // IPC listeners
 function setupIpcListeners() {
-    if (!window.electronAPI) {
-        console.error('electronAPI not available');
-        return;
-    }
-
-    window.electronAPI.onScreenshotTakenStealth((count) => {
-        const payload = typeof count === 'object' && count !== null ? count : { count };
-        screenshotsCount = Number(payload.count || 0);
-        updateUI();
-        addChatMessage('screenshot', 'Screenshot captured', {
-            screenshotId: typeof payload.screenshotId === 'string' ? payload.screenshotId : null
-        });
-        showFeedback('Screenshot captured', 'success');
-    });
-
-    window.electronAPI.onAnalysisStart(() => {
-        setAnalyzing(true);
-        showLoadingOverlay();
-        addChatMessage('system', 'Analyzing screenshots...');
-    });
-
-    window.electronAPI.onAnalysisResult((data) => {
-        setAnalyzing(false);
-        hideLoadingOverlay();
-
-        if (data.error) {
-            addChatMessage('system', `Error: ${data.error}`);
-            showFeedback('Analysis failed', 'error');
-        } else {
-            addChatMessage('ai-response', data.text);
-            showFeedback('Analysis complete', 'success');
-        }
-    });
-
-    window.electronAPI.onSetStealthMode((enabled) => {
-        stealthModeActive = enabled;
-        showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');
-    });
-
-    window.electronAPI.onEmergencyClear(() => {
-        showEmergencyOverlay();
-    });
-
-    window.electronAPI.onError((message) => {
-        showFeedback(message, 'error');
-    });
-
-    // AssemblyAI streaming transcription event listeners
-    window.electronAPI.onVoskStatus((data) => {
-        transcriptionManager.handleVoskStatus(data);
-    });
-
-    window.electronAPI.onVoskPartial((data) => {
-        handleVoskPartial(data);
-    });
-
-    window.electronAPI.onVoskFinal((data) => {
-        handleVoskFinal(data);
-    });
-
-    window.electronAPI.onVoskError((data) => {
-        transcriptionManager.handleVoskError(data);
-    });
-
-    window.electronAPI.onVoskStopped((data) => {
-        transcriptionManager.handleVoskStopped(data);
-    });
-
-    if (window.electronAPI.onToggleVoiceRecognition) {
-        window.electronAPI.onToggleVoiceRecognition(() => {
-            addMonitorLog('info', 'shortcut-event', 'Global shortcut toggled transcription');
-            toggleMasterTranscription().catch((error) => {
-                console.error('Global shortcut toggle failed:', error);
-                addMonitorLog('error', 'shortcut-toggle-failed', error.message);
-            });
-        });
-    }
-
-    if (window.electronAPI.onTriggerAskAi) {
-        window.electronAPI.onTriggerAskAi(() => {
-            addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
-            askAiWithSessionContext().catch((error) => {
-                console.error('Global Ask AI trigger failed:', error);
-                addMonitorLog('error', 'shortcut-ask-ai-failed', error.message);
-            });
-        });
-    }
-
-    if (window.electronAPI.onSttDebug) {
-        window.electronAPI.onSttDebug((data) => {
-            const source = data?.source ? normalizeSource(data.source) : null;
-            addMonitorLog(
-                data?.level || 'info',
-                data?.event || 'stt-debug',
-                data?.message || '',
-                source,
-                data?.meta || null,
-                data?.ts || Date.now()
-            );
-        });
-    }
-
-    window.addEventListener('error', (event) => {
-        addMonitorLog('error', 'renderer-error', event?.message || 'Renderer error');
-    });
-
-    window.addEventListener('unhandledrejection', (event) => {
-        const reason = event?.reason;
-        const message = typeof reason === 'string'
-            ? reason
-            : reason?.message || 'Unhandled promise rejection';
-        addMonitorLog('error', 'renderer-rejection', message);
+    setupIpcListenersModule({
+        windowApi: window.electronAPI,
+        setScreenshotsCount: (nextCount) => {
+            screenshotsCount = nextCount;
+        },
+        updateUi: updateUI,
+        addChatMessage,
+        setAnalyzing,
+        showLoadingOverlay,
+        hideLoadingOverlay,
+        showFeedback,
+        showEmergencyOverlay,
+        transcriptionManager,
+        toggleMasterTranscription,
+        askAiWithSessionContext,
+        addMonitorLog
     });
 }
 
