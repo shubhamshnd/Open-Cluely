@@ -50,7 +50,6 @@ Directory Structure
 assets/chrome.ico
 assets/README.md
 BUILD_INSTRUCTIONS.md
-notes.md
 package.json
 README.md
 SETUP-VOSK.md
@@ -104,339 +103,6 @@ src/windows/legacy/whisper-worker.js
 ================================================================
 Files
 ================================================================
-
-================
-File: src/windows/assistant/renderer/features/listeners/event-listeners.js
-================
-export function setupEventListeners({
-    windowApi,
-    screenshotBtn,
-    analyzeBtn,
-    screenAiBtn,
-    clearBtn,
-    hideBtn,
-    copyBtn,
-    chatManualSend,
-    chatManualInput,
-    closeResultsBtn,
-    transcriptionToggle,
-    sourceSystemToggle,
-    sourceMicToggle,
-    closeAppBtn,
-    cancelCloseBtn,
-    confirmCloseBtn,
-    closeConfirmationDialog,
-    chatMessagesElement,
-    suggestBtn,
-    notesBtn,
-    insightsBtn,
-    themeToggleBtn,
-    settingsBtn,
-    closeSettingsBtn,
-    saveSettingsBtn,
-    settingWindowOpacity,
-    selectedSources,
-    isCloseConfirmationOpen,
-    isShortcutPressed,
-    updateWindowOpacityValueLabel,
-    takeStealthScreenshot,
-    askAiWithSessionContext,
-    analyzeScreenshotsOnly,
-    clearStealthData,
-    emergencyHide,
-    copyToClipboard,
-    submitManualContextMessage,
-    autoResizeManualInput,
-    updateManualComposerState,
-    hideResults,
-    toggleMasterTranscription,
-    addMonitorLog,
-    setSourceSelected,
-    openCloseConfirmation,
-    closeCloseConfirmation,
-    closeApplication,
-    toggleChatMessageInclusion,
-    getResponseSuggestions,
-    generateMeetingNotes,
-    getConversationInsights,
-    toggleThemeMode,
-    openSettings,
-    closeSettings,
-    saveSettings
-}) {
-    if (screenshotBtn) screenshotBtn.addEventListener('click', takeStealthScreenshot);
-    if (analyzeBtn) analyzeBtn.addEventListener('click', askAiWithSessionContext);
-    if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
-    if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
-    if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
-    if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
-    if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
-
-    if (chatManualInput) {
-        chatManualInput.addEventListener('input', () => {
-            autoResizeManualInput();
-            updateManualComposerState();
-        });
-
-        chatManualInput.addEventListener('keydown', (event) => {
-            if (event.isComposing) {
-                return;
-            }
-
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                submitManualContextMessage();
-            }
-        });
-
-        autoResizeManualInput();
-        updateManualComposerState();
-    }
-
-    if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
-
-    if (transcriptionToggle) {
-        transcriptionToggle.addEventListener('click', () => {
-            toggleMasterTranscription().catch((error) => {
-                console.error('Failed to toggle transcription:', error);
-                addMonitorLog('error', 'master-toggle-failed', error.message);
-            });
-        });
-    }
-
-    if (sourceSystemToggle) {
-        sourceSystemToggle.addEventListener('click', () => {
-            setSourceSelected('system', !selectedSources.system);
-        });
-    }
-
-    if (sourceMicToggle) {
-        sourceMicToggle.addEventListener('click', () => {
-            setSourceSelected('mic', !selectedSources.mic);
-        });
-    }
-
-    if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
-    if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
-    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
-
-    if (closeConfirmationDialog) {
-        closeConfirmationDialog.addEventListener('click', (event) => {
-            if (event.target === closeConfirmationDialog) {
-                closeCloseConfirmation();
-            }
-        });
-    }
-
-    if (chatMessagesElement) {
-        chatMessagesElement.addEventListener('click', (event) => {
-            const button = event.target?.closest?.('.ai-include-toggle');
-            if (!button) return;
-            event.preventDefault();
-            const messageId = button.dataset.messageId;
-            if (!messageId) return;
-            toggleChatMessageInclusion(messageId);
-        });
-    }
-
-    if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
-    if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
-    if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
-    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleThemeMode);
-
-    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
-    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
-    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
-
-    if (settingWindowOpacity) {
-        settingWindowOpacity.addEventListener('input', (event) => {
-            const value = event?.target?.value;
-            if (typeof value !== 'undefined') {
-                updateWindowOpacityValueLabel(value);
-            }
-        });
-    }
-
-    document.addEventListener('keydown', (event) => {
-        if (isCloseConfirmationOpen?.()) {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                closeCloseConfirmation();
-                return;
-            }
-
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                closeApplication();
-                return;
-            }
-        }
-
-        if (isShortcutPressed?.(event, 'toggleStealth')) {
-            event.preventDefault();
-            windowApi?.toggleStealth?.();
-            return;
-        }
-
-        if (isShortcutPressed?.(event, 'takeScreenshot')) {
-            event.preventDefault();
-            takeStealthScreenshot();
-            return;
-        }
-
-        if (isShortcutPressed?.(event, 'askAi')) {
-            event.preventDefault();
-            addMonitorLog('info', 'shortcut-local', 'Local Ask AI shortcut captured; awaiting global Ask AI event');
-            return;
-        }
-
-        if (isShortcutPressed?.(event, 'emergencyHide')) {
-            event.preventDefault();
-            emergencyHide();
-            return;
-        }
-
-        if (isShortcutPressed?.(event, 'toggleTranscription')) {
-            event.preventDefault();
-            addMonitorLog('info', 'shortcut-local', 'Local transcription shortcut captured; awaiting global shortcut event');
-        }
-    });
-
-    document.addEventListener('contextmenu', (event) => event.preventDefault());
-    document.addEventListener('selectstart', (event) => event.preventDefault());
-    document.addEventListener('dragstart', (event) => event.preventDefault());
-}
-
-================
-File: src/windows/assistant/renderer/features/listeners/ipc-listeners.js
-================
-export function setupIpcListeners({
-    windowApi,
-    setScreenshotsCount,
-    updateUi,
-    addChatMessage,
-    setAnalyzing,
-    showLoadingOverlay,
-    hideLoadingOverlay,
-    showFeedback,
-    showEmergencyOverlay,
-    transcriptionManager,
-    toggleMasterTranscription,
-    askAiWithSessionContext,
-    addMonitorLog
-}) {
-    if (!windowApi) {
-        console.error('electronAPI not available');
-        return;
-    }
-
-    windowApi.onScreenshotTakenStealth((count) => {
-        const payload = typeof count === 'object' && count !== null ? count : { count };
-        setScreenshotsCount(Number(payload.count || 0));
-        updateUi();
-        addChatMessage('screenshot', 'Screenshot captured', {
-            screenshotId: typeof payload.screenshotId === 'string' ? payload.screenshotId : null
-        });
-        showFeedback('Screenshot captured', 'success');
-    });
-
-    windowApi.onAnalysisStart(() => {
-        setAnalyzing(true);
-        showLoadingOverlay();
-        addChatMessage('system', 'Analyzing screenshots...');
-    });
-
-    windowApi.onAnalysisResult((data) => {
-        setAnalyzing(false);
-        hideLoadingOverlay();
-
-        if (data.error) {
-            addChatMessage('system', `Error: ${data.error}`);
-            showFeedback('Analysis failed', 'error');
-        } else {
-            addChatMessage('ai-response', data.text);
-            showFeedback('Analysis complete', 'success');
-        }
-    });
-
-    windowApi.onSetStealthMode((enabled) => {
-        showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');
-    });
-
-    windowApi.onEmergencyClear(() => {
-        showEmergencyOverlay();
-    });
-
-    windowApi.onError((message) => {
-        showFeedback(message, 'error');
-    });
-
-    windowApi.onVoskStatus((data) => {
-        transcriptionManager.handleVoskStatus(data);
-    });
-
-    windowApi.onVoskPartial((data) => {
-        transcriptionManager.handleVoskPartial(data);
-    });
-
-    windowApi.onVoskFinal((data) => {
-        transcriptionManager.handleVoskFinal(data);
-    });
-
-    windowApi.onVoskError((data) => {
-        transcriptionManager.handleVoskError(data);
-    });
-
-    windowApi.onVoskStopped((data) => {
-        transcriptionManager.handleVoskStopped(data);
-    });
-
-    if (windowApi.onToggleVoiceRecognition) {
-        windowApi.onToggleVoiceRecognition(() => {
-            addMonitorLog('info', 'shortcut-event', 'Global shortcut toggled transcription');
-            toggleMasterTranscription().catch((error) => {
-                console.error('Global shortcut toggle failed:', error);
-                addMonitorLog('error', 'shortcut-toggle-failed', error.message);
-            });
-        });
-    }
-
-    if (windowApi.onTriggerAskAi) {
-        windowApi.onTriggerAskAi(() => {
-            addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
-            askAiWithSessionContext().catch((error) => {
-                console.error('Global Ask AI trigger failed:', error);
-                addMonitorLog('error', 'shortcut-ask-ai-failed', error.message);
-            });
-        });
-    }
-
-    if (windowApi.onSttDebug) {
-        windowApi.onSttDebug((data) => {
-            const source = data?.source ? transcriptionManager.normalizeSource(data.source) : null;
-            addMonitorLog(
-                data?.level || 'info',
-                data?.event || 'stt-debug',
-                data?.message || '',
-                source,
-                data?.meta || null,
-                data?.ts || Date.now()
-            );
-        });
-    }
-
-    window.addEventListener('error', (event) => {
-        addMonitorLog('error', 'renderer-error', event?.message || 'Renderer error');
-    });
-
-    window.addEventListener('unhandledrejection', (event) => {
-        const reason = event?.reason;
-        const message = typeof reason === 'string'
-            ? reason
-            : reason?.message || 'Unhandled promise rejection';
-        addMonitorLog('error', 'renderer-rejection', message);
-    });
-}
 
 ================
 File: assets/README.md
@@ -528,52 +194,6 @@ If successful, you should see:
 ---
 
 **Note:** This is for educational purposes and authorized use only.
-
-================
-File: notes.md
-================
-# Codebase Summary (Folder Ownership)
-
-## `src/`
-- `main.js`: thin Electron entrypoint that starts the app bootstrap flow.
-- `config.js`: source of truth for model/language option lists and resolvers.
-
-## `src/bootstrap/`
-- `environment.js`: loads, validates, normalizes, and saves `.env` app settings.
-
-## `src/main-process/`
-- Purpose: main-process composition and feature wiring.
-- `start-application.js`: orchestrates startup, lifecycle hooks, and IPC registration.
-- `startup-logging.js`: startup config logging.
-- `shared/safe-send.js`: guarded `sendToRenderer` helper.
-- `features/assistant/`: screenshot manager, Gemini runtime wrapper, assistant IPC handlers.
-- `features/window/`: window lifecycle, stealth behavior, shortcuts, bounds/opacity control.
-- `features/settings/`: settings IPC handlers (`get-settings`, `save-settings`).
-
-## `src/services/`
-- Purpose: reusable domain services used by main process logic.
-- `ai/`: Gemini integration and prompt builders.
-  - `gemini-service.js`: request queue, model calls, history handling.
-  - `prompts.js`: prompt templates/builders for Ask AI, notes, insights, etc.
-- `assembly-ai/`: AssemblyAI streaming + transcription backend modules.
-  - `service.js`: WebSocket lifecycle, stream state, transcribe flow.
-  - `stt-history.js`: transcript merge/flush buffering.
-  - `ipc.js`: AssemblyAI-related IPC channel registration.
-- `state/`: persisted app state helpers (`cache/app-state.json` load/save/sanitize).
-
-## `src/windows/assistant/`
-- Purpose: active Electron window implementation (UI + preload bridge).
-- `window.js`: BrowserWindow creation/configuration.
-- `preload.js`: exposes `window.electronAPI`.
-- `preload/`: modularized invoke/listener API construction for IPC.
-- `renderer.html` + `styles.css`: UI structure and styling.
-- `renderer.js`: renderer entry module and UI orchestration.
-- `renderer/features/ai-context/`: AI include/exclude message toggle + context bundle building.
-- `renderer/features/assembly-ai/`: renderer-side source state, audio pipeline, transcript buffering.
-- `pcm-capture-worklet.js`: audio worklet used for PCM capture.
-
-## `src/windows/legacy/`
-- Old experimental/backed-up renderer/transcription files kept for reference, not part of active flow.
 
 ================
 File: SETUP-VOSK.md
@@ -2918,7 +2538,7 @@ export function createChatUiManager({
 
         const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
         const toggleHtml = record.canToggleAi
-            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? 'AI' : 'Off'}</button>`
+            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? '-' : '+'}</button>`
             : '';
         const exclusionHtml = record.canToggleAi
             ? '<div class="ai-excluded-note">Excluded from AI context</div>'
@@ -3190,6 +2810,339 @@ export function createWindowAdjustmentManager({
     return {
         setupWindowAdjustments
     };
+}
+
+================
+File: src/windows/assistant/renderer/features/listeners/event-listeners.js
+================
+export function setupEventListeners({
+    windowApi,
+    screenshotBtn,
+    analyzeBtn,
+    screenAiBtn,
+    clearBtn,
+    hideBtn,
+    copyBtn,
+    chatManualSend,
+    chatManualInput,
+    closeResultsBtn,
+    transcriptionToggle,
+    sourceSystemToggle,
+    sourceMicToggle,
+    closeAppBtn,
+    cancelCloseBtn,
+    confirmCloseBtn,
+    closeConfirmationDialog,
+    chatMessagesElement,
+    suggestBtn,
+    notesBtn,
+    insightsBtn,
+    themeToggleBtn,
+    settingsBtn,
+    closeSettingsBtn,
+    saveSettingsBtn,
+    settingWindowOpacity,
+    selectedSources,
+    isCloseConfirmationOpen,
+    isShortcutPressed,
+    updateWindowOpacityValueLabel,
+    takeStealthScreenshot,
+    askAiWithSessionContext,
+    analyzeScreenshotsOnly,
+    clearStealthData,
+    emergencyHide,
+    copyToClipboard,
+    submitManualContextMessage,
+    autoResizeManualInput,
+    updateManualComposerState,
+    hideResults,
+    toggleMasterTranscription,
+    addMonitorLog,
+    setSourceSelected,
+    openCloseConfirmation,
+    closeCloseConfirmation,
+    closeApplication,
+    toggleChatMessageInclusion,
+    getResponseSuggestions,
+    generateMeetingNotes,
+    getConversationInsights,
+    toggleThemeMode,
+    openSettings,
+    closeSettings,
+    saveSettings
+}) {
+    if (screenshotBtn) screenshotBtn.addEventListener('click', takeStealthScreenshot);
+    if (analyzeBtn) analyzeBtn.addEventListener('click', askAiWithSessionContext);
+    if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
+    if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
+    if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
+    if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
+    if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
+
+    if (chatManualInput) {
+        chatManualInput.addEventListener('input', () => {
+            autoResizeManualInput();
+            updateManualComposerState();
+        });
+
+        chatManualInput.addEventListener('keydown', (event) => {
+            if (event.isComposing) {
+                return;
+            }
+
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitManualContextMessage();
+            }
+        });
+
+        autoResizeManualInput();
+        updateManualComposerState();
+    }
+
+    if (closeResultsBtn) closeResultsBtn.addEventListener('click', hideResults);
+
+    if (transcriptionToggle) {
+        transcriptionToggle.addEventListener('click', () => {
+            toggleMasterTranscription().catch((error) => {
+                console.error('Failed to toggle transcription:', error);
+                addMonitorLog('error', 'master-toggle-failed', error.message);
+            });
+        });
+    }
+
+    if (sourceSystemToggle) {
+        sourceSystemToggle.addEventListener('click', () => {
+            setSourceSelected('system', !selectedSources.system);
+        });
+    }
+
+    if (sourceMicToggle) {
+        sourceMicToggle.addEventListener('click', () => {
+            setSourceSelected('mic', !selectedSources.mic);
+        });
+    }
+
+    if (closeAppBtn) closeAppBtn.addEventListener('click', openCloseConfirmation);
+    if (cancelCloseBtn) cancelCloseBtn.addEventListener('click', closeCloseConfirmation);
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeApplication);
+
+    if (closeConfirmationDialog) {
+        closeConfirmationDialog.addEventListener('click', (event) => {
+            if (event.target === closeConfirmationDialog) {
+                closeCloseConfirmation();
+            }
+        });
+    }
+
+    if (chatMessagesElement) {
+        chatMessagesElement.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('.ai-include-toggle');
+            if (!button) return;
+            event.preventDefault();
+            const messageId = button.dataset.messageId;
+            if (!messageId) return;
+            toggleChatMessageInclusion(messageId);
+        });
+    }
+
+    if (suggestBtn) suggestBtn.addEventListener('click', getResponseSuggestions);
+    if (notesBtn) notesBtn.addEventListener('click', generateMeetingNotes);
+    if (insightsBtn) insightsBtn.addEventListener('click', getConversationInsights);
+    if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleThemeMode);
+
+    if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
+    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+
+    if (settingWindowOpacity) {
+        settingWindowOpacity.addEventListener('input', (event) => {
+            const value = event?.target?.value;
+            if (typeof value !== 'undefined') {
+                updateWindowOpacityValueLabel(value);
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (isCloseConfirmationOpen?.()) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeCloseConfirmation();
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                closeApplication();
+                return;
+            }
+        }
+
+        if (isShortcutPressed?.(event, 'toggleStealth')) {
+            event.preventDefault();
+            windowApi?.toggleStealth?.();
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'takeScreenshot')) {
+            event.preventDefault();
+            takeStealthScreenshot();
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'askAi')) {
+            event.preventDefault();
+            addMonitorLog('info', 'shortcut-local', 'Local Ask AI shortcut captured; awaiting global Ask AI event');
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'emergencyHide')) {
+            event.preventDefault();
+            emergencyHide();
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'toggleTranscription')) {
+            event.preventDefault();
+            addMonitorLog('info', 'shortcut-local', 'Local transcription shortcut captured; awaiting global shortcut event');
+        }
+    });
+
+    document.addEventListener('contextmenu', (event) => event.preventDefault());
+    document.addEventListener('selectstart', (event) => event.preventDefault());
+    document.addEventListener('dragstart', (event) => event.preventDefault());
+}
+
+================
+File: src/windows/assistant/renderer/features/listeners/ipc-listeners.js
+================
+export function setupIpcListeners({
+    windowApi,
+    setScreenshotsCount,
+    updateUi,
+    addChatMessage,
+    setAnalyzing,
+    showLoadingOverlay,
+    hideLoadingOverlay,
+    showFeedback,
+    showEmergencyOverlay,
+    transcriptionManager,
+    toggleMasterTranscription,
+    askAiWithSessionContext,
+    addMonitorLog
+}) {
+    if (!windowApi) {
+        console.error('electronAPI not available');
+        return;
+    }
+
+    windowApi.onScreenshotTakenStealth((count) => {
+        const payload = typeof count === 'object' && count !== null ? count : { count };
+        setScreenshotsCount(Number(payload.count || 0));
+        updateUi();
+        addChatMessage('screenshot', 'Screenshot captured', {
+            screenshotId: typeof payload.screenshotId === 'string' ? payload.screenshotId : null
+        });
+        showFeedback('Screenshot captured', 'success');
+    });
+
+    windowApi.onAnalysisStart(() => {
+        setAnalyzing(true);
+        showLoadingOverlay();
+        addChatMessage('system', 'Analyzing screenshots...');
+    });
+
+    windowApi.onAnalysisResult((data) => {
+        setAnalyzing(false);
+        hideLoadingOverlay();
+
+        if (data.error) {
+            addChatMessage('system', `Error: ${data.error}`);
+            showFeedback('Analysis failed', 'error');
+        } else {
+            addChatMessage('ai-response', data.text);
+            showFeedback('Analysis complete', 'success');
+        }
+    });
+
+    windowApi.onSetStealthMode((enabled) => {
+        showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');
+    });
+
+    windowApi.onEmergencyClear(() => {
+        showEmergencyOverlay();
+    });
+
+    windowApi.onError((message) => {
+        showFeedback(message, 'error');
+    });
+
+    windowApi.onVoskStatus((data) => {
+        transcriptionManager.handleVoskStatus(data);
+    });
+
+    windowApi.onVoskPartial((data) => {
+        transcriptionManager.handleVoskPartial(data);
+    });
+
+    windowApi.onVoskFinal((data) => {
+        transcriptionManager.handleVoskFinal(data);
+    });
+
+    windowApi.onVoskError((data) => {
+        transcriptionManager.handleVoskError(data);
+    });
+
+    windowApi.onVoskStopped((data) => {
+        transcriptionManager.handleVoskStopped(data);
+    });
+
+    if (windowApi.onToggleVoiceRecognition) {
+        windowApi.onToggleVoiceRecognition(() => {
+            addMonitorLog('info', 'shortcut-event', 'Global shortcut toggled transcription');
+            toggleMasterTranscription().catch((error) => {
+                console.error('Global shortcut toggle failed:', error);
+                addMonitorLog('error', 'shortcut-toggle-failed', error.message);
+            });
+        });
+    }
+
+    if (windowApi.onTriggerAskAi) {
+        windowApi.onTriggerAskAi(() => {
+            addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
+            askAiWithSessionContext().catch((error) => {
+                console.error('Global Ask AI trigger failed:', error);
+                addMonitorLog('error', 'shortcut-ask-ai-failed', error.message);
+            });
+        });
+    }
+
+    if (windowApi.onSttDebug) {
+        windowApi.onSttDebug((data) => {
+            const source = data?.source ? transcriptionManager.normalizeSource(data.source) : null;
+            addMonitorLog(
+                data?.level || 'info',
+                data?.event || 'stt-debug',
+                data?.message || '',
+                source,
+                data?.meta || null,
+                data?.ts || Date.now()
+            );
+        });
+    }
+
+    window.addEventListener('error', (event) => {
+        addMonitorLog('error', 'renderer-error', event?.message || 'Renderer error');
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+        const reason = event?.reason;
+        const message = typeof reason === 'string'
+            ? reason
+            : reason?.message || 'Unhandled promise rejection';
+        addMonitorLog('error', 'renderer-rejection', message);
+    });
 }
 
 ================
@@ -7211,7 +7164,7 @@ export function updateMessageAiToggleUi(chatMessagesElement, message) {
   if (toggle) {
     toggle.classList.toggle('included', !!message.includeInAi);
     toggle.classList.toggle('excluded', !message.includeInAi);
-    toggle.textContent = message.includeInAi ? 'AI' : 'Off';
+    toggle.textContent = message.includeInAi ? '-' : '+';
     toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
   }
 }

@@ -647,19 +647,19 @@ body {
 }
 
 .monitor-log-list {
-  max-height: 72px;
+  max-height: 44px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding-top: 2px;
+  gap: 2px;
+  padding-top: 1px;
 }
 
 .monitor-log-entry {
   font-size: 9px;
-  line-height: 1.25;
-  padding: 3px 6px;
-  border-radius: 5px;
+  line-height: 1.2;
+  padding: 2px 6px;
+  border-radius: 4px;
   color: rgba(0, 0, 0, 0.78);
   background: rgba(255, 255, 255, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.35);

@@ -94,7 +94,7 @@ export function createChatUiManager({
 
         const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
         const toggleHtml = record.canToggleAi
-            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? 'AI' : 'Off'}</button>`
+            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? '-' : '+'}</button>`
             : '';
         const exclusionHtml = record.canToggleAi
             ? '<div class="ai-excluded-note">Excluded from AI context</div>'

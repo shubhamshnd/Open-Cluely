@@ -1,4 +1,4 @@
-﻿export function updateMessageAiToggleUi(chatMessagesElement, message) {
+export function updateMessageAiToggleUi(chatMessagesElement, message) {
   if (!message || !message.id || !chatMessagesElement) {
     return;
   }
@@ -15,7 +15,7 @@
   if (toggle) {
     toggle.classList.toggle('included', !!message.includeInAi);
     toggle.classList.toggle('excluded', !message.includeInAi);
-    toggle.textContent = message.includeInAi ? 'AI' : 'Off';
+    toggle.textContent = message.includeInAi ? '-' : '+';
     toggle.setAttribute('aria-pressed', message.includeInAi ? 'true' : 'false');
   }
 }

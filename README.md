@@ -118,18 +118,30 @@ The first item in each model/language list is treated as the default.
 4. Use `Ask AI` for transcript-plus-screen context, or `Screen AI` for screenshot-only analysis.
 5. Toggle noisy messages to `Off` before asking AI again so the next prompt stays focused.
 
-## Folder Structure
+## Project Structure (Brief)
+
+- `src/main-process/` is the Electron control plane (startup flow, window behavior, global shortcuts, and IPC registration).
+- `src/services/` contains reusable domain logic (Gemini prompts/runtime behavior, AssemblyAI streaming/transcript history, persisted app-state).
+- `src/windows/assistant/preload/` is the renderer-safe API boundary (`window.electronAPI` invoke + event wrappers).
+- `src/windows/assistant/renderer/features/` contains modular UI logic (chat, listeners, settings, transcription, context bundling, layout).
+- `src/windows/legacy/` contains old experiments and is not part of the active runtime path.
+
+Detailed, file-by-file ownership is documented in [`notes.md`](./notes.md).
 
 ```text
 src/
   bootstrap/             Environment loading, validation, and persistence
-  main-process/          Electron startup, IPC wiring, window control, assistant runtime
+  main-process/          Startup orchestration, IPC wiring, window control, assistant runtime
   services/
-    ai/                  Gemini service wrapper and prompt builders
-    assembly-ai/         Streaming STT service and transcript history merging
+    ai/                  Gemini service + prompt builders
+    assembly-ai/         Streaming STT service + transcript history manager
     state/               App-state load/save helpers
   windows/
-    assistant/           Active window, preload bridge, renderer, and renderer feature modules
+    assistant/
+      preload/           `window.electronAPI` invoke/listener bridge
+      renderer/features/ Renderer feature modules (chat, listeners, settings, transcription, AI context, layout)
+      window.js          BrowserWindow creation/config
+      renderer.js        Renderer composition root
     legacy/              Older experimental files kept out of the active flow
 assets/                  Build icons and packaging assets
 cache/                   Generated app state in development
