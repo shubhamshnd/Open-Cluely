@@ -94,8 +94,10 @@ export function createChatUiManager({
 
         const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
         const toggleHtml = record.canToggleAi
-            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? '-' : '+'}</button>`
+            ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" type="button" aria-label="Toggle AI context" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? '-' : '+'}</button>`
             : '';
+        const copyHtml = `<button class="message-copy-btn" data-message-id="${record.id}" type="button" aria-label="Copy message"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>`;
+        const messageActionsHtml = `<span class="message-actions">${toggleHtml}${copyHtml}</span>`;
         const exclusionHtml = record.canToggleAi
             ? '<div class="ai-excluded-note">Excluded from AI context</div>'
             : '';
@@ -104,7 +106,7 @@ export function createChatUiManager({
         <div class="message-header">
             <span class="message-icon">${icon}</span>
             ${labelHtml}
-            ${toggleHtml}
+            ${messageActionsHtml}
             <span class="message-time">${timestamp}</span>
         </div>
         <div class="${contentClass}">${exclusionHtml}${safeContent}</div>

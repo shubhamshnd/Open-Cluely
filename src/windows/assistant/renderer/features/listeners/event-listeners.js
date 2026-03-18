@@ -5,7 +5,6 @@ export function setupEventListeners({
     screenAiBtn,
     clearBtn,
     hideBtn,
-    copyBtn,
     chatManualSend,
     chatManualInput,
     closeResultsBtn,
@@ -34,7 +33,7 @@ export function setupEventListeners({
     analyzeScreenshotsOnly,
     clearStealthData,
     emergencyHide,
-    copyToClipboard,
+    copyChatMessageById,
     submitManualContextMessage,
     autoResizeManualInput,
     updateManualComposerState,
@@ -59,7 +58,6 @@ export function setupEventListeners({
     if (screenAiBtn) screenAiBtn.addEventListener('click', analyzeScreenshotsOnly);
     if (clearBtn) clearBtn.addEventListener('click', clearStealthData);
     if (hideBtn) hideBtn.addEventListener('click', emergencyHide);
-    if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
     if (chatManualSend) chatManualSend.addEventListener('click', submitManualContextMessage);
 
     if (chatManualInput) {
@@ -120,10 +118,19 @@ export function setupEventListeners({
 
     if (chatMessagesElement) {
         chatMessagesElement.addEventListener('click', (event) => {
-            const button = event.target?.closest?.('.ai-include-toggle');
-            if (!button) return;
+            const copyButton = event.target?.closest?.('.message-copy-btn');
+            if (copyButton) {
+                event.preventDefault();
+                const messageId = copyButton.dataset.messageId;
+                if (!messageId) return;
+                copyChatMessageById(messageId);
+                return;
+            }
+
+            const toggleButton = event.target?.closest?.('.ai-include-toggle');
+            if (!toggleButton) return;
             event.preventDefault();
-            const messageId = button.dataset.messageId;
+            const messageId = toggleButton.dataset.messageId;
             if (!messageId) return;
             toggleChatMessageInclusion(messageId);
         });

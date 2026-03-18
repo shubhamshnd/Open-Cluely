@@ -753,32 +753,6 @@ body.chat-resizing * {
   gap: 4px;
 }
 
-.chat-controls {
-  display: flex;
-  gap: 4px;
-}
-
-.copy-btn {
-  background: var(--glass-control-bg);
-  border: 1px solid var(--glass-control-border);
-  color: rgba(0, 0, 0, 0.8);
-  padding: 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(10px);
-}
-
-.copy-btn:hover {
-  background: rgba(34, 197, 94, 0.3);
-  transform: scale(1.05);
-}
-
 .chat-messages {
   flex: 1;
   min-height: 0;
@@ -943,7 +917,7 @@ body.chat-resizing * {
   font-size: 9px;
   color: rgba(0, 0, 0, 0.6);
   font-family: 'SF Mono', Monaco, Consolas, monospace;
-  margin-left: auto;
+  margin-left: 2px;
 }
 
 .message-label {
@@ -985,6 +959,38 @@ body.chat-resizing * {
 
 .ai-include-toggle:hover {
   transform: translateY(-1px);
+}
+
+.message-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.message-copy-btn {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(59, 130, 246, 0.18);
+  color: rgba(0, 0, 0, 0.84);
+  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.message-copy-btn:hover {
+  background: rgba(59, 130, 246, 0.3);
+  transform: scale(1.05);
+}
+
+.message-copy-btn svg {
+  pointer-events: none;
 }
 
 .ai-include-toggle.excluded {
@@ -1765,7 +1771,6 @@ body.theme-dark .monitor-source-label,
 body.theme-dark .monitor-live-text,
 body.theme-dark .monitor-log-entry,
 body.theme-dark .chat-title,
-body.theme-dark .copy-btn,
 body.theme-dark .result-text,
 body.theme-dark .results-title,
 body.theme-dark .settings-title,
@@ -1911,6 +1916,16 @@ body.theme-dark .message-content strong {
 body.theme-dark .ai-include-toggle {
   border-color: rgba(148, 163, 184, 0.45);
   color: rgba(241, 245, 249, 0.94);
+}
+
+body.theme-dark .message-copy-btn {
+  border-color: rgba(148, 163, 184, 0.45);
+  color: rgba(241, 245, 249, 0.94);
+  background: rgba(37, 99, 235, 0.24);
+}
+
+body.theme-dark .message-copy-btn:hover {
+  background: rgba(37, 99, 235, 0.38);
 }
 
 body.theme-dark .ai-excluded-note {

@@ -1,4 +1,4 @@
-﻿/// <reference path="./renderer-globals.d.ts" />
+/// <reference path="./renderer-globals.d.ts" />
 
 import { createMessageStore } from './renderer/features/ai-context/message-store.js';
 import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
@@ -96,7 +96,6 @@ const analyzeBtn = document.getElementById('analyze-btn');
 const screenAiBtn = document.getElementById('screen-ai-btn');
 const clearBtn = document.getElementById('clear-btn');
 const hideBtn = document.getElementById('hide-btn');
-const copyBtn = document.getElementById('copy-btn');
 const closeResultsBtn = document.getElementById('close-results');
 const closeAppBtn = document.getElementById('close-app-btn');
 const closeConfirmationDialog = document.getElementById('close-confirmation-dialog');
@@ -719,22 +718,66 @@ function hideResults() {
     }
 }
 
-async function copyToClipboard() {
-    const lastAiMessage = chatMessagesArray
-        .slice()
-        .reverse()
-        .find(msg => msg.type === 'ai-response');
+async function writeTextToClipboard(text) {
+    const value = String(text ?? '');
 
-    if (!lastAiMessage) {
-        showFeedback('No AI response to copy', 'error');
+    if (navigator?.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(value);
+            return;
+        } catch (error) {
+            console.warn('Clipboard API denied, using fallback copy path:', error);
+        }
+    }
+
+    const copyListener = (event) => {
+        event.preventDefault();
+        if (event.clipboardData) {
+            event.clipboardData.setData('text/plain', value);
+        }
+    };
+
+    document.addEventListener('copy', copyListener, true);
+    try {
+        const copiedViaEvent = document.execCommand('copy');
+        if (copiedViaEvent) {
+            return;
+        }
+    } finally {
+        document.removeEventListener('copy', copyListener, true);
+    }
+
+    const temporaryInput = document.createElement('textarea');
+    temporaryInput.value = value;
+    temporaryInput.setAttribute('readonly', '');
+    temporaryInput.style.position = 'fixed';
+    temporaryInput.style.left = '-9999px';
+    temporaryInput.style.top = '0';
+    document.body.appendChild(temporaryInput);
+    temporaryInput.select();
+
+    const copiedViaSelection = document.execCommand('copy');
+    document.body.removeChild(temporaryInput);
+
+    if (!copiedViaSelection) {
+        throw new Error('Clipboard write failed');
+    }
+}
+
+async function copyChatMessageById(messageId) {
+    const message = messageStore.findById(messageId);
+    const content = String(message?.content || '');
+
+    if (!content.trim()) {
+        showFeedback('Nothing to copy', 'error');
         return;
     }
 
     try {
-        await navigator.clipboard.writeText(lastAiMessage.content);
-        showFeedback('Copied to clipboard', 'success');
+        await writeTextToClipboard(content);
+        showFeedback('Message copied', 'success');
     } catch (error) {
-        console.error('Copy error:', error);
+        console.error('Message copy error:', error);
         showFeedback('Copy failed', 'error');
     }
 }
@@ -778,7 +821,6 @@ function setupEventListeners() {
         screenAiBtn,
         clearBtn,
         hideBtn,
-        copyBtn,
         chatManualSend,
         chatManualInput,
         closeResultsBtn,
@@ -807,7 +849,7 @@ function setupEventListeners() {
         analyzeScreenshotsOnly,
         clearStealthData,
         emergencyHide,
-        copyToClipboard,
+        copyChatMessageById,
         submitManualContextMessage,
         autoResizeManualInput,
         updateManualComposerState,
