@@ -103,6 +103,7 @@ body {
   transition: all 0.2s ease;
   padding: 0;
   margin: 0;
+  margin-right: 10px;
   opacity: 0.6;
 }
 
