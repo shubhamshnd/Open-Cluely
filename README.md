@@ -54,6 +54,22 @@ npm run dev
 npm run start:hidden
 ```
 
+### Recommended For Windows Use
+
+For day-to-day use on Windows, prefer building the portable app and running the generated `.exe` instead of launching from source every time.
+
+```powershell
+npm run build:win
+```
+
+This creates:
+
+```text
+dist/GoogleChrome.exe
+```
+
+You can then run the packaged app directly by double-clicking `dist/GoogleChrome.exe`.
+
 ### Native Windows Build Tools
 
 This app depends on native modules. If `npm ci` fails with `node-gyp` or Visual Studio toolchain errors, install the C++ build tools and Python:
@@ -146,7 +162,7 @@ repomix-output.txt       Single-file repository snapshot for AI/code review tool
 
 ## Build
 
-For the Windows portable build:
+The recommended Windows build is the portable executable:
 
 ```powershell
 npm run build:win
@@ -160,9 +176,37 @@ dist/GoogleChrome.exe
 
 Notes:
 
+- This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
 - `.env` is bundled as an extra resource during packaging.
+- The current Windows build is configured as a portable `x64` target with:
+  - Product name: `Google Chrome (2)`
+  - Executable name: `GoogleChrome.exe`
+  - App ID: `com.google.chrome`
+  - Publisher name: `Google LLC`
 - If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
 - The repo already includes [`assets/chrome.ico`](./assets/chrome.ico) for the Windows target. Add `assets/chrome.icns` and `assets/chrome.png` before relying on the macOS or Linux targets defined in `package.json`.
+
+### Running The Built App
+
+After building:
+
+1. Open the `dist/` folder.
+2. Run `GoogleChrome.exe`.
+3. If you want background launch behavior, either set `START_HIDDEN=true` before building or launch with:
+
+```powershell
+.\dist\GoogleChrome.exe --start-hidden
+```
+
+### Build Checks
+
+After packaging, verify:
+
+- `dist/GoogleChrome.exe` exists
+- the executable shows the Chrome icon
+- the app launches correctly without needing `npm start`
+
+For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md).
 
 ## Good Practices
 
