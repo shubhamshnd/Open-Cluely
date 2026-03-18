@@ -11,6 +11,9 @@ import {
 import { createMessageStore } from './renderer/features/ai-context/message-store.js';
 import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
 import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/features/ai-context/toggle-ui.js';
+import { createChatUiManager } from './renderer/features/chat/chat-ui-manager.js';
+import { createWindowAdjustmentManager } from './renderer/features/layout/window-adjustments.js';
+import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
 
 import {
     createTranscriptionSourceState,
@@ -111,7 +114,6 @@ const chatMessagesElement = document.getElementById('chat-messages');
 const chatComposer = document.getElementById('chat-composer');
 const chatManualInput = document.getElementById('chat-manual-input');
 const chatManualSend = document.getElementById('chat-manual-send');
-const chatResizeHandle = document.getElementById('chat-resize-handle');
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
@@ -160,16 +162,35 @@ let startTime = Date.now();
 let timerInterval;
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 380;
-const MIN_CHAT_HEIGHT = 200;
 const MAX_CHAT_INPUT_HEIGHT = 88;
 
-let activeWindowResize = null;
-let pendingWindowBounds = null;
-let windowResizeFrame = null;
-let activeChatResize = null;
 let isCloseConfirmationOpen = false;
-let configuredKeyboardShortcuts = [];
-const shortcutBindingsById = new Map();
+const shortcutManager = createShortcutManager({ settingsShortcutsList });
+const windowAdjustmentManager = createWindowAdjustmentManager({
+    windowResizeHandles,
+    chatContainer,
+    minWindowWidth: MIN_WINDOW_WIDTH,
+    minWindowHeight: MIN_WINDOW_HEIGHT,
+    onViewportResize: () => {
+        autoResizeManualInput();
+    }
+});
+const chatUiManager = createChatUiManager({
+    chatContainer,
+    chatMessagesElement,
+    chatComposer,
+    chatManualInput,
+    chatManualSend,
+    messageStore,
+    maxChatInputHeight: MAX_CHAT_INPUT_HEIGHT,
+    escapeHtml: (value) => escapeHtml(value),
+    updateUi: () => updateUI(),
+    onMessagesChanged: (messages) => {
+        chatMessagesArray = messages;
+    },
+    showFeedback: (message, type) => showFeedback(message, type),
+    addMonitorLog: (...args) => addMonitorLog(...args)
+});
 
 // Initialize
 async function init() {
@@ -289,238 +310,12 @@ function toggleThemeMode() {
     applyTheme(nextTheme, { persist: true, announce: true });
 }
 
-function normalizeShortcutToken(token) {
-    const normalized = String(token || '').trim().toLowerCase();
-    const aliasMap = {
-        left: 'arrowleft',
-        right: 'arrowright',
-        up: 'arrowup',
-        down: 'arrowdown',
-        escape: 'escape',
-        esc: 'escape',
-        enter: 'enter',
-        return: 'enter',
-        plus: '+',
-        space: ' '
-    };
-
-    if (Object.prototype.hasOwnProperty.call(aliasMap, normalized)) {
-        return aliasMap[normalized];
-    }
-
-    return normalized;
-}
-
-function parseAcceleratorBinding(accelerator) {
-    if (typeof accelerator !== 'string' || accelerator.trim().length === 0) {
-        return null;
-    }
-
-    const tokens = accelerator
-        .split('+')
-        .map((token) => token.trim())
-        .filter(Boolean);
-
-    if (tokens.length === 0) {
-        return null;
-    }
-
-    const binding = {
-        ctrl: false,
-        meta: false,
-        ctrlOrMeta: false,
-        alt: false,
-        shift: false,
-        key: ''
-    };
-
-    tokens.forEach((token) => {
-        const normalized = String(token).toLowerCase();
-        switch (normalized) {
-            case 'commandorcontrol':
-                binding.ctrlOrMeta = true;
-                break;
-            case 'ctrl':
-            case 'control':
-                binding.ctrl = true;
-                break;
-            case 'command':
-            case 'cmd':
-            case 'meta':
-            case 'super':
-                binding.meta = true;
-                break;
-            case 'alt':
-            case 'option':
-                binding.alt = true;
-                break;
-            case 'shift':
-                binding.shift = true;
-                break;
-            default:
-                binding.key = normalizeShortcutToken(normalized);
-                break;
-        }
-    });
-
-    if (!binding.key) {
-        return null;
-    }
-
-    return binding;
-}
-
-function normalizeKeyboardShortcutDefinition(shortcut) {
-    if (!shortcut || typeof shortcut !== 'object') {
-        return null;
-    }
-
-    const id = typeof shortcut.id === 'string' ? shortcut.id.trim() : '';
-    const accelerator = typeof shortcut.accelerator === 'string' ? shortcut.accelerator.trim() : '';
-    if (!id || !accelerator) {
-        return null;
-    }
-
-    const buttonLabel = typeof shortcut.buttonLabel === 'string' && shortcut.buttonLabel.trim()
-        ? shortcut.buttonLabel.trim()
-        : id;
-    const description = typeof shortcut.description === 'string' ? shortcut.description.trim() : '';
-
-    return {
-        id,
-        accelerator,
-        buttonLabel,
-        description
-    };
-}
-
-function setConfiguredKeyboardShortcuts(shortcuts) {
-    const normalizedShortcuts = Array.isArray(shortcuts)
-        ? shortcuts
-            .map((shortcut) => normalizeKeyboardShortcutDefinition(shortcut))
-            .filter(Boolean)
-        : [];
-
-    configuredKeyboardShortcuts = normalizedShortcuts;
-    shortcutBindingsById.clear();
-
-    normalizedShortcuts.forEach((shortcut) => {
-        const parsedBinding = parseAcceleratorBinding(shortcut.accelerator);
-        if (parsedBinding) {
-            shortcutBindingsById.set(shortcut.id, parsedBinding);
-        }
-    });
-
-    renderKeyboardShortcutsInSettings();
-}
-
-function getShortcutBinding(shortcutId) {
-    return shortcutBindingsById.get(shortcutId) || null;
+function applySettingsShortcutConfig(settings) {
+    shortcutManager.applySettingsShortcutConfig(settings);
 }
 
 function isShortcutPressed(event, shortcutId) {
-    const binding = getShortcutBinding(shortcutId);
-    if (!binding) {
-        return false;
-    }
-
-    const eventKey = normalizeShortcutToken(event.key);
-    if (eventKey !== binding.key) {
-        return false;
-    }
-
-    if (binding.ctrlOrMeta) {
-        if (!event.ctrlKey && !event.metaKey) {
-            return false;
-        }
-    } else {
-        if (event.ctrlKey !== binding.ctrl || event.metaKey !== binding.meta) {
-            return false;
-        }
-    }
-
-    return event.altKey === binding.alt && event.shiftKey === binding.shift;
-}
-
-function formatShortcutTokenForDisplay(token) {
-    const normalized = String(token || '').trim().toLowerCase();
-    const displayMap = {
-        commandorcontrol: navigator.platform.toLowerCase().includes('mac') ? 'Cmd' : 'Ctrl',
-        command: 'Cmd',
-        cmd: 'Cmd',
-        control: 'Ctrl',
-        ctrl: 'Ctrl',
-        alt: navigator.platform.toLowerCase().includes('mac') ? 'Option' : 'Alt',
-        option: 'Option',
-        shift: 'Shift',
-        left: 'Left',
-        right: 'Right',
-        up: 'Up',
-        down: 'Down'
-    };
-
-    if (Object.prototype.hasOwnProperty.call(displayMap, normalized)) {
-        return displayMap[normalized];
-    }
-
-    if (normalized.length === 1) {
-        return normalized.toUpperCase();
-    }
-
-    return token;
-}
-
-function formatShortcutForDisplay(accelerator) {
-    return String(accelerator || '')
-        .split('+')
-        .map((token) => token.trim())
-        .filter(Boolean)
-        .map((token) => formatShortcutTokenForDisplay(token))
-        .join('+');
-}
-
-function renderKeyboardShortcutsInSettings() {
-    if (!settingsShortcutsList) {
-        return;
-    }
-
-    settingsShortcutsList.innerHTML = '';
-
-    if (!configuredKeyboardShortcuts.length) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'settings-shortcuts-empty';
-        emptyState.textContent = 'No shortcuts configured.';
-        settingsShortcutsList.appendChild(emptyState);
-        return;
-    }
-
-    configuredKeyboardShortcuts.forEach((shortcut) => {
-        const row = document.createElement('div');
-        row.className = 'settings-shortcut-row';
-
-        const buttonLabel = document.createElement('span');
-        buttonLabel.className = 'settings-shortcut-button';
-        buttonLabel.textContent = shortcut.buttonLabel;
-        if (shortcut.description) {
-            buttonLabel.title = shortcut.description;
-        }
-
-        const shortcutValue = document.createElement('span');
-        shortcutValue.className = 'settings-shortcut-key';
-        shortcutValue.textContent = formatShortcutForDisplay(shortcut.accelerator);
-
-        row.appendChild(buttonLabel);
-        row.appendChild(shortcutValue);
-        settingsShortcutsList.appendChild(row);
-    });
-}
-
-function applySettingsShortcutConfig(settings) {
-    if (!settings || settings.error) {
-        return;
-    }
-
-    setConfiguredKeyboardShortcuts(settings.keyboardShortcuts);
+    return shortcutManager.isShortcutPressed(event, shortcutId);
 }
 
 async function loadShortcutConfig() {
@@ -537,230 +332,7 @@ async function loadShortcutConfig() {
 }
 
 function setupWindowAdjustments() {
-    setupWindowResizeHandles();
-    enforceChatFillLayout();
-    window.addEventListener('resize', () => {
-        enforceChatFillLayout();
-        autoResizeManualInput();
-    });
-}
-
-function enforceChatFillLayout() {
-    if (!chatContainer) {
-        return;
-    }
-
-    // Ensure stale manual-resize inline styles never pin chat height.
-    chatContainer.style.removeProperty('height');
-}
-
-function setupWindowResizeHandles() {
-    if (!window.electronAPI || !windowResizeHandles.length) {
-        return;
-    }
-
-    windowResizeHandles.forEach((handle) => {
-        handle.addEventListener('pointerdown', startWindowResize);
-    });
-}
-
-async function startWindowResize(event) {
-    if (!window.electronAPI?.getWindowBounds || !window.electronAPI?.setWindowBounds) {
-        return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const handleElement = event.currentTarget;
-    if (!handleElement) {
-        return;
-    }
-
-    const direction = handleElement.dataset.resizeHandle;
-    const pointerId = event.pointerId;
-    const startScreenX = event.screenX;
-    const startScreenY = event.screenY;
-    const startBounds = await window.electronAPI.getWindowBounds();
-    if (!startBounds || startBounds.error) {
-        console.error('Failed to get initial window bounds:', startBounds?.error);
-        return;
-    }
-
-    activeWindowResize = {
-        direction,
-        pointerId,
-        startScreenX,
-        startScreenY,
-        startBounds,
-        handleElement
-    };
-
-    document.body.classList.add('window-resizing');
-    handleElement.setPointerCapture?.(pointerId);
-
-    document.addEventListener('pointermove', onWindowResizeMove);
-    document.addEventListener('pointerup', stopWindowResize);
-    document.addEventListener('pointercancel', stopWindowResize);
-}
-
-function onWindowResizeMove(event) {
-    if (!activeWindowResize || event.pointerId !== activeWindowResize.pointerId) {
-        return;
-    }
-
-    event.preventDefault();
-
-    const deltaX = event.screenX - activeWindowResize.startScreenX;
-    const deltaY = event.screenY - activeWindowResize.startScreenY;
-    const nextBounds = calculateWindowResizeBounds(
-        activeWindowResize.startBounds,
-        activeWindowResize.direction,
-        deltaX,
-        deltaY
-    );
-
-    scheduleWindowResize(nextBounds);
-}
-
-function calculateWindowResizeBounds(startBounds, direction, deltaX, deltaY) {
-    let { x, y, width, height } = startBounds;
-
-    if (direction.includes('e')) {
-        width = Math.max(MIN_WINDOW_WIDTH, startBounds.width + deltaX);
-    }
-
-    if (direction.includes('s')) {
-        height = Math.max(MIN_WINDOW_HEIGHT, startBounds.height + deltaY);
-    }
-
-    if (direction.includes('w')) {
-        const nextWidth = Math.max(MIN_WINDOW_WIDTH, startBounds.width - deltaX);
-        x = startBounds.x + (startBounds.width - nextWidth);
-        width = nextWidth;
-    }
-
-    if (direction.includes('n')) {
-        const nextHeight = Math.max(MIN_WINDOW_HEIGHT, startBounds.height - deltaY);
-        y = startBounds.y + (startBounds.height - nextHeight);
-        height = nextHeight;
-    }
-
-    return {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height)
-    };
-}
-
-function scheduleWindowResize(bounds) {
-    pendingWindowBounds = bounds;
-    if (windowResizeFrame) {
-        return;
-    }
-
-    windowResizeFrame = window.requestAnimationFrame(async () => {
-        windowResizeFrame = null;
-        const nextBounds = pendingWindowBounds;
-        pendingWindowBounds = null;
-
-        if (!nextBounds) {
-            return;
-        }
-
-        const result = await window.electronAPI.setWindowBounds(nextBounds);
-        if (result && result.error) {
-            console.error('Failed to set window bounds:', result.error);
-        }
-    });
-}
-
-function stopWindowResize(event) {
-    if (!activeWindowResize) {
-        return;
-    }
-
-    if (event.pointerId && event.pointerId !== activeWindowResize.pointerId) {
-        return;
-    }
-
-    activeWindowResize.handleElement?.releasePointerCapture?.(activeWindowResize.pointerId);
-    activeWindowResize = null;
-    pendingWindowBounds = null;
-
-    if (windowResizeFrame) {
-        window.cancelAnimationFrame(windowResizeFrame);
-        windowResizeFrame = null;
-    }
-
-    document.body.classList.remove('window-resizing');
-    document.removeEventListener('pointermove', onWindowResizeMove);
-    document.removeEventListener('pointerup', stopWindowResize);
-    document.removeEventListener('pointercancel', stopWindowResize);
-}
-
-function setupChatResizeHandle() {
-    if (!chatContainer || !chatResizeHandle) {
-        return;
-    }
-
-    chatResizeHandle.addEventListener('pointerdown', startChatResize);
-}
-
-function startChatResize(event) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    activeChatResize = {
-        pointerId: event.pointerId,
-        startClientY: event.clientY,
-        startHeight: chatContainer.getBoundingClientRect().height
-    };
-
-    document.body.classList.add('chat-resizing');
-    chatResizeHandle.setPointerCapture?.(event.pointerId);
-
-    document.addEventListener('pointermove', onChatResizeMove);
-    document.addEventListener('pointerup', stopChatResize);
-    document.addEventListener('pointercancel', stopChatResize);
-}
-
-function onChatResizeMove(event) {
-    if (!activeChatResize || event.pointerId !== activeChatResize.pointerId) {
-        return;
-    }
-
-    event.preventDefault();
-
-    const deltaY = event.clientY - activeChatResize.startClientY;
-    const mainInterface = document.querySelector('.main-interface');
-    const monitorSection = document.getElementById('transcription-monitor');
-    const reservedHeight =
-        (mainInterface?.getBoundingClientRect().height || 0) +
-        (monitorSection?.getBoundingClientRect().height || 0) +
-        56;
-    const maxChatHeight = Math.max(MIN_CHAT_HEIGHT, window.innerHeight - reservedHeight);
-    const nextHeight = clamp(activeChatResize.startHeight + deltaY, MIN_CHAT_HEIGHT, maxChatHeight);
-
-    chatContainer.style.height = `${Math.round(nextHeight)}px`;
-}
-
-function stopChatResize(event) {
-    if (!activeChatResize) {
-        return;
-    }
-
-    if (event.pointerId && event.pointerId !== activeChatResize.pointerId) {
-        return;
-    }
-
-    chatResizeHandle.releasePointerCapture?.(activeChatResize.pointerId);
-    activeChatResize = null;
-    document.body.classList.remove('chat-resizing');
-    document.removeEventListener('pointermove', onChatResizeMove);
-    document.removeEventListener('pointerup', stopChatResize);
-    document.removeEventListener('pointercancel', stopChatResize);
+    windowAdjustmentManager.setupWindowAdjustments();
 }
 
 function sourceLabel(source) {
@@ -1798,170 +1370,20 @@ async function copyToClipboard() {
 }
 
 // Chat message management
-function formatResponse(text) {
-    let formatted = text
-        .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n/g, '<br>');
-
-    return formatted;
-}
-
-function isChatNearBottom(threshold = 28) {
-    if (!chatMessagesElement) {
-        return true;
-    }
-
-    const distanceFromBottom =
-        chatMessagesElement.scrollHeight - chatMessagesElement.clientHeight - chatMessagesElement.scrollTop;
-    return distanceFromBottom <= threshold;
-}
-
 function addChatMessage(type, content, options = {}) {
-    if (!chatMessagesElement) return;
-    const shouldAutoScroll = isChatNearBottom();
-
-    const timestampDate = new Date();
-    const record = messageStore.add(type, content, {
-        id: options.id,
-        timestamp: timestampDate,
-        canToggleAi: options.canToggleAi,
-        includeInAi: options.includeInAi,
-        screenshotId: options.screenshotId
-    });
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${type}-message`;
-    messageDiv.dataset.messageId = record.id;
-    if (record.canToggleAi) {
-        messageDiv.classList.add('ai-toggleable');
-        messageDiv.classList.add(record.includeInAi ? 'ai-included' : 'ai-excluded');
-    }
-
-    const timestamp = timestampDate.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-
-    let icon = '\u2139\uFE0F';
-    let label = '';
-    let contentClass = 'message-content';
-    let safeContent = escapeHtml(content);
-
-    switch (type) {
-        case 'voice':
-        case 'voice-mic':
-            icon = '\u{1F3A4}';
-            label = 'You';
-            break;
-
-        case 'voice-system':
-            icon = '\u{1F50A}';
-            label = 'Host';
-            break;
-
-        case 'screenshot':
-            icon = '\u{1F4F8}';
-            break;
-
-        case 'ai-response':
-            icon = '\u{1F916}';
-            contentClass = 'message-content ai-response';
-            safeContent = formatResponse(content);
-            break;
-
-        case 'system':
-            icon = '\u2139\uFE0F';
-            contentClass = 'message-content system-message';
-            break;
-    }
-
-    const labelHtml = label ? `<span class="message-label">${label}</span>` : '';
-    const toggleHtml = record.canToggleAi
-        ? `<button class="ai-include-toggle ${record.includeInAi ? 'included' : 'excluded'}" data-message-id="${record.id}" aria-pressed="${record.includeInAi ? 'true' : 'false'}">${record.includeInAi ? 'AI' : 'Off'}</button>`
-        : '';
-    const exclusionHtml = record.canToggleAi
-        ? '<div class="ai-excluded-note">Excluded from AI context</div>'
-        : '';
-
-    const messageContent = `
-        <div class="message-header">
-            <span class="message-icon">${icon}</span>
-            ${labelHtml}
-            ${toggleHtml}
-            <span class="message-time">${timestamp}</span>
-        </div>
-        <div class="${contentClass}">${exclusionHtml}${safeContent}</div>
-    `;
-
-    messageDiv.innerHTML = messageContent;
-    chatMessagesElement.appendChild(messageDiv);
-
-    if (shouldAutoScroll) {
-        chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
-    }
-
-    chatMessagesArray = messageStore.getMessages();
-
-    // Update UI to enable/disable buttons based on content
-    updateUI();
-
-    return record;
-}
-
-function updateChatComposerHeight() {
-    if (!chatContainer || !chatComposer) {
-        return;
-    }
-
-    const composerHeight = Math.max(0, Math.round(chatComposer.getBoundingClientRect().height));
-    if (composerHeight > 0) {
-        chatContainer.style.setProperty('--chat-composer-height', `${composerHeight}px`);
-    }
+    return chatUiManager.addChatMessage(type, content, options);
 }
 
 function autoResizeManualInput() {
-    if (!chatManualInput) {
-        return;
-    }
-
-    chatManualInput.style.height = 'auto';
-    const nextHeight = Math.min(chatManualInput.scrollHeight, MAX_CHAT_INPUT_HEIGHT);
-    chatManualInput.style.height = `${Math.max(24, nextHeight)}px`;
-    chatManualInput.style.overflowY = chatManualInput.scrollHeight > MAX_CHAT_INPUT_HEIGHT ? 'auto' : 'hidden';
-    updateChatComposerHeight();
+    chatUiManager.autoResizeManualInput();
 }
 
 function updateManualComposerState() {
-    if (!chatManualInput || !chatManualSend) {
-        return;
-    }
-
-    chatManualSend.disabled = String(chatManualInput.value || '').trim().length === 0;
+    chatUiManager.updateManualComposerState();
 }
 
 function submitManualContextMessage() {
-    if (!chatManualInput) {
-        return;
-    }
-
-    const text = String(chatManualInput.value || '').trim();
-    if (!text) {
-        showFeedback('Type a message first', 'error');
-        return;
-    }
-
-    addChatMessage('voice-mic', text);
-    addMonitorLog('info', 'manual-context-added', 'Manual context message added', 'mic', {
-        chars: text.length
-    });
-    showFeedback('Manual context added', 'success');
-
-    chatManualInput.value = '';
-    autoResizeManualInput();
-    updateManualComposerState();
-    chatManualInput.focus();
+    chatUiManager.submitManualContextMessage();
 }
 
 // Timer
