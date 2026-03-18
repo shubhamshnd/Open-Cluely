@@ -140,7 +140,7 @@ function createAssistantWindow({
       const app = document.getElementById('app');
       if (app) {
         app.style.visibility = 'visible';
-        app.style.display = 'block';
+        app.style.display = 'flex';
         console.log('App container made visible');
       }
 

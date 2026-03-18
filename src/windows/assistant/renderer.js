@@ -1,4 +1,6 @@
-﻿import {
+﻿/// <reference path="./renderer-globals.d.ts" />
+
+import {
     canToggleAiForMessageType as canToggleAiForMessageTypeRule,
     defaultIncludeInAiForMessageType as defaultIncludeInAiForMessageTypeRule,
     isAiResponseMessageType as isAiResponseMessageTypeRule,
@@ -9,6 +11,7 @@
 import { createMessageStore } from './renderer/features/ai-context/message-store.js';
 import { buildFilteredAiContextBundle as buildAiContextBundle } from './renderer/features/ai-context/context-bundle.js';
 import { updateMessageAiToggleUi as syncMessageAiToggleUi } from './renderer/features/ai-context/toggle-ui.js';
+
 import {
     createTranscriptionSourceState,
     normalizeSource as normalizeAssemblySource,
@@ -156,8 +159,8 @@ const settingsShortcutsList = document.getElementById('settings-shortcuts-list')
 let startTime = Date.now();
 let timerInterval;
 const MIN_WINDOW_WIDTH = 600;
-const MIN_WINDOW_HEIGHT = 250;
-const MIN_CHAT_HEIGHT = 150;
+const MIN_WINDOW_HEIGHT = 380;
+const MIN_CHAT_HEIGHT = 200;
 const MAX_CHAT_INPUT_HEIGHT = 88;
 
 let activeWindowResize = null;
@@ -195,7 +198,7 @@ async function init() {
     const app = document.getElementById('app');
     if (app) {
         app.style.visibility = 'visible';
-        app.style.display = 'block';
+        app.style.display = 'flex';
     }
 
     console.log('Renderer initialized - Ready for live transcription!');
@@ -535,10 +538,20 @@ async function loadShortcutConfig() {
 
 function setupWindowAdjustments() {
     setupWindowResizeHandles();
-    setupChatResizeHandle();
+    enforceChatFillLayout();
     window.addEventListener('resize', () => {
+        enforceChatFillLayout();
         autoResizeManualInput();
     });
+}
+
+function enforceChatFillLayout() {
+    if (!chatContainer) {
+        return;
+    }
+
+    // Ensure stale manual-resize inline styles never pin chat height.
+    chatContainer.style.removeProperty('height');
 }
 
 function setupWindowResizeHandles() {
@@ -1795,8 +1808,19 @@ function formatResponse(text) {
     return formatted;
 }
 
+function isChatNearBottom(threshold = 28) {
+    if (!chatMessagesElement) {
+        return true;
+    }
+
+    const distanceFromBottom =
+        chatMessagesElement.scrollHeight - chatMessagesElement.clientHeight - chatMessagesElement.scrollTop;
+    return distanceFromBottom <= threshold;
+}
+
 function addChatMessage(type, content, options = {}) {
     if (!chatMessagesElement) return;
+    const shouldAutoScroll = isChatNearBottom();
 
     const timestampDate = new Date();
     const record = messageStore.add(type, content, {
@@ -1874,7 +1898,9 @@ function addChatMessage(type, content, options = {}) {
     messageDiv.innerHTML = messageContent;
     chatMessagesElement.appendChild(messageDiv);
 
-    chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+    if (shouldAutoScroll) {
+        chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+    }
 
     chatMessagesArray = messageStore.getMessages();
 

@@ -44,6 +44,7 @@ body {
 .glass-container {
   width: 100vw;
   height: 100vh;
+  min-height: 0;
   background: var(--glass-shell-bg);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
@@ -672,10 +673,8 @@ body {
 /* CHAT INTERFACE */
 .chat-container {
   --chat-composer-height: 38px;
-  flex: 0 0 auto;
-  height: 220px;
-  min-height: 150px;
-  max-height: 600px;
+  flex: 1 1 0;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   background: var(--glass-panel-bg);
@@ -687,6 +686,7 @@ body {
 }
 
 .chat-resize-handle {
+  display: none;
   position: absolute;
   bottom: calc(var(--chat-composer-height) + 2px);
   left: 50%;
@@ -782,6 +782,7 @@ body.chat-resizing * {
 
 .chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -1409,19 +1410,6 @@ body.chat-resizing * {
 .transcription-btn.connecting svg {
   color: white;
   filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.8));
-}
-
-/* RESPONSIVE ADJUSTMENTS */
-@media (max-height: 600px) {
-  .chat-container {
-    max-height: 300px;
-  }
-}
-
-@media (max-height: 400px) {
-  .chat-container {
-    max-height: 200px;
-  }
 }
 
 /* SETTINGS PANEL */
