@@ -798,6 +798,7 @@ body.chat-resizing * {
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(14px);
+  cursor: default;
 }
 
 .chat-manual-input {
@@ -815,6 +816,7 @@ body.chat-resizing * {
   background: rgba(255, 255, 255, 0.38);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35);
   font-family: inherit;
+  cursor: default;
 }
 
 .chat-manual-input:focus {
