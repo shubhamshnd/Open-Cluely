@@ -13,13 +13,84 @@ Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview A
 ## Features
 
 - Dual-source live transcription for host/system audio and microphone input, with per-source toggles and a live monitor.
-- `Ask AI` uses the current transcript bundle, manual notes, and any enabled screenshots, with text-only fallback when no screenshots are selected.
-- `Screen AI` runs screenshot-focused analysis from the screenshots currently included in AI context.
+- Four AI action buttons, each with a distinct purpose — described in detail below.
 - Per-message `AI` / `Off` controls let you keep transcript chunks, screenshots, and prior AI replies visible while excluding them from future prompts.
-- Built-in actions for response suggestions, meeting notes, and conversation insights.
 - Multiple Gemini API keys are supported as a comma-separated list, with automatic failover on quota or authentication errors.
 - Settings support Gemini model selection, AssemblyAI speech model selection, programming language preference, and window opacity.
 - Session state is persisted to `cache/app-state.json`, and screenshot retention is bounded by `MAX_SCREENSHOTS`.
+
+## AI Action Buttons
+
+Each button sends a different slice of context to the AI and is designed for a different moment in the workflow.
+
+### Ask AI — `Alt+Shift+A`
+
+The full-context answer button. Use this when you want a complete, thorough response.
+
+**What it sends:** all enabled transcript messages + all enabled screenshots + full conversation history.
+
+**What it does:** reads the entire context as one unified thread, silently corrects speech-to-text recognition errors, identifies the actual question being asked (even across fragmented or imperfect transcript messages), and produces a complete answer.
+
+**Output:**
+- **Understanding** — one sentence confirming what it understood the question to be
+- **Answer** — full response, as deep as the question requires
+- For coding and algorithmic questions: **Approach → Full solution code → Time/Space complexity → Key points**
+
+Use Ask AI when you need the complete answer, not just the opening move.
+
+---
+
+### Screen AI — `Alt+Shift+E`
+
+The screenshot interpreter. Use this when the question or problem is visible on screen.
+
+**What it sends:** only the screenshots currently enabled in context.
+
+**What it does:** reads all visible text in the screenshot (constraints, function signatures, error messages, sample I/O), identifies what type of content it is (LeetCode problem, stack trace, terminal output, UI layout, architecture diagram), and responds accordingly.
+
+**Output (for coding/debugging):**
+- **Understanding → Approach → Complexity → Full runnable solution code → Explanation** (only if it adds value)
+
+**Output (for non-coding screenshots — UI, architecture, docs):**
+- **What I see → Answer → Key Points**
+
+Use Screen AI when the problem is on your screen and you want a direct solution without needing to describe it in words.
+
+---
+
+### Suggest — `Alt+Shift+G`
+
+The opening-move button. Use this when you want something ready to say right now, without the full depth of Ask AI.
+
+**What it sends:** only the enabled transcript messages.
+
+**What it does:** reads the full conversation flow, identifies where the discussion stands, and generates a concise spoken response — something you can say out loud immediately, not a written essay.
+
+**Output:**
+- **Best response (say this)** — 2–4 sentences, natural spoken language, technically accurate but not exhaustive
+- **Key points** — 2–3 short anchor concepts to hold in mind and expand on if pushed
+- **Optional follow-ups** — questions or angles the other person is likely to raise next
+
+Use Suggest to open confidently. Use Ask AI when the interviewer pushes deeper and you need the full answer.
+
+---
+
+### Notes — `Alt+Shift+N`
+
+The structured record button. Use this at any point to capture what has happened in the session.
+
+**What it sends:** all enabled transcript messages and context.
+
+**What it does:** organizes the conversation into a clean, topic-grouped document — correcting for STT noise throughout. Does not add inferences or assumptions not grounded in the actual conversation.
+
+**Output (always all five sections, even if empty):**
+- **Key Discussion Points** — main topics covered
+- **Decisions Made** — with owner if mentioned
+- **Action Items** — checkboxed, with owner and deadline if mentioned
+- **Open Questions / Unresolved Items** — what was raised but not resolved
+- **Next Steps** — what happens next based on the conversation
+
+Use Notes to produce a shareable record at the end of a meeting or interview debrief.
 
 ## Installation
 
@@ -113,9 +184,13 @@ The first item in each model/language list is treated as the default.
 
 1. Launch the app and confirm your API keys and models in Settings.
 2. Start transcription and enable whichever sources you need: `Host`, `Mic`, or both.
-3. Take screenshots when visual context matters.
-4. Use `Ask AI` for transcript-plus-screen context, or `Screen AI` for screenshot-only analysis.
-5. Toggle noisy messages to `Off` before asking AI again so the next prompt stays focused.
+3. Take screenshots when visual context is needed — a problem statement, error, or UI.
+4. Use the right button for the moment:
+   - **Suggest** to get a quick, speakable opening response from the transcript
+   - **Ask AI** when you need the full, complete answer from all context
+   - **Screen AI** when the problem is on your screen and you want a direct solution
+   - **Notes** to capture a structured record of what was discussed and decided
+5. Toggle noisy messages to `Off` before the next AI call so the prompt stays focused on what matters.
 
 ## Project Structure (Brief)
 
@@ -155,13 +230,22 @@ repomix-output.txt       Single-file repository snapshot for AI/code review tool
 |----------|--------|
 | `Ctrl+Alt+Shift+V` | Toggle transcription master control |
 | `Ctrl+Alt+Shift+S` | Capture screenshot |
-| `Ctrl+Alt+Shift+A` | Ask AI with current session context |
+| `Ctrl+Alt+Shift+A` | Ask AI (global shortcut) |
 | `Ctrl+Alt+Shift+X` | Emergency hide |
 | `Alt+Shift+H` | Toggle stealth mode |
 | `Ctrl+Alt+Shift+Left` | Move window left |
 | `Ctrl+Alt+Shift+Right` | Move window right |
 | `Ctrl+Alt+Shift+Up` | Move window to top |
 | `Ctrl+Alt+Shift+Down` | Move window to bottom |
+
+### In-App AI Button Shortcuts
+
+| Shortcut | Button | What it does |
+|----------|--------|--------------|
+| `Alt+Shift+A` | Ask AI | Full answer from transcript + screenshots + history |
+| `Alt+Shift+E` | Screen AI | Screenshot-only analysis and solution |
+| `Alt+Shift+G` | Suggest | Quick spoken response from transcript |
+| `Alt+Shift+N` | Notes | Structured notes from the full session |
 
 ## Scripts
 
