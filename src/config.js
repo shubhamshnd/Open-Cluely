@@ -35,55 +35,55 @@ const KEYBOARD_SHORTCUTS = [
     id: 'toggleTranscription',
     buttonLabel: 'Transcription',
     description: 'Toggle transcription master control',
-    accelerator: 'CommandOrControl+Alt+Shift+V'
+    accelerator: 'Alt+T'
   },
   {
     id: 'takeScreenshot',
     buttonLabel: 'Screenshot',
     description: 'Capture screenshot',
-    accelerator: 'CommandOrControl+Alt+Shift+S'
+    accelerator: 'Alt+S'
   },
   {
     id: 'askAi',
     buttonLabel: 'Ask AI',
     description: 'Ask AI with session context',
-    accelerator: 'CommandOrControl+Alt+Shift+A'
+    accelerator: 'Alt+A'
   },
   {
     id: 'emergencyHide',
     buttonLabel: 'Hide',
     description: 'Emergency hide',
-    accelerator: 'CommandOrControl+Alt+Shift+X'
+    accelerator: 'Alt+X'
   },
   {
     id: 'toggleStealth',
     buttonLabel: 'Toggle Opacity',
     description: 'Toggle stealth opacity mode',
-    accelerator: 'CommandOrControl+Alt+Shift+H'
+    accelerator: 'Alt+H'
   },
   {
     id: 'moveWindowLeft',
     buttonLabel: 'Move Window Left',
     description: 'Move window to left side',
-    accelerator: 'CommandOrControl+Alt+Shift+Left'
+    accelerator: 'Alt+Left'
   },
   {
     id: 'moveWindowRight',
     buttonLabel: 'Move Window Right',
     description: 'Move window to right side',
-    accelerator: 'CommandOrControl+Alt+Shift+Right'
+    accelerator: 'Alt+Right'
   },
   {
     id: 'moveWindowUp',
     buttonLabel: 'Move Window Up',
     description: 'Move window to top',
-    accelerator: 'CommandOrControl+Alt+Shift+Up'
+    accelerator: 'Alt+Up'
   },
   {
     id: 'moveWindowDown',
     buttonLabel: 'Move Window Down',
     description: 'Move window to bottom',
-    accelerator: 'CommandOrControl+Alt+Shift+Down'
+    accelerator: 'Alt+Down'
   }
 ];
 
