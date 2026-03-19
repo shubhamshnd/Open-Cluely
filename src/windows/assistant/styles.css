@@ -1699,7 +1699,7 @@ select.settings-input {
 
 .settings-shortcut-meta {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   min-width: 0;
 }
@@ -1727,6 +1727,22 @@ select.settings-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.settings-shortcut-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-shortcut-description {
+  font-size: 9px;
+  color: rgba(0, 0, 0, 0.58);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-shortcut-key {
@@ -1834,6 +1850,7 @@ body.theme-dark .settings-title,
 body.theme-dark .settings-label,
 body.theme-dark .settings-input,
 body.theme-dark .settings-shortcut-button,
+body.theme-dark .settings-shortcut-description,
 body.theme-dark .settings-shortcuts-empty,
 body.theme-dark .settings-helper-text,
 body.theme-dark .settings-shortcut-key,

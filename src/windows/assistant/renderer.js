@@ -555,14 +555,15 @@ async function getResponseSuggestions() {
     try {
         showFeedback('Generating suggestions...', 'info');
         const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        if (!bundle.contextString) {
-            showFeedback('No enabled context available for suggestions', 'error');
+        const transcriptOnlyContext = String(bundle.transcriptContext || '').trim();
+        if (!transcriptOnlyContext) {
+            showFeedback('No enabled transcript context available for suggestions', 'error');
             return;
         }
 
         const result = await window.electronAPI.suggestResponse({
             context: bundle.sessionSummary || 'Current meeting conversation',
-            contextString: bundle.contextString
+            contextString: transcriptOnlyContext
         });
 
         if (result.success && result.suggestions) {
@@ -692,7 +693,7 @@ function updateUI() {
     }
 
     if (suggestBtn) {
-        suggestBtn.disabled = isAnalyzing || !hasAiContext;
+        suggestBtn.disabled = isAnalyzing || !hasTranscriptContext;
     }
 
     if (notesBtn) {

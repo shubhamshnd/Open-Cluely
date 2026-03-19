@@ -12,7 +12,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.2.1",
+    "@google/generative-ai": "^0.24.1",
     "dotenv": "^16.3.1",
     "node-window-manager": "^2.2.4",
     "screenshot-desktop": "^1.15.0",

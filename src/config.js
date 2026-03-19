@@ -46,8 +46,38 @@ const KEYBOARD_SHORTCUTS = [
   {
     id: 'askAi',
     buttonLabel: 'Ask AI',
-    description: 'Ask AI with session context',
+    description: 'Uses only enabled transcript, enabled screenshots, and enabled chat context',
     accelerator: 'Alt+A'
+  },
+  {
+    id: 'screenAi',
+    buttonLabel: 'Screen AI',
+    description: 'Analyzes only enabled screenshots selected in chat',
+    accelerator: 'Alt+E'
+  },
+  {
+    id: 'suggest',
+    buttonLabel: 'Suggest',
+    description: 'Uses only enabled transcript context to suggest what to say next',
+    accelerator: 'Alt+G'
+  },
+  {
+    id: 'notes',
+    buttonLabel: 'Notes',
+    description: 'Generates notes from only enabled context',
+    accelerator: 'Alt+N'
+  },
+  {
+    id: 'insights',
+    buttonLabel: 'Insights',
+    description: 'Finds key insights from only enabled context',
+    accelerator: 'Alt+I'
+  },
+  {
+    id: 'clearChat',
+    buttonLabel: 'Clear Chat',
+    description: 'Clears chat, screenshots, and AI history',
+    accelerator: 'Alt+C'
   },
   {
     id: 'emergencyHide',
