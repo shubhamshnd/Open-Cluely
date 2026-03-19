@@ -5,6 +5,7 @@ const screenshot = require('screenshot-desktop');
 function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendToRenderer }) {
   let screenshots = [];
   let screenshotSequence = 0;
+  let screenshotInProgress = false;
 
   function nextScreenshotId() {
     screenshotSequence += 1;
@@ -55,6 +56,11 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
   }
 
   async function takeStealthScreenshot() {
+    if (screenshotInProgress) {
+      console.log('Screenshot already in progress, skipping');
+      return null;
+    }
+
     const mainWindow = getMainWindow();
     const appEnvironment = getAppEnvironment();
 
@@ -62,6 +68,7 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
       throw new Error('Main window not available');
     }
 
+    screenshotInProgress = true;
     try {
       console.log('Taking stealth screenshot...');
       const currentOpacity = mainWindow.getOpacity();
@@ -106,6 +113,8 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
       }
       console.error('Stealth screenshot error:', error);
       throw error;
+    } finally {
+      screenshotInProgress = false;
     }
   }
 
