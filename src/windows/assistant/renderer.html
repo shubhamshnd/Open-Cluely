@@ -208,7 +208,19 @@
       <div class="settings-body">
         <div class="settings-group">
           <label class="settings-label">Gemini API Key(s)</label>
-          <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key(s), comma-separated..." />
+          <div class="settings-input-row">
+            <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key(s), comma-separated..." />
+            <button
+              type="button"
+              id="toggle-gemini-key-visibility"
+              class="settings-input-toggle"
+              aria-label="Show Gemini API key"
+              aria-pressed="false"
+            >
+              Show
+            </button>
+          </div>
+          <div class="settings-helper-text">Multiple Gemini keys are supported as comma-separated values.</div>
         </div>
         <div class="settings-group">
           <label class="settings-label">Gemini Model</label>
@@ -220,7 +232,18 @@
         </div>
         <div class="settings-group">
           <label class="settings-label">AssemblyAI API Key</label>
-          <input type="password" id="setting-assembly-key" class="settings-input" placeholder="Enter AssemblyAI API key..." />
+          <div class="settings-input-row">
+            <input type="password" id="setting-assembly-key" class="settings-input" placeholder="Enter AssemblyAI API key..." />
+            <button
+              type="button"
+              id="toggle-assembly-key-visibility"
+              class="settings-input-toggle"
+              aria-label="Show AssemblyAI API key"
+              aria-pressed="false"
+            >
+              Show
+            </button>
+          </div>
         </div>
         <div class="settings-group">
           <label class="settings-label">AssemblyAI Speech Model</label>

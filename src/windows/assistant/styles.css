@@ -405,6 +405,13 @@ body {
   background: rgba(255, 255, 255, 0.42);
 }
 
+.source-toggle:disabled {
+  opacity: 0.42;
+  transform: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
 .source-toggle.selected {
   color: #fff;
 }
@@ -1619,6 +1626,42 @@ body.chat-resizing * {
   backdrop-filter: blur(10px);
 }
 
+.settings-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-input-row .settings-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-input-toggle {
+  height: 30px;
+  min-width: 50px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.16);
+  color: rgba(15, 23, 42, 0.85);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-input-toggle:hover {
+  background: rgba(59, 130, 246, 0.28);
+  transform: translateY(-1px);
+}
+
+.settings-input-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.24);
+}
+
 .settings-input:focus {
   border-color: rgba(59, 130, 246, 0.6);
   background: var(--glass-input-focus-bg);
@@ -1940,6 +1983,16 @@ body.theme-dark .chat-manual-input {
 body.theme-dark .chat-manual-input:focus {
   border-color: rgba(96, 165, 250, 0.72);
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+body.theme-dark .settings-input-toggle {
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(30, 58, 138, 0.34);
+  color: rgba(226, 232, 240, 0.92);
+}
+
+body.theme-dark .settings-input-toggle:hover {
+  background: rgba(37, 99, 235, 0.45);
 }
 
 body.theme-dark .chat-manual-input::placeholder {

@@ -28,8 +28,8 @@ Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview A
 - Windows 10/11 is the primary development target for this repo.
 - Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
 - npm `10+`
-- At least one Gemini API key
-- One AssemblyAI API key
+- At least one Gemini API key (configured in the app Settings UI)
+- One AssemblyAI API key (configured in the app Settings UI)
 
 ### Setup
 
@@ -40,12 +40,7 @@ npm ci
 Copy-Item .env.example .env
 ```
 
-Populate `.env` before the first run:
-
-```env
-GEMINI_API_KEY=your_gemini_key_1,your_gemini_key_2
-ASSEMBLY_AI_API_KEY=your_assemblyai_key
-```
+API keys are configured from the in-app Settings panel after launch.
 
 Start the app:
 
@@ -90,8 +85,6 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-pack
 
 | Variable | Required | Notes |
 |----------|----------|-------|
-| `GEMINI_API_KEY` | Yes | Comma-separated keys are allowed. The runtime rotates to the next key when it hits quota/auth failures. |
-| `ASSEMBLY_AI_API_KEY` | Yes | Used for streaming STT and audio transcription endpoints. |
 | `HIDE_FROM_SCREEN_CAPTURE` | No | Defaults to `true`. Controls `BrowserWindow.setContentProtection(...)`. |
 | `START_HIDDEN` | No | Defaults to `false`. Also available at runtime via `npm run start:hidden` or `--start-hidden`. |
 | `MAX_SCREENSHOTS` | No | Defaults to `50`. Old screenshots are deleted when the limit is exceeded. |
@@ -114,7 +107,7 @@ The first item in each model/language list is treated as the default.
 
 - In development, state is written to `cache/app-state.json` at the repo root. Portable builds create the same `cache/app-state.json` structure next to the executable.
 - Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
-- Saving settings from the UI writes API-key values back to `.env` and selection state back to `cache/app-state.json`.
+- Saving settings from the UI writes API-key values and selection state to `cache/app-state.json`.
 
 ## Basic Workflow
 

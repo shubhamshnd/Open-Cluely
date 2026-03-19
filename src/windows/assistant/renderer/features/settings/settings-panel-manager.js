@@ -5,14 +5,17 @@ function clamp(value, min, max) {
 export function createSettingsPanelManager({
     settingsPanel,
     settingGeminiKey,
+    toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
     settingProgrammingLanguage,
     settingAssemblyKey,
+    toggleAssemblyKeyVisibilityBtn,
     settingAssemblyModel,
     settingWindowOpacity,
     settingWindowOpacityValue,
     applySettingsShortcutConfig,
-    showFeedback
+    showFeedback,
+    onSettingsSaved
 }) {
     function normalizeWindowOpacityLevel(value) {
         const parsedValue = Number.parseInt(String(value ?? ''), 10);
@@ -31,6 +34,33 @@ export function createSettingsPanelManager({
 
         const opacityLevel = normalizeWindowOpacityLevel(value);
         settingWindowOpacityValue.textContent = `${opacityLevel}/10`;
+    }
+
+    function setApiKeyFieldVisibility(inputElement, toggleButton, providerName, visible) {
+        if (!inputElement || !toggleButton) {
+            return;
+        }
+
+        const shouldShow = Boolean(visible);
+        inputElement.type = shouldShow ? 'text' : 'password';
+        toggleButton.textContent = shouldShow ? 'Hide' : 'Show';
+        toggleButton.setAttribute('aria-pressed', shouldShow ? 'true' : 'false');
+        toggleButton.setAttribute(
+            'aria-label',
+            `${shouldShow ? 'Hide' : 'Show'} ${providerName} API key`
+        );
+    }
+
+    function bindApiKeyVisibilityToggle(inputElement, toggleButton, providerName) {
+        if (!inputElement || !toggleButton) {
+            return;
+        }
+
+        setApiKeyFieldVisibility(inputElement, toggleButton, providerName, false);
+        toggleButton.addEventListener('click', () => {
+            const nextVisible = inputElement.type !== 'text';
+            setApiKeyFieldVisibility(inputElement, toggleButton, providerName, nextVisible);
+        });
     }
 
     function populateGeminiModelOptions(models, selectedModel) {
@@ -134,6 +164,9 @@ export function createSettingsPanelManager({
             console.error('Failed to load settings:', error);
         }
 
+        setApiKeyFieldVisibility(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini', false);
+        setApiKeyFieldVisibility(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI', false);
+
         settingsPanel.classList.remove('hidden');
     }
 
@@ -141,6 +174,9 @@ export function createSettingsPanelManager({
         if (settingsPanel) {
             settingsPanel.classList.add('hidden');
         }
+
+        setApiKeyFieldVisibility(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini', false);
+        setApiKeyFieldVisibility(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI', false);
     }
 
     async function saveSettings() {
@@ -169,16 +205,23 @@ export function createSettingsPanelManager({
             const result = await window.electronAPI.saveSettings(settings);
 
             if (result.success) {
-                showFeedback?.('Settings saved. AI changes are active now; voice model applies next session.', 'success');
+                showFeedback?.('Settings saved. Latest API keys and AI settings are active now; voice model applies next session.', 'success');
+                onSettingsSaved?.(settings);
                 closeSettings();
+                return { success: true, settings };
             } else {
                 showFeedback?.(`Failed to save: ${result.error}`, 'error');
+                return { success: false, error: result.error || 'Failed to save settings' };
             }
         } catch (error) {
             console.error('Failed to save settings:', error);
             showFeedback?.('Failed to save settings', 'error');
+            return { success: false, error: error.message || 'Failed to save settings' };
         }
     }
+
+    bindApiKeyVisibilityToggle(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini');
+    bindApiKeyVisibilityToggle(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI');
 
     return {
         normalizeWindowOpacityLevel,

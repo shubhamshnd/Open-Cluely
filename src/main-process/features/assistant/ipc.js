@@ -22,7 +22,7 @@
     }
 
     if (normalizedMessage.includes('no api key configured')) {
-      return 'No API key configured. Please add GEMINI_API_KEY to your .env file.';
+      return 'No Gemini API key configured. Add it in Settings.';
     }
 
     if (
@@ -36,7 +36,7 @@
       normalizedMessage.includes('401') ||
       normalizedMessage.includes('403')
     ) {
-      return 'Invalid API key. Please check your GEMINI_API_KEY values.';
+      return 'Invalid Gemini API key. Please check the key values in Settings.';
     }
 
     if (
@@ -75,7 +75,7 @@
 
     if (!geminiRuntime.hasApiKeys()) {
       sendToRenderer('analysis-result', {
-        error: 'No API key configured. Please add GEMINI_API_KEY to your .env file.'
+        error: 'No Gemini API key configured. Add it in Settings.'
       });
       return;
     }
@@ -179,7 +179,7 @@
       assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai');
 
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const transcriptContext = typeof payload?.transcriptContext === 'string'
@@ -294,7 +294,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-suggest');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const payload = typeof context === 'object' && context !== null
@@ -328,7 +328,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-notes');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
@@ -356,7 +356,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-followup');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
@@ -378,7 +378,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-answer');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
@@ -400,7 +400,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-insights');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'

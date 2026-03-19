@@ -114,9 +114,11 @@ const settingsPanel = document.getElementById('settings-panel');
 const closeSettingsBtn = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingGeminiKey = document.getElementById('setting-gemini-key');
+const toggleGeminiKeyVisibilityBtn = document.getElementById('toggle-gemini-key-visibility');
 const settingGeminiModel = document.getElementById('setting-gemini-model');
 const settingProgrammingLanguage = document.getElementById('setting-programming-language');
 const settingAssemblyKey = document.getElementById('setting-assembly-key');
+const toggleAssemblyKeyVisibilityBtn = document.getElementById('toggle-assembly-key-visibility');
 const settingAssemblyModel = document.getElementById('setting-assembly-model');
 const settingWindowOpacity = document.getElementById('setting-window-opacity');
 const settingWindowOpacityValue = document.getElementById('setting-window-opacity-value');
@@ -130,6 +132,8 @@ const MIN_WINDOW_HEIGHT = 380;
 const MAX_CHAT_INPUT_HEIGHT = 88;
 
 let isCloseConfirmationOpen = false;
+let hasGeminiApiKeysConfigured = false;
+let hasAssemblyAiApiKeyConfigured = false;
 const shortcutManager = createShortcutManager({ settingsShortcutsList });
 const windowAdjustmentManager = createWindowAdjustmentManager({
     windowResizeHandles,
@@ -159,14 +163,20 @@ const chatUiManager = createChatUiManager({
 const settingsPanelManager = createSettingsPanelManager({
     settingsPanel,
     settingGeminiKey,
+    toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
     settingProgrammingLanguage,
     settingAssemblyKey,
+    toggleAssemblyKeyVisibilityBtn,
     settingAssemblyModel,
     settingWindowOpacity,
     settingWindowOpacityValue,
     applySettingsShortcutConfig: (settings) => applySettingsShortcutConfig(settings),
-    showFeedback: (message, type) => showFeedback(message, type)
+    showFeedback: (message, type) => showFeedback(message, type),
+    onSettingsSaved: (settings) => {
+        applyApiKeyAvailabilityFromSettings(settings);
+        updateUI();
+    }
 });
 const transcriptionManager = createTranscriptionManager({
     transcriptionSourceState,
@@ -320,17 +330,52 @@ function isShortcutPressed(event, shortcutId) {
     return shortcutManager.isShortcutPressed(event, shortcutId);
 }
 
+function hasConfiguredGeminiApiKeys(value) {
+    const keys = String(value ?? '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    return keys.length > 0;
+}
+
+function hasConfiguredAssemblyAiApiKey(value) {
+    return String(value ?? '').trim().length > 0;
+}
+
+function applyApiKeyAvailabilityFromSettings(settings) {
+    if (!settings || typeof settings !== 'object') {
+        hasGeminiApiKeysConfigured = false;
+        hasAssemblyAiApiKeyConfigured = false;
+        return;
+    }
+
+    if (typeof settings.hasGeminiApiKeys === 'boolean') {
+        hasGeminiApiKeysConfigured = settings.hasGeminiApiKeys;
+    } else {
+        hasGeminiApiKeysConfigured = hasConfiguredGeminiApiKeys(settings.geminiApiKey);
+    }
+
+    if (typeof settings.hasAssemblyAiApiKey === 'boolean') {
+        hasAssemblyAiApiKeyConfigured = settings.hasAssemblyAiApiKey;
+    } else {
+        hasAssemblyAiApiKeyConfigured = hasConfiguredAssemblyAiApiKey(settings.assemblyAiApiKey);
+    }
+}
+
 async function loadShortcutConfig() {
     if (!window.electronAPI?.getSettings) {
+        applyApiKeyAvailabilityFromSettings(null);
         return null;
     }
 
     try {
         const settings = await window.electronAPI.getSettings();
         applySettingsShortcutConfig(settings);
+        applyApiKeyAvailabilityFromSettings(settings);
         return settings;
     } catch (error) {
         console.error('Failed to load shortcut config:', error);
+        applyApiKeyAvailabilityFromSettings(null);
         return null;
     }
 }
@@ -400,6 +445,11 @@ function setSourceSelected(source, enabled) {
 }
 
 async function toggleMasterTranscription() {
+    if (!hasAssemblyAiApiKeyConfigured) {
+        showFeedback('AssemblyAI API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     return transcriptionManager.toggleMasterTranscription();
 }
 
@@ -427,6 +477,11 @@ function buildAskAiContextPayload() {
 }
 
 async function askAiWithSessionContext() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI?.askAiWithSessionContext) {
         showFeedback('Feature not available', 'error');
         return;
@@ -464,6 +519,11 @@ async function askAiWithSessionContext() {
 }
 
 async function analyzeScreenshotsOnly() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
     if (bundle.enabledScreenshotIds.length === 0) {
         showFeedback('No enabled screenshots to analyze', 'error');
@@ -547,6 +607,11 @@ async function closeApplication() {
 // NEW CLUELY-STYLE FEATURES
 
 async function getResponseSuggestions() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI || !window.electronAPI.suggestResponse) {
         showFeedback('Feature not available', 'error');
         return;
@@ -580,6 +645,11 @@ async function getResponseSuggestions() {
 }
 
 async function generateMeetingNotes() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI || !window.electronAPI.generateMeetingNotes) {
         showFeedback('Feature not available', 'error');
         return;
@@ -616,6 +686,11 @@ async function generateMeetingNotes() {
 }
 
 async function getConversationInsights() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI || !window.electronAPI.getConversationInsights) {
         showFeedback('Feature not available', 'error');
         return;
@@ -662,7 +737,11 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-    await settingsPanelManager.saveSettings();
+    const result = await settingsPanelManager.saveSettings();
+    if (result?.success && result?.settings) {
+        applyApiKeyAvailabilityFromSettings(result.settings);
+        updateUI();
+    }
 }
 
 // UI Helper functions
@@ -683,25 +762,39 @@ function updateUI() {
     const hasTranscriptContext = aiBundle.transcriptContext.length > 0;
     const hasEnabledScreenshots = aiBundle.enabledScreenshotIds.length > 0;
     const hasAiContext = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
+    const canRunAiActions = hasGeminiApiKeysConfigured;
+    const canRunTranscription = hasAssemblyAiApiKeyConfigured;
 
     if (analyzeBtn) {
-        analyzeBtn.disabled = isAnalyzing || !hasAiContext;
+        analyzeBtn.disabled = isAnalyzing || !canRunAiActions || !hasAiContext;
     }
 
     if (screenAiBtn) {
-        screenAiBtn.disabled = isAnalyzing || !hasEnabledScreenshots;
+        screenAiBtn.disabled = isAnalyzing || !canRunAiActions || !hasEnabledScreenshots;
     }
 
     if (suggestBtn) {
-        suggestBtn.disabled = isAnalyzing || !hasTranscriptContext;
+        suggestBtn.disabled = isAnalyzing || !canRunAiActions || !hasTranscriptContext;
     }
 
     if (notesBtn) {
-        notesBtn.disabled = isAnalyzing || !hasAiContext;
+        notesBtn.disabled = isAnalyzing || !canRunAiActions || !hasAiContext;
     }
 
     if (insightsBtn) {
-        insightsBtn.disabled = isAnalyzing || !hasAiContext;
+        insightsBtn.disabled = isAnalyzing || !canRunAiActions || !hasAiContext;
+    }
+
+    if (transcriptionToggle) {
+        transcriptionToggle.disabled = !canRunTranscription;
+    }
+
+    if (sourceSystemToggle) {
+        sourceSystemToggle.disabled = !canRunTranscription;
+    }
+
+    if (sourceMicToggle) {
+        sourceMicToggle.disabled = !canRunTranscription;
     }
 }
 

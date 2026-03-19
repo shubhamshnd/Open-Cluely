@@ -19,10 +19,14 @@ function registerSettingsIpc({
   ipcMain.handle('get-settings', () => {
     const appEnvironment = getAppEnvironment();
     const appState = getAppState();
+    const geminiApiKey = typeof appState?.geminiApiKey === 'string' ? appState.geminiApiKey : '';
+    const assemblyAiApiKey = typeof appState?.assemblyAiApiKey === 'string' ? appState.assemblyAiApiKey : '';
 
     return {
-      geminiApiKey: appEnvironment.geminiApiKey,
-      assemblyAiApiKey: appEnvironment.assemblyAiApiKey,
+      geminiApiKey,
+      assemblyAiApiKey,
+      hasGeminiApiKeys: geminiApiKey.split(',').map((value) => value.trim()).filter(Boolean).length > 0,
+      hasAssemblyAiApiKey: assemblyAiApiKey.length > 0,
       geminiModel: geminiRuntime.getActiveGeminiModel(),
       geminiModels: geminiRuntime.getGeminiModels(),
       defaultGeminiModel: geminiRuntime.getDefaultGeminiModel(),
@@ -65,14 +69,14 @@ function registerSettingsIpc({
 
     try {
       const appEnvironment = getAppEnvironment();
+      const nextGeminiApiKey = String(settings.geminiApiKey || '').trim();
+      const nextAssemblyAiApiKey = String(settings.assemblyAiApiKey || '').trim();
       const nextGeminiModel = geminiRuntime.setActiveGeminiModel(settings.geminiModel);
       const nextAssemblyModel = setAssemblyAiSpeechModel(settings.assemblyAiSpeechModel);
       const nextProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(settings.programmingLanguage);
       const nextWindowOpacityLevel = windowController.setWindowOpacityLevel(settings.windowOpacityLevel);
 
       const updatedEnvironment = saveApplicationEnvironment(app, {
-        geminiApiKey: settings.geminiApiKey || '',
-        assemblyAiApiKey: settings.assemblyAiApiKey || '',
         hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
         startHidden: appEnvironment.startHidden,
         maxScreenshots: appEnvironment.maxScreenshots,
@@ -81,8 +85,10 @@ function registerSettingsIpc({
         nodeOptions: appEnvironment.nodeOptions
       });
 
-      const keyState = geminiRuntime.setKeys(updatedEnvironment.geminiApiKeys, 0);
+      const keyState = geminiRuntime.setKeys(nextGeminiApiKey, 0);
       const updatedAppState = saveAppState(app, {
+        geminiApiKey: nextGeminiApiKey,
+        assemblyAiApiKey: nextAssemblyAiApiKey,
         geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: nextGeminiModel,
         assemblyAiSpeechModel: nextAssemblyModel,
