@@ -130,6 +130,10 @@ export function createChatUiManager({
             return;
         }
 
+        // Remove the variable first so the min-height constraint is cleared,
+        // allowing getBoundingClientRect to return the natural content height
+        // instead of being held at the previous (potentially stale) large value.
+        chatContainer.style.removeProperty('--chat-composer-height');
         const composerHeight = Math.max(0, Math.round(chatComposer.getBoundingClientRect().height));
         if (composerHeight > 0) {
             chatContainer.style.setProperty('--chat-composer-height', `${composerHeight}px`);
