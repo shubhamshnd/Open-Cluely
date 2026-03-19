@@ -1,4 +1,4 @@
-﻿const { invokeWithFallback } = require('./helpers');
+const { invokeWithFallback } = require('./helpers');
 
 function createInvokeActions(ipcRenderer) {
   return {
@@ -149,6 +149,13 @@ function createInvokeActions(ipcRenderer) {
     saveSettings: invokeWithFallback(ipcRenderer, {
       channel: 'save-settings',
       label: 'saveSettings',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    setThemePreference: invokeWithFallback(ipcRenderer, {
+      channel: 'set-theme-preference',
+      label: 'setThemePreference',
+      transformArgs: (args) => [{ theme: args[0] }],
       fallback: (error) => ({ success: false, error: error.message })
     }),
 

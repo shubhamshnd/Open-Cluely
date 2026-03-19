@@ -199,11 +199,11 @@ async function init() {
         showFeedback('electronAPI not available', 'error');
     }
 
-    await loadShortcutConfig();
+    const settings = await loadShortcutConfig();
     setupEventListeners();
     setupIpcListeners();
     setupWindowAdjustments();
-    applyTheme(loadStoredThemePreference(), { persist: false });
+    applyTheme(resolveInitialThemePreference(settings), { persist: false });
     updateUI();
     transcriptionManager.updateTranscriptionUI();
     transcriptionManager.renderMonitorState();
@@ -227,18 +227,32 @@ function updateWindowOpacityValueLabel(value) {
     settingsPanelManager.updateWindowOpacityValueLabel(value);
 }
 
+function parseThemePreference(theme) {
+    return theme === THEME_DARK || theme === THEME_LIGHT ? theme : null;
+}
+
 function normalizeTheme(theme) {
     return theme === THEME_DARK ? THEME_DARK : THEME_LIGHT;
 }
 
 function loadStoredThemePreference() {
     try {
-        const savedTheme = window.localStorage?.getItem(THEME_STORAGE_KEY);
-        return normalizeTheme(savedTheme);
+        const savedTheme = window.localStorage?.getItem(THEME_STORAGE_KEY) || '';
+        return parseThemePreference(savedTheme) || THEME_LIGHT;
     } catch (error) {
         console.warn('Failed to read saved theme preference:', error);
         return THEME_LIGHT;
     }
+}
+
+function resolveInitialThemePreference(settings) {
+    const settingsTheme = parseThemePreference(String(settings?.themePreference || '').trim().toLowerCase());
+    if (settingsTheme) {
+        saveThemePreference(settingsTheme);
+        return settingsTheme;
+    }
+
+    return loadStoredThemePreference();
 }
 
 function saveThemePreference(theme) {
@@ -246,6 +260,18 @@ function saveThemePreference(theme) {
         window.localStorage?.setItem(THEME_STORAGE_KEY, normalizeTheme(theme));
     } catch (error) {
         console.warn('Failed to save theme preference:', error);
+    }
+}
+
+function persistThemePreference(theme) {
+    const normalizedTheme = normalizeTheme(theme);
+    saveThemePreference(normalizedTheme);
+
+    const setThemePreference = window.electronAPI?.setThemePreference;
+    if (typeof setThemePreference === 'function') {
+        setThemePreference(normalizedTheme).catch((error) => {
+            console.warn('Failed to persist theme preference to app state:', error);
+        });
     }
 }
 
@@ -273,7 +299,7 @@ function applyTheme(theme, options = {}) {
     updateThemeToggleUi();
 
     if (persist) {
-        saveThemePreference(activeTheme);
+        persistThemePreference(activeTheme);
     }
 
     if (announce) {
@@ -296,14 +322,16 @@ function isShortcutPressed(event, shortcutId) {
 
 async function loadShortcutConfig() {
     if (!window.electronAPI?.getSettings) {
-        return;
+        return null;
     }
 
     try {
         const settings = await window.electronAPI.getSettings();
         applySettingsShortcutConfig(settings);
+        return settings;
     } catch (error) {
         console.error('Failed to load shortcut config:', error);
+        return null;
     }
 }
 

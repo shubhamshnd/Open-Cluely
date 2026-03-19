@@ -1,4 +1,4 @@
-﻿function registerSettingsIpc({
+function registerSettingsIpc({
   ipcMain,
   app,
   getAppEnvironment,
@@ -18,6 +18,7 @@
 }) {
   ipcMain.handle('get-settings', () => {
     const appEnvironment = getAppEnvironment();
+    const appState = getAppState();
 
     return {
       geminiApiKey: appEnvironment.geminiApiKey,
@@ -34,8 +35,29 @@
       keyboardShortcuts,
       hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
       startHidden: appEnvironment.startHidden,
-      windowOpacityLevel: windowController.getWindowOpacityLevel()
+      windowOpacityLevel: windowController.getWindowOpacityLevel(),
+      themePreference: appState?.themePreference === 'dark' || appState?.themePreference === 'light'
+        ? appState.themePreference
+        : null
     };
+  });
+
+  ipcMain.handle('set-theme-preference', (_event, payload = {}) => {
+    try {
+      const requestedTheme = typeof payload === 'string'
+        ? payload
+        : payload?.theme;
+      const normalizedTheme = String(requestedTheme || '').trim().toLowerCase();
+      const themePreference = normalizedTheme === 'dark' ? 'dark' : 'light';
+
+      const updatedAppState = saveAppState(app, { themePreference });
+      setAppState(updatedAppState);
+
+      return { success: true, themePreference };
+    } catch (error) {
+      console.error('Error saving theme preference:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('save-settings', async (_event, settings = {}) => {

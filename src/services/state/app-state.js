@@ -10,7 +10,8 @@ function getDefaultAppState() {
     geminiModel: null,
     assemblyAiSpeechModel: null,
     programmingLanguage: null,
-    windowOpacityLevel: 10
+    windowOpacityLevel: 10,
+    themePreference: null
   };
 }
 
@@ -38,6 +39,11 @@ function sanitizeAppState(state) {
     const windowOpacityLevel = Number.parseInt(String(state.windowOpacityLevel ?? ''), 10);
     if (Number.isFinite(windowOpacityLevel)) {
       nextState.windowOpacityLevel = Math.min(Math.max(windowOpacityLevel, 1), 10);
+    }
+
+    const themePreference = String(state.themePreference ?? '').trim().toLowerCase();
+    if (themePreference === 'dark' || themePreference === 'light') {
+      nextState.themePreference = themePreference;
     }
   }
 
