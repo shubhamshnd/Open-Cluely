@@ -13,7 +13,8 @@ export function setupIpcListeners({
     askAiWithSessionContext,
     isAskAiShortcutEnabled,
     addMonitorLog,
-    getActiveScreenAiStream
+    getActiveScreenAiStream,
+    clearActiveScreenAiStream
 }) {
     if (!windowApi) {
         console.error('electronAPI not available');
@@ -44,6 +45,7 @@ export function setupIpcListeners({
         hideLoadingOverlay();
 
         const stream = typeof getActiveScreenAiStream === 'function' ? getActiveScreenAiStream() : null;
+        console.log('[onAnalysisResult] stream active:', !!stream, 'has error:', !!data.error);
         if (data.error) {
             addChatMessage('system', `Error: ${data.error}`);
             showFeedback('Analysis failed', 'error');
@@ -51,8 +53,14 @@ export function setupIpcListeners({
             stream.finalize(data.text);
             showFeedback('Analysis complete', 'success');
         } else {
+            console.log('[onAnalysisResult] No active stream - creating new message');
             addChatMessage('ai-response', data.text);
             showFeedback('Analysis complete', 'success');
+        }
+
+        // Clean up the screen AI stream after processing the result
+        if (typeof clearActiveScreenAiStream === 'function') {
+            clearActiveScreenAiStream();
         }
     });
 

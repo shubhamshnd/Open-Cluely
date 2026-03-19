@@ -634,10 +634,12 @@ async function analyzeScreenshotsOnly() {
             showFeedback('Analysis failed', 'error');
             setAnalyzing(false);
             hideLoadingOverlay();
-        } finally {
+            // Clean up on error since onAnalysisResult may not fire
             stream.cleanup();
             activeScreenAiStream = null;
         }
+        // Don't cleanup in finally - onAnalysisResult handles it for success path
+        // This avoids a race where the invoke resolves before the event is delivered
     });
 }
 
@@ -1139,7 +1141,13 @@ function setupIpcListeners() {
         askAiWithSessionContext,
         isAskAiShortcutEnabled: () => Boolean(analyzeBtn && !analyzeBtn.disabled),
         addMonitorLog,
-        getActiveScreenAiStream: () => activeScreenAiStream
+        getActiveScreenAiStream: () => activeScreenAiStream,
+        clearActiveScreenAiStream: () => {
+            if (activeScreenAiStream) {
+                activeScreenAiStream.cleanup();
+                activeScreenAiStream = null;
+            }
+        }
     });
 }
 

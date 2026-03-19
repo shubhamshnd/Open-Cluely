@@ -192,6 +192,7 @@ class GeminiService {
 
       // Streaming path: use generateContentStream when onChunk callback is provided
       if (typeof request.onChunk === 'function') {
+        console.log(`[Gemini API] Streaming ${request.type} request started`);
         const streamResult = await this.model.generateContentStream(request.data);
         let fullText = '';
         let chunkIndex = 0;
@@ -209,10 +210,12 @@ class GeminiService {
         }
 
         this.dailyTokenCount += this.estimateTokens(fullText);
+        console.log(`[Gemini API] Streaming ${request.type} request completed (${chunkIndex} chunks, ${fullText.length} chars)`);
         return fullText;
       }
 
       // Non-streaming path (existing behavior)
+      console.log(`[Gemini API] Non-streaming ${request.type} request started`);
       let result;
       if (request.type === 'text') {
         result = await this.model.generateContent(request.data);
@@ -224,7 +227,9 @@ class GeminiService {
 
       this.dailyTokenCount += estimatedTokens;
 
-      return result.response.text();
+      const responseText = result.response.text();
+      console.log(`[Gemini API] Non-streaming ${request.type} request completed (${responseText.length} chars)`);
+      return responseText;
     } catch (error) {
       console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
 
