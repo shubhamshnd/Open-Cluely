@@ -87,8 +87,8 @@ const KEYBOARD_SHORTCUTS = [
   },
   {
     id: 'toggleStealth',
-    buttonLabel: 'Toggle Opacity',
-    description: 'Toggle stealth opacity mode',
+    buttonLabel: 'Toggle Stealth',
+    description: 'Toggle stealth mode',
     accelerator: 'Alt+Shift+H'
   },
   {

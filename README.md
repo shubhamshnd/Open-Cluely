@@ -157,7 +157,7 @@ repomix-output.txt       Single-file repository snapshot for AI/code review tool
 | `Ctrl+Alt+Shift+S` | Capture screenshot |
 | `Ctrl+Alt+Shift+A` | Ask AI with current session context |
 | `Ctrl+Alt+Shift+X` | Emergency hide |
-| `Ctrl+Alt+Shift+H` | Toggle stealth opacity mode |
+| `Alt+Shift+H` | Toggle stealth mode |
 | `Ctrl+Alt+Shift+Left` | Move window left |
 | `Ctrl+Alt+Shift+Right` | Move window right |
 | `Ctrl+Alt+Shift+Up` | Move window to top |

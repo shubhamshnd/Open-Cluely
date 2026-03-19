@@ -6,7 +6,7 @@
   WINDOW_OPACITY_LEVEL_MIN,
   WINDOW_OPACITY_LEVEL_MAX,
   DEFAULT_WINDOW_OPACITY_LEVEL,
-  STEALTH_OPACITY_LEVEL_DELTA
+  STEALTH_WINDOW_OPACITY
 } = require('./window-constants');
 const { getKeyboardShortcutAccelerator } = require('../../../config');
 
@@ -62,7 +62,7 @@ function createWindowController({
   }
 
   function getStealthWindowOpacity() {
-    return getWindowOpacityFromLevel(activeWindowOpacityLevel - STEALTH_OPACITY_LEVEL_DELTA);
+    return Math.min(getVisibleWindowOpacity(), STEALTH_WINDOW_OPACITY);
   }
 
   function getCurrentWindowOpacity() {
