@@ -154,7 +154,11 @@ const shortcutIconById = {
     moveWindowLeft: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 7l-5 5 5 5V7z"/></svg>',
     moveWindowRight: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 7l5 5-5 5V7z"/></svg>',
     moveWindowUp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5H7z"/></svg>',
-    moveWindowDown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>'
+    moveWindowDown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>',
+    windowSizePreset1: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="8" width="12" height="8" rx="1.5"/></svg>',
+    windowSizePreset2: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="7" width="14" height="10" rx="1.5"/></svg>',
+    windowSizePreset3: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg>',
+    windowSizePreset4: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="14" rx="1.5"/></svg>'
 };
 
 function getShortcutIconMarkup(shortcutId) {

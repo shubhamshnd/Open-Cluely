@@ -147,6 +147,11 @@
     return windowController.setWindowBounds(nextBounds);
   });
 
+  ipcMain.handle('set-window-size-preset', (_event, payload = {}) => {
+    const preset = typeof payload === 'number' ? payload : payload?.preset;
+    return windowController.setWindowSizePreset(preset);
+  });
+
   ipcMain.handle('toggle-stealth', () => {
     return windowController.toggleStealthMode();
   });

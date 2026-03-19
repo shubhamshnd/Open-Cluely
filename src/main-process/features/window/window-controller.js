@@ -322,6 +322,49 @@ function createWindowController({
     mainWindow.setPosition(x, y);
   }
 
+  function clampWindowSizePreset(preset) {
+    const parsedPreset = Number.parseInt(String(preset ?? ''), 10);
+    if (!Number.isFinite(parsedPreset)) {
+      return 1;
+    }
+
+    return clamp(parsedPreset, 1, 4);
+  }
+
+  function getWindowSizeScaleForPreset(preset) {
+    const clampedPreset = clampWindowSizePreset(preset);
+    return 1 + ((clampedPreset - 1) * 0.25);
+  }
+
+  function setWindowSizePreset(preset) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { error: 'Main window not available' };
+    }
+
+    const clampedPreset = clampWindowSizePreset(preset);
+    const scale = getWindowSizeScaleForPreset(clampedPreset);
+    const currentBounds = mainWindow.getBounds();
+
+    const width = Math.round(WINDOW_MIN_WIDTH * scale);
+    const height = Math.round(WINDOW_MIN_HEIGHT * scale);
+
+    const centerX = currentBounds.x + Math.round(currentBounds.width / 2);
+    const centerY = currentBounds.y + Math.round(currentBounds.height / 2);
+
+    const nextBounds = getSafeWindowBounds({
+      x: centerX - Math.round(width / 2),
+      y: centerY - Math.round(height / 2),
+      width,
+      height
+    });
+
+    mainWindow.setBounds(nextBounds, false);
+    return {
+      ...mainWindow.getBounds(),
+      preset: clampedPreset
+    };
+  }
+
   function registerShortcuts() {
     const registerShortcut = (shortcutId, handler) => {
       const accelerator = getKeyboardShortcutAccelerator(shortcutId);
@@ -380,6 +423,22 @@ function createWindowController({
     registerShortcut('moveWindowDown', () => {
       moveToPosition('bottom');
     });
+
+    registerShortcut('windowSizePreset1', () => {
+      setWindowSizePreset(1);
+    });
+
+    registerShortcut('windowSizePreset2', () => {
+      setWindowSizePreset(2);
+    });
+
+    registerShortcut('windowSizePreset3', () => {
+      setWindowSizePreset(3);
+    });
+
+    registerShortcut('windowSizePreset4', () => {
+      setWindowSizePreset(4);
+    });
   }
 
   function unregisterShortcuts() {
@@ -425,6 +484,7 @@ function createWindowController({
     hasWindow,
     markVisible,
     registerShortcuts,
+    setWindowSizePreset,
     setWindowBounds,
     setWindowOpacityLevel,
     toggleStealthMode,

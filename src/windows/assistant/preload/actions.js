@@ -62,6 +62,13 @@ function createInvokeActions(ipcRenderer) {
       fallback: (error) => ({ error: error.message })
     }),
 
+    setWindowSizePreset: invokeWithFallback(ipcRenderer, {
+      channel: 'set-window-size-preset',
+      label: 'setWindowSizePreset',
+      transformArgs: (args) => [{ preset: args[0] }],
+      fallback: (error) => ({ error: error.message })
+    }),
+
     startVoiceRecognition: invokeWithFallback(ipcRenderer, {
       channel: 'start-voice-recognition',
       label: 'startVoiceRecognition',

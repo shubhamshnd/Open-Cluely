@@ -35,85 +35,109 @@ const KEYBOARD_SHORTCUTS = [
     id: 'toggleTranscription',
     buttonLabel: 'Transcription',
     description: 'Toggle transcription master control',
-    accelerator: 'Alt+T'
+    accelerator: 'Alt+Shift+T'
   },
   {
     id: 'takeScreenshot',
     buttonLabel: 'Screenshot',
     description: 'Capture screenshot',
-    accelerator: 'Alt+S'
+    accelerator: 'Alt+Shift+S'
   },
   {
     id: 'askAi',
     buttonLabel: 'Ask AI',
     description: 'Uses only enabled transcript, enabled screenshots, and enabled chat context',
-    accelerator: 'Alt+A'
+    accelerator: 'Alt+Shift+A'
   },
   {
     id: 'screenAi',
     buttonLabel: 'Screen AI',
     description: 'Analyzes only enabled screenshots selected in chat',
-    accelerator: 'Alt+E'
+    accelerator: 'Alt+Shift+E'
   },
   {
     id: 'suggest',
     buttonLabel: 'Suggest',
     description: 'Uses only enabled transcript context to suggest what to say next',
-    accelerator: 'Alt+G'
+    accelerator: 'Alt+Shift+G'
   },
   {
     id: 'notes',
     buttonLabel: 'Notes',
     description: 'Generates notes from only enabled context',
-    accelerator: 'Alt+N'
+    accelerator: 'Alt+Shift+N'
   },
   {
     id: 'insights',
     buttonLabel: 'Insights',
     description: 'Finds key insights from only enabled context',
-    accelerator: 'Alt+I'
+    accelerator: 'Alt+Shift+I'
   },
   {
     id: 'clearChat',
     buttonLabel: 'Clear Chat',
     description: 'Clears chat, screenshots, and AI history',
-    accelerator: 'Alt+C'
+    accelerator: 'Alt+Shift+C'
   },
   {
     id: 'emergencyHide',
     buttonLabel: 'Hide',
     description: 'Emergency hide',
-    accelerator: 'Alt+X'
+    accelerator: 'Alt+Shift+X'
   },
   {
     id: 'toggleStealth',
     buttonLabel: 'Toggle Opacity',
     description: 'Toggle stealth opacity mode',
-    accelerator: 'Alt+H'
+    accelerator: 'Alt+Shift+H'
   },
   {
     id: 'moveWindowLeft',
     buttonLabel: 'Move Window Left',
     description: 'Move window to left side',
-    accelerator: 'Alt+Left'
+    accelerator: 'Alt+Shift+Left'
   },
   {
     id: 'moveWindowRight',
     buttonLabel: 'Move Window Right',
     description: 'Move window to right side',
-    accelerator: 'Alt+Right'
+    accelerator: 'Alt+Shift+Right'
   },
   {
     id: 'moveWindowUp',
     buttonLabel: 'Move Window Up',
     description: 'Move window to top',
-    accelerator: 'Alt+Up'
+    accelerator: 'Alt+Shift+Up'
   },
   {
     id: 'moveWindowDown',
     buttonLabel: 'Move Window Down',
     description: 'Move window to bottom',
-    accelerator: 'Alt+Down'
+    accelerator: 'Alt+Shift+Down'
+  },
+  {
+    id: 'windowSizePreset1',
+    buttonLabel: 'Size Preset 1',
+    description: 'Resize window to minimum size',
+    accelerator: 'Alt+Shift+1'
+  },
+  {
+    id: 'windowSizePreset2',
+    buttonLabel: 'Size Preset 2',
+    description: 'Resize window to +25% from minimum size',
+    accelerator: 'Alt+Shift+2'
+  },
+  {
+    id: 'windowSizePreset3',
+    buttonLabel: 'Size Preset 3',
+    description: 'Resize window to +50% from minimum size',
+    accelerator: 'Alt+Shift+3'
+  },
+  {
+    id: 'windowSizePreset4',
+    buttonLabel: 'Size Preset 4',
+    description: 'Resize window to +75% from minimum size',
+    accelerator: 'Alt+Shift+4'
   }
 ];
 
