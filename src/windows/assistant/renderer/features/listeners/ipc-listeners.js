@@ -12,7 +12,8 @@ export function setupIpcListeners({
     toggleMasterTranscription,
     askAiWithSessionContext,
     isAskAiShortcutEnabled,
-    addMonitorLog
+    addMonitorLog,
+    getActiveScreenAiStream
 }) {
     if (!windowApi) {
         console.error('electronAPI not available');
@@ -32,16 +33,23 @@ export function setupIpcListeners({
     windowApi.onAnalysisStart(() => {
         setAnalyzing(true);
         showLoadingOverlay();
-        addChatMessage('system', 'Analyzing screenshots...');
+        const stream = typeof getActiveScreenAiStream === 'function' ? getActiveScreenAiStream() : null;
+        if (!stream) {
+            addChatMessage('system', 'Analyzing screenshots...');
+        }
     });
 
     windowApi.onAnalysisResult((data) => {
         setAnalyzing(false);
         hideLoadingOverlay();
 
+        const stream = typeof getActiveScreenAiStream === 'function' ? getActiveScreenAiStream() : null;
         if (data.error) {
             addChatMessage('system', `Error: ${data.error}`);
             showFeedback('Analysis failed', 'error');
+        } else if (stream) {
+            stream.finalize(data.text);
+            showFeedback('Analysis complete', 'success');
         } else {
             addChatMessage('ai-response', data.text);
             showFeedback('Analysis complete', 'success');

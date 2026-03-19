@@ -160,6 +160,28 @@ export function createChatUiManager({
         chatManualSend.disabled = String(chatManualInput.value || '').trim().length === 0;
     }
 
+    function updateChatMessageContent(messageId, newContent) {
+        const record = messageStore.findById(messageId);
+        if (record) {
+            record.content = newContent;
+        }
+
+        if (!chatMessagesElement) return;
+
+        const messageEl = chatMessagesElement.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageEl) return;
+
+        const contentEl = messageEl.querySelector('.message-content');
+        if (!contentEl) return;
+
+        const shouldAutoScroll = isChatNearBottom();
+        contentEl.innerHTML = formatResponse(newContent);
+
+        if (shouldAutoScroll) {
+            chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+        }
+    }
+
     function submitManualContextMessage() {
         if (!chatManualInput) {
             return;
@@ -185,6 +207,7 @@ export function createChatUiManager({
 
     return {
         addChatMessage,
+        updateChatMessageContent,
         autoResizeManualInput,
         submitManualContextMessage,
         updateManualComposerState

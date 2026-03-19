@@ -76,6 +76,21 @@ function createEventActions(ipcRenderer) {
     label: 'onTriggerAskAi'
   });
 
+  const onAiStreamStart = createEventListener(ipcRenderer, {
+    channel: 'ai-stream-start',
+    label: 'onAiStreamStart'
+  });
+
+  const onAiStreamChunk = createEventListener(ipcRenderer, {
+    channel: 'ai-stream-chunk',
+    label: 'onAiStreamChunk'
+  });
+
+  const onAiStreamEnd = createEventListener(ipcRenderer, {
+    channel: 'ai-stream-end',
+    label: 'onAiStreamEnd'
+  });
+
   const rawOnSttDebug = createEventListener(ipcRenderer, {
     channel: 'stt-debug',
     label: 'onSttDebug'
@@ -95,6 +110,9 @@ function createEventActions(ipcRenderer) {
     onVoskFinal,
     onVoskError,
     onVoskStopped,
+    onAiStreamStart,
+    onAiStreamChunk,
+    onAiStreamEnd,
     onToggleVoiceRecognition,
     onTriggerAskAi,
     onSttDebug: (callback) => rawOnSttDebug((data) => callback(data || {}))
