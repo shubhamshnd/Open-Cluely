@@ -11,6 +11,7 @@ export function setupIpcListeners({
     transcriptionManager,
     toggleMasterTranscription,
     askAiWithSessionContext,
+    isAskAiShortcutEnabled,
     addMonitorLog
 }) {
     if (!windowApi) {
@@ -91,6 +92,11 @@ export function setupIpcListeners({
 
     if (windowApi.onTriggerAskAi) {
         windowApi.onTriggerAskAi(() => {
+            if (typeof isAskAiShortcutEnabled === 'function' && !isAskAiShortcutEnabled()) {
+                addMonitorLog('info', 'shortcut-ask-ai-blocked', 'Global Ask AI shortcut ignored because Ask AI is disabled');
+                return;
+            }
+
             addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
             askAiWithSessionContext().catch((error) => {
                 console.error('Global Ask AI trigger failed:', error);

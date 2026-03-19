@@ -134,6 +134,13 @@ const MAX_CHAT_INPUT_HEIGHT = 88;
 let isCloseConfirmationOpen = false;
 let hasGeminiApiKeysConfigured = false;
 let hasAssemblyAiApiKeyConfigured = false;
+const aiActionInFlightState = {
+    askAi: false,
+    screenAi: false,
+    suggest: false,
+    notes: false,
+    insights: false
+};
 const shortcutManager = createShortcutManager({ settingsShortcutsList });
 const windowAdjustmentManager = createWindowAdjustmentManager({
     windowResizeHandles,
@@ -330,6 +337,38 @@ function isShortcutPressed(event, shortcutId) {
     return shortcutManager.isShortcutPressed(event, shortcutId);
 }
 
+function isAiActionInFlight(actionId) {
+    return Boolean(aiActionInFlightState[actionId]);
+}
+
+function setAiActionInFlight(actionId, inFlight) {
+    if (!Object.prototype.hasOwnProperty.call(aiActionInFlightState, actionId)) {
+        return;
+    }
+
+    const nextValue = Boolean(inFlight);
+    if (aiActionInFlightState[actionId] === nextValue) {
+        return;
+    }
+
+    aiActionInFlightState[actionId] = nextValue;
+    updateUI();
+}
+
+async function runAiActionWithLock(actionId, action) {
+    if (isAiActionInFlight(actionId)) {
+        return false;
+    }
+
+    setAiActionInFlight(actionId, true);
+    try {
+        await action();
+        return true;
+    } finally {
+        setAiActionInFlight(actionId, false);
+    }
+}
+
 function hasConfiguredGeminiApiKeys(value) {
     const keys = String(value ?? '')
         .split(',')
@@ -493,29 +532,30 @@ async function askAiWithSessionContext() {
         return;
     }
 
-    try {
-        setAnalyzing(true);
-        showLoadingOverlay('Analyzing full session context...');
-        const result = await window.electronAPI.askAiWithSessionContext(payload);
-        setAnalyzing(false);
-        hideLoadingOverlay();
+    await runAiActionWithLock('askAi', async () => {
+        try {
+            setAnalyzing(true);
+            showLoadingOverlay('Analyzing full session context...');
+            const result = await window.electronAPI.askAiWithSessionContext(payload);
 
-        if (result?.success && result?.text) {
-            const heading = result.usedScreenshots
-                ? '**Best Next Answer (Transcript + Screen):**'
-                : '**Best Next Answer (Transcript):**';
-            addChatMessage('ai-response', `${heading}\n\n${result.text}`);
-            showFeedback('Ask AI ready', 'success');
-        } else {
-            throw new Error(result?.error || 'Ask AI failed');
+            if (result?.success && result?.text) {
+                const heading = result.usedScreenshots
+                    ? '**Best Next Answer (Transcript + Screen):**'
+                    : '**Best Next Answer (Transcript):**';
+                addChatMessage('ai-response', `${heading}\n\n${result.text}`);
+                showFeedback('Ask AI ready', 'success');
+            } else {
+                throw new Error(result?.error || 'Ask AI failed');
+            }
+        } catch (error) {
+            console.error('Ask AI error:', error);
+            showFeedback('Ask AI failed', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
+            setAnalyzing(false);
+            hideLoadingOverlay();
         }
-    } catch (error) {
-        console.error('Ask AI error:', error);
-        setAnalyzing(false);
-        hideLoadingOverlay();
-        showFeedback('Ask AI failed', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 async function analyzeScreenshotsOnly() {
@@ -530,20 +570,22 @@ async function analyzeScreenshotsOnly() {
         return;
     }
 
-    try {
-        setAnalyzing(true);
-        showLoadingOverlay('Analyzing screenshots...');
+    await runAiActionWithLock('screenAi', async () => {
+        try {
+            setAnalyzing(true);
+            showLoadingOverlay('Analyzing screenshots...');
 
-        await window.electronAPI.analyzeStealthWithContext({
-            contextString: bundle.contextString,
-            enabledScreenshotIds: bundle.enabledScreenshotIds
-        });
-    } catch (error) {
-        console.error('Analysis error:', error);
-        showFeedback('Analysis failed', 'error');
-        setAnalyzing(false);
-        hideLoadingOverlay();
-    }
+            await window.electronAPI.analyzeStealthWithContext({
+                contextString: bundle.contextString,
+                enabledScreenshotIds: bundle.enabledScreenshotIds
+            });
+        } catch (error) {
+            console.error('Analysis error:', error);
+            showFeedback('Analysis failed', 'error');
+            setAnalyzing(false);
+            hideLoadingOverlay();
+        }
+    });
 }
 
 async function clearStealthData() {
@@ -617,31 +659,33 @@ async function getResponseSuggestions() {
         return;
     }
 
-    try {
-        showFeedback('Generating suggestions...', 'info');
-        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        const transcriptOnlyContext = String(bundle.transcriptContext || '').trim();
-        if (!transcriptOnlyContext) {
-            showFeedback('No enabled transcript context available for suggestions', 'error');
-            return;
-        }
+    await runAiActionWithLock('suggest', async () => {
+        try {
+            showFeedback('Generating suggestions...', 'info');
+            const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+            const transcriptOnlyContext = String(bundle.transcriptContext || '').trim();
+            if (!transcriptOnlyContext) {
+                showFeedback('No enabled transcript context available for suggestions', 'error');
+                return;
+            }
 
-        const result = await window.electronAPI.suggestResponse({
-            context: bundle.sessionSummary || 'Current meeting conversation',
-            contextString: transcriptOnlyContext
-        });
+            const result = await window.electronAPI.suggestResponse({
+                context: bundle.sessionSummary || 'Current meeting conversation',
+                contextString: transcriptOnlyContext
+            });
 
-        if (result.success && result.suggestions) {
-            addChatMessage('ai-response', `\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
-            showFeedback('Suggestions generated', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to generate suggestions');
+            if (result.success && result.suggestions) {
+                addChatMessage('ai-response', `\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
+                showFeedback('Suggestions generated', 'success');
+            } else {
+                throw new Error(result.error || 'Failed to generate suggestions');
+            }
+        } catch (error) {
+            console.error('Error getting suggestions:', error);
+            showFeedback('Failed to generate suggestions', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
         }
-    } catch (error) {
-        console.error('Error getting suggestions:', error);
-        showFeedback('Failed to generate suggestions', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 async function generateMeetingNotes() {
@@ -655,34 +699,34 @@ async function generateMeetingNotes() {
         return;
     }
 
-    try {
-        showFeedback('Generating meeting notes...', 'info');
-        setAnalyzing(true);
-        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        if (!bundle.contextString) {
+    await runAiActionWithLock('notes', async () => {
+        try {
+            showFeedback('Generating meeting notes...', 'info');
+            setAnalyzing(true);
+            const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+            if (!bundle.contextString) {
+                showFeedback('No enabled context available for notes', 'error');
+                return;
+            }
+
+            const result = await window.electronAPI.generateMeetingNotes({
+                contextString: bundle.contextString
+            });
+
+            if (result.success && result.notes) {
+                addChatMessage('ai-response', `\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
+                showFeedback('Meeting notes generated', 'success');
+            } else {
+                throw new Error(result.error || 'Failed to generate notes');
+            }
+        } catch (error) {
+            console.error('Error generating notes:', error);
+            showFeedback('Failed to generate notes', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
             setAnalyzing(false);
-            showFeedback('No enabled context available for notes', 'error');
-            return;
         }
-
-        const result = await window.electronAPI.generateMeetingNotes({
-            contextString: bundle.contextString
-        });
-
-        setAnalyzing(false);
-
-        if (result.success && result.notes) {
-            addChatMessage('ai-response', `\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
-            showFeedback('Meeting notes generated', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to generate notes');
-        }
-    } catch (error) {
-        console.error('Error generating notes:', error);
-        setAnalyzing(false);
-        showFeedback('Failed to generate notes', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 async function getConversationInsights() {
@@ -696,34 +740,34 @@ async function getConversationInsights() {
         return;
     }
 
-    try {
-        showFeedback('Analyzing conversation...', 'info');
-        setAnalyzing(true);
-        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        if (!bundle.contextString) {
+    await runAiActionWithLock('insights', async () => {
+        try {
+            showFeedback('Analyzing conversation...', 'info');
+            setAnalyzing(true);
+            const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+            if (!bundle.contextString) {
+                showFeedback('No enabled context available for insights', 'error');
+                return;
+            }
+
+            const result = await window.electronAPI.getConversationInsights({
+                contextString: bundle.contextString
+            });
+
+            if (result.success && result.insights) {
+                addChatMessage('ai-response', `\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
+                showFeedback('Insights generated', 'success');
+            } else {
+                throw new Error(result.error || 'Failed to get insights');
+            }
+        } catch (error) {
+            console.error('Error getting insights:', error);
+            showFeedback('Failed to get insights', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
             setAnalyzing(false);
-            showFeedback('No enabled context available for insights', 'error');
-            return;
         }
-
-        const result = await window.electronAPI.getConversationInsights({
-            contextString: bundle.contextString
-        });
-
-        setAnalyzing(false);
-
-        if (result.success && result.insights) {
-            addChatMessage('ai-response', `\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
-            showFeedback('Insights generated', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to get insights');
-        }
-    } catch (error) {
-        console.error('Error getting insights:', error);
-        setAnalyzing(false);
-        showFeedback('Failed to get insights', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 // SETTINGS FUNCTIONS
@@ -764,25 +808,30 @@ function updateUI() {
     const hasAiContext = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
     const canRunAiActions = hasGeminiApiKeysConfigured;
     const canRunTranscription = hasAssemblyAiApiKeyConfigured;
+    const askAiInFlight = isAiActionInFlight('askAi');
+    const screenAiInFlight = isAiActionInFlight('screenAi');
+    const suggestInFlight = isAiActionInFlight('suggest');
+    const notesInFlight = isAiActionInFlight('notes');
+    const insightsInFlight = isAiActionInFlight('insights');
 
     if (analyzeBtn) {
-        analyzeBtn.disabled = isAnalyzing || !canRunAiActions || !hasAiContext;
+        analyzeBtn.disabled = isAnalyzing || askAiInFlight || !canRunAiActions || !hasAiContext;
     }
 
     if (screenAiBtn) {
-        screenAiBtn.disabled = isAnalyzing || !canRunAiActions || !hasEnabledScreenshots;
+        screenAiBtn.disabled = isAnalyzing || screenAiInFlight || !canRunAiActions || !hasEnabledScreenshots;
     }
 
     if (suggestBtn) {
-        suggestBtn.disabled = isAnalyzing || !canRunAiActions || !hasTranscriptContext;
+        suggestBtn.disabled = isAnalyzing || suggestInFlight || !canRunAiActions || !hasTranscriptContext;
     }
 
     if (notesBtn) {
-        notesBtn.disabled = isAnalyzing || !canRunAiActions || !hasAiContext;
+        notesBtn.disabled = isAnalyzing || notesInFlight || !canRunAiActions || !hasAiContext;
     }
 
     if (insightsBtn) {
-        insightsBtn.disabled = isAnalyzing || !canRunAiActions || !hasAiContext;
+        insightsBtn.disabled = isAnalyzing || insightsInFlight || !canRunAiActions || !hasAiContext;
     }
 
     if (transcriptionToggle) {
@@ -1022,6 +1071,7 @@ function setupIpcListeners() {
         transcriptionManager,
         toggleMasterTranscription,
         askAiWithSessionContext,
+        isAskAiShortcutEnabled: () => Boolean(analyzeBtn && !analyzeBtn.disabled),
         addMonitorLog
     });
 }

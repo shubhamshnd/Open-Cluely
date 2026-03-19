@@ -23,7 +23,7 @@ Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview A
 
 Each button sends a different slice of context to the AI and is designed for a different moment in the workflow.
 
-### Ask AI — `Alt+Shift+A`
+### Ask AI
 
 The full-context answer button. Use this when you want a complete, thorough response.
 
@@ -40,7 +40,7 @@ Use Ask AI when you need the complete answer, not just the opening move.
 
 ---
 
-### Screen AI — `Alt+Shift+E`
+### Screen AI
 
 The screenshot interpreter. Use this when the question or problem is visible on screen.
 
@@ -58,7 +58,7 @@ Use Screen AI when the problem is on your screen and you want a direct solution 
 
 ---
 
-### Suggest — `Alt+Shift+G`
+### Suggest
 
 The opening-move button. Use this when you want something ready to say right now, without the full depth of Ask AI.
 
@@ -75,7 +75,7 @@ Use Suggest to open confidently. Use Ask AI when the interviewer pushes deeper a
 
 ---
 
-### Notes — `Alt+Shift+N`
+### Notes
 
 The structured record button. Use this at any point to capture what has happened in the session.
 
@@ -224,28 +224,9 @@ dist/                    Packaged build output
 repomix-output.txt       Single-file repository snapshot for AI/code review tooling
 ```
 
-## Default Shortcuts
+## Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Alt+Shift+V` | Toggle transcription master control |
-| `Ctrl+Alt+Shift+S` | Capture screenshot |
-| `Ctrl+Alt+Shift+A` | Ask AI (global shortcut) |
-| `Ctrl+Alt+Shift+X` | Emergency hide |
-| `Alt+Shift+H` | Toggle stealth mode |
-| `Ctrl+Alt+Shift+Left` | Move window left |
-| `Ctrl+Alt+Shift+Right` | Move window right |
-| `Ctrl+Alt+Shift+Up` | Move window to top |
-| `Ctrl+Alt+Shift+Down` | Move window to bottom |
-
-### In-App AI Button Shortcuts
-
-| Shortcut | Button | What it does |
-|----------|--------|--------------|
-| `Alt+Shift+A` | Ask AI | Full answer from transcript + screenshots + history |
-| `Alt+Shift+E` | Screen AI | Screenshot-only analysis and solution |
-| `Alt+Shift+G` | Suggest | Quick spoken response from transcript |
-| `Alt+Shift+N` | Notes | Structured notes from the full session |
+All keyboard shortcuts are customizable. Configure them in `src/config.js` to match your preference before building or running the app.
 
 ## Scripts
 
