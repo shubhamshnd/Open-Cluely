@@ -47,4 +47,8 @@ Thumbs.db
 .claude/
 
 .stealth_screenshots/
+cache/
 logs.txt
+
+#.md files
+# notes.md

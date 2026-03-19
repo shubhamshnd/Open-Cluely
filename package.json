@@ -5,7 +5,9 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "start:hidden": "electron . --start-hidden",
     "build": "electron-builder",
+    "build:win": "electron-builder --win portable",
     "dev": "electron . --enable-logging",
     "postinstall": "electron-builder install-app-deps"
   },
