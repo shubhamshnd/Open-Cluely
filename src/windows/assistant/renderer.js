@@ -681,14 +681,26 @@ function updateUI() {
     });
     const hasTranscriptContext = aiBundle.transcriptContext.length > 0;
     const hasEnabledScreenshots = aiBundle.enabledScreenshotIds.length > 0;
+    const hasAiContext = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
 
     if (analyzeBtn) {
-        const hasContent = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
-        analyzeBtn.disabled = isAnalyzing || !hasContent;
+        analyzeBtn.disabled = isAnalyzing || !hasAiContext;
     }
 
     if (screenAiBtn) {
         screenAiBtn.disabled = isAnalyzing || !hasEnabledScreenshots;
+    }
+
+    if (suggestBtn) {
+        suggestBtn.disabled = isAnalyzing || !hasAiContext;
+    }
+
+    if (notesBtn) {
+        notesBtn.disabled = isAnalyzing || !hasAiContext;
+    }
+
+    if (insightsBtn) {
+        insightsBtn.disabled = isAnalyzing || !hasAiContext;
     }
 }
 

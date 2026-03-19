@@ -502,7 +502,9 @@ body {
 .action-btn.suggest-btn {
   background: rgba(251, 191, 36, 0.3);
   border-color: rgba(251, 191, 36, 0.5);
-  font-size: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 6px 8px;
 }
 
 .action-btn.suggest-btn:hover {
@@ -513,7 +515,9 @@ body {
 .action-btn.notes-btn {
   background: rgba(139, 92, 246, 0.3);
   border-color: rgba(139, 92, 246, 0.5);
-  font-size: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 6px 8px;
 }
 
 .action-btn.notes-btn:hover {
@@ -524,7 +528,9 @@ body {
 .action-btn.insights-btn {
   background: rgba(236, 72, 153, 0.3);
   border-color: rgba(236, 72, 153, 0.5);
-  font-size: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 6px 8px;
 }
 
 .action-btn.insights-btn:hover {
