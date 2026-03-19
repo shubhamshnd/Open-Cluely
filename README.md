@@ -7,8 +7,11 @@ Use it only in environments where recording, transcription, screenshots, and AI 
 Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview Assistant 😉
 
 ## Looks
-<img width="1071" height="834" alt="image" src="https://github.com/user-attachments/assets/9ede4cd0-937c-4438-83df-0c1a4938c774" />
-<img width="1088" height="854" alt="image" src="https://github.com/user-attachments/assets/ef57eb8d-95a5-41d6-ba27-395c8b7d41ad" />
+
+<img width="1137" height="1014" alt="image" src="https://github.com/user-attachments/assets/b9250f36-5623-45da-ab8e-8265ee079e92" />
+<img width="1137" height="1019" alt="image" src="https://github.com/user-attachments/assets/68c14d18-fcb3-4ee5-9f98-d137b744156e" />
+
+---
 
 ## Features
 
