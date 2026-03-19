@@ -316,6 +316,17 @@ body {
   display: flex;
   gap: 4px;
   align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.utility-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 28px;
+  padding-right: 2px;
 }
 
 .transcription-control {
@@ -1346,24 +1357,32 @@ body.chat-resizing * {
 
 /* SCROLLBAR STYLING */
 .chat-messages::-webkit-scrollbar,
-.results-content::-webkit-scrollbar {
+.results-content::-webkit-scrollbar,
+.monitor-log-list::-webkit-scrollbar,
+.settings-body::-webkit-scrollbar {
   width: 4px;
 }
 
 .chat-messages::-webkit-scrollbar-track,
-.results-content::-webkit-scrollbar-track {
+.results-content::-webkit-scrollbar-track,
+.monitor-log-list::-webkit-scrollbar-track,
+.settings-body::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb,
-.results-content::-webkit-scrollbar-thumb {
+.results-content::-webkit-scrollbar-thumb,
+.monitor-log-list::-webkit-scrollbar-thumb,
+.settings-body::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover,
-.results-content::-webkit-scrollbar-thumb:hover {
+.results-content::-webkit-scrollbar-thumb:hover,
+.monitor-log-list::-webkit-scrollbar-thumb:hover,
+.settings-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4);
 }
 
@@ -2045,16 +2064,22 @@ body.theme-dark #close-settings.close-btn:focus-visible {
 }
 
 body.theme-dark .chat-messages::-webkit-scrollbar-track,
-body.theme-dark .results-content::-webkit-scrollbar-track {
+body.theme-dark .results-content::-webkit-scrollbar-track,
+body.theme-dark .monitor-log-list::-webkit-scrollbar-track,
+body.theme-dark .settings-body::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.52);
 }
 
 body.theme-dark .chat-messages::-webkit-scrollbar-thumb,
-body.theme-dark .results-content::-webkit-scrollbar-thumb {
+body.theme-dark .results-content::-webkit-scrollbar-thumb,
+body.theme-dark .monitor-log-list::-webkit-scrollbar-thumb,
+body.theme-dark .settings-body::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.4);
 }
 
 body.theme-dark .chat-messages::-webkit-scrollbar-thumb:hover,
-body.theme-dark .results-content::-webkit-scrollbar-thumb:hover {
+body.theme-dark .results-content::-webkit-scrollbar-thumb:hover,
+body.theme-dark .monitor-log-list::-webkit-scrollbar-thumb:hover,
+body.theme-dark .settings-body::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.58);
 }
