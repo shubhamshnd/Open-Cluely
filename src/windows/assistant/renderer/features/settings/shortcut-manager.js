@@ -144,12 +144,21 @@ const shortcutIconById = {
     toggleTranscription: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10v4"/><path d="M7 7v10"/><path d="M11 4v16"/><path d="M15 7v10"/><path d="M19 10v4"/></svg>',
     takeScreenshot: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>',
     askAi: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a8 8 0 0 0-8 8v2a4 4 0 0 0 4 4h1v3l3-3h3a8 8 0 0 0 8-8 8 8 0 0 0-8-8zm-1 6h2v2h-2V8zm0 3h2v5h-2v-5z"/></svg>',
+    screenAi: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6v2h3v1H7v-1h3v-2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v10h16V7H4z"/></svg>',
+    suggest: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 21h6v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2zm2 11.6V16h-4v-2.4A5 5 0 1 1 14 13.6z"/></svg>',
+    notes: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1v5h5"/><path d="M8 13h8v1H8zm0 3h8v1H8zm0-6h5v1H8z"/></svg>',
+    insights: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 20h16v1H3V4h1v16z"/><path d="M7 16h2v-5H7v5zm4 0h2V8h-2v8zm4 0h2v-3h-2v3z"/></svg>',
+    clearChat: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
     emergencyHide: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/></svg>',
     toggleStealth: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a8 8 0 1 0 0 16V4z"/></svg>',
     moveWindowLeft: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 7l-5 5 5 5V7z"/></svg>',
     moveWindowRight: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 7l5 5-5 5V7z"/></svg>',
     moveWindowUp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5H7z"/></svg>',
-    moveWindowDown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>'
+    moveWindowDown: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5H7z"/></svg>',
+    windowSizePreset1: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="8" width="12" height="8" rx="1.5"/></svg>',
+    windowSizePreset2: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="7" width="14" height="10" rx="1.5"/></svg>',
+    windowSizePreset3: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg>',
+    windowSizePreset4: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="14" rx="1.5"/></svg>'
 };
 
 function getShortcutIconMarkup(shortcutId) {
@@ -192,13 +201,23 @@ export function createShortcutManager({ settingsShortcutsList }) {
             if (shortcut.description) {
                 buttonLabel.title = shortcut.description;
             }
+            const shortcutText = document.createElement('div');
+            shortcutText.className = 'settings-shortcut-text';
+            shortcutText.appendChild(buttonLabel);
+
+            if (shortcut.description) {
+                const description = document.createElement('span');
+                description.className = 'settings-shortcut-description';
+                description.textContent = shortcut.description;
+                shortcutText.appendChild(description);
+            }
 
             const shortcutValue = document.createElement('span');
             shortcutValue.className = 'settings-shortcut-key';
             shortcutValue.textContent = formatShortcutForDisplay(shortcut.accelerator);
 
             shortcutMeta.appendChild(icon);
-            shortcutMeta.appendChild(buttonLabel);
+            shortcutMeta.appendChild(shortcutText);
             row.appendChild(shortcutMeta);
             row.appendChild(shortcutValue);
             settingsShortcutsList.appendChild(row);

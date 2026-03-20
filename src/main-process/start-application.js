@@ -10,6 +10,7 @@ const WebSocket = require('ws');
 
 const {
   loadApplicationEnvironment,
+  normalizeGeminiApiKeys,
   saveApplicationEnvironment
 } = require('../bootstrap/environment');
 const {
@@ -74,7 +75,7 @@ async function startApplication() {
   const assemblyAiService = createAssemblyAiService({
     WebSocket,
     desktopCapturer,
-    getAssemblyApiKey: () => appEnvironment?.assemblyAiApiKey || '',
+    getAssemblyApiKey: () => appState?.assemblyAiApiKey || '',
     getSpeechModel: () => activeAssemblyAiSpeechModel,
     getGeminiService: () => geminiRuntime.getService(),
     sendToRenderer
@@ -105,7 +106,10 @@ async function startApplication() {
   function loadPersistedAppState() {
     appState = loadAppState(app);
 
-    const keyState = geminiRuntime.setKeys(appEnvironment.geminiApiKeys, appState.geminiApiKeyIndex);
+    const keyState = geminiRuntime.setKeys(
+      normalizeGeminiApiKeys(appState?.geminiApiKey),
+      appState.geminiApiKeyIndex
+    );
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
     const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
@@ -207,8 +211,11 @@ async function startApplication() {
       return;
     }
 
+    loadPersistedAppState();
+
     logStartupConfiguration({
       appEnvironment,
+      appState,
       geminiModels: geminiRuntime.getGeminiModels(),
       defaultGeminiModel: geminiRuntime.getDefaultGeminiModel(),
       assemblyAiSpeechModels,
@@ -216,8 +223,6 @@ async function startApplication() {
       programmingLanguages: geminiRuntime.getProgrammingLanguages(),
       defaultProgrammingLanguage: geminiRuntime.getDefaultProgrammingLanguage()
     });
-
-    loadPersistedAppState();
 
     geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
       if (!appState || appState.geminiApiKeyIndex === nextIndex) {

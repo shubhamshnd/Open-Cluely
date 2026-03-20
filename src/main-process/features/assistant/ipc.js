@@ -22,7 +22,7 @@
     }
 
     if (normalizedMessage.includes('no api key configured')) {
-      return 'No API key configured. Please add GEMINI_API_KEY to your .env file.';
+      return 'No Gemini API key configured. Add it in Settings.';
     }
 
     if (
@@ -36,7 +36,7 @@
       normalizedMessage.includes('401') ||
       normalizedMessage.includes('403')
     ) {
-      return 'Invalid API key. Please check your GEMINI_API_KEY values.';
+      return 'Invalid Gemini API key. Please check the key values in Settings.';
     }
 
     if (
@@ -75,7 +75,7 @@
 
     if (!geminiRuntime.hasApiKeys()) {
       sendToRenderer('analysis-result', {
-        error: 'No API key configured. Please add GEMINI_API_KEY to your .env file.'
+        error: 'No Gemini API key configured. Add it in Settings.'
       });
       return;
     }
@@ -102,6 +102,11 @@
         return;
       }
 
+      const onChunk = ({ text, index }) => {
+        sendToRenderer('ai-stream-chunk', { actionId: 'screenAi', text, index });
+      };
+      sendToRenderer('ai-stream-start', { actionId: 'screenAi' });
+
       const text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
           throw new Error('AI model not initialized. Please check your API key.');
@@ -110,7 +115,7 @@
         return geminiService.analyzeScreenshots(
           imageParts,
           '',
-          { contextStringOverride: contextString }
+          { contextStringOverride: contextString, onChunk }
         );
       });
 
@@ -121,10 +126,12 @@
         screenshotCount: imageParts.length
       });
 
+      sendToRenderer('ai-stream-end', { actionId: 'screenAi' });
       sendToRenderer('analysis-result', { text });
     } catch (error) {
       console.error('Analysis error details:', error);
 
+      sendToRenderer('ai-stream-end', { actionId: 'screenAi' });
       sendToRenderer('analysis-result', {
         error: mapGeminiErrorMessage(error, 'Analysis failed')
       });
@@ -145,6 +152,11 @@
 
   ipcMain.handle('set-window-bounds', (_event, nextBounds) => {
     return windowController.setWindowBounds(nextBounds);
+  });
+
+  ipcMain.handle('set-window-size-preset', (_event, payload = {}) => {
+    const preset = typeof payload === 'number' ? payload : payload?.preset;
+    return windowController.setWindowSizePreset(preset);
   });
 
   ipcMain.handle('toggle-stealth', () => {
@@ -174,7 +186,7 @@
       assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai');
 
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const transcriptContext = typeof payload?.transcriptContext === 'string'
@@ -199,6 +211,11 @@
         };
       }
 
+      const onChunk = ({ text, index }) => {
+        sendToRenderer('ai-stream-chunk', { actionId: 'askAi', text, index });
+      };
+      sendToRenderer('ai-stream-start', { actionId: 'askAi' });
+
       let usedScreenshots = false;
       let usedScreenshotCount = 0;
       let text = '';
@@ -222,7 +239,8 @@
               transcriptContext,
               sessionSummary,
               screenshotCount: imageParts.length,
-              mode
+              mode,
+              onChunk
             });
           });
         }
@@ -239,7 +257,8 @@
             transcriptContext,
             sessionSummary,
             screenshotCount: usedScreenshots ? usedScreenshotCount : 0,
-            mode
+            mode,
+            onChunk
           });
         });
       }
@@ -251,9 +270,11 @@
         screenshotCount: usedScreenshots ? usedScreenshotCount : 0
       });
 
+      sendToRenderer('ai-stream-end', { actionId: 'askAi' });
       return { success: true, text, mode, usedScreenshots };
     } catch (error) {
       console.error('Error in ask-ai-with-session-context:', error);
+      sendToRenderer('ai-stream-end', { actionId: 'askAi' });
       return {
         success: false,
         error: mapGeminiErrorMessage(error, 'Ask AI failed'),
@@ -289,7 +310,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-suggest');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const payload = typeof context === 'object' && context !== null
@@ -302,19 +323,27 @@
         ? payload.contextString
         : '';
 
+      const onChunk = ({ text, index }) => {
+        sendToRenderer('ai-stream-chunk', { actionId: 'suggest', text, index });
+      };
+      sendToRenderer('ai-stream-start', { actionId: 'suggest' });
+
       const suggestions = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
           throw new Error('Gemini service not initialized');
         }
 
         return geminiService.suggestResponse(contextPrompt, {
-          contextString: contextStringOverride
+          contextString: contextStringOverride,
+          onChunk
         });
       });
 
+      sendToRenderer('ai-stream-end', { actionId: 'suggest' });
       return { success: true, suggestions };
     } catch (error) {
       console.error('Error generating suggestions:', error);
+      sendToRenderer('ai-stream-end', { actionId: 'suggest' });
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate suggestions') };
     }
   });
@@ -323,12 +352,17 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-notes');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
         ? payload.contextString
         : '';
+
+      const onChunk = ({ text, index }) => {
+        sendToRenderer('ai-stream-chunk', { actionId: 'notes', text, index });
+      };
+      sendToRenderer('ai-stream-start', { actionId: 'notes' });
 
       const notes = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
@@ -336,13 +370,16 @@
         }
 
         return geminiService.generateMeetingNotes({
-          contextString: contextStringOverride
+          contextString: contextStringOverride,
+          onChunk
         });
       });
 
+      sendToRenderer('ai-stream-end', { actionId: 'notes' });
       return { success: true, notes };
     } catch (error) {
       console.error('Error generating meeting notes:', error);
+      sendToRenderer('ai-stream-end', { actionId: 'notes' });
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate meeting notes') };
     }
   });
@@ -351,7 +388,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-followup');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
@@ -373,7 +410,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-answer');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
@@ -395,12 +432,17 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-insights');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+        throw new Error('No Gemini API key configured. Add it in Settings.');
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
         ? payload.contextString
         : '';
+
+      const onChunk = ({ text, index }) => {
+        sendToRenderer('ai-stream-chunk', { actionId: 'insights', text, index });
+      };
+      sendToRenderer('ai-stream-start', { actionId: 'insights' });
 
       const insights = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
@@ -408,13 +450,16 @@
         }
 
         return geminiService.getConversationInsights({
-          contextString: contextStringOverride
+          contextString: contextStringOverride,
+          onChunk
         });
       });
 
+      sendToRenderer('ai-stream-end', { actionId: 'insights' });
       return { success: true, insights };
     } catch (error) {
       console.error('Error getting insights:', error);
+      sendToRenderer('ai-stream-end', { actionId: 'insights' });
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to get conversation insights') };
     }
   });

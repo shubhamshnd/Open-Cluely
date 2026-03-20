@@ -130,6 +130,10 @@ export function createChatUiManager({
             return;
         }
 
+        // Remove the variable first so the min-height constraint is cleared,
+        // allowing getBoundingClientRect to return the natural content height
+        // instead of being held at the previous (potentially stale) large value.
+        chatContainer.style.removeProperty('--chat-composer-height');
         const composerHeight = Math.max(0, Math.round(chatComposer.getBoundingClientRect().height));
         if (composerHeight > 0) {
             chatContainer.style.setProperty('--chat-composer-height', `${composerHeight}px`);
@@ -154,6 +158,28 @@ export function createChatUiManager({
         }
 
         chatManualSend.disabled = String(chatManualInput.value || '').trim().length === 0;
+    }
+
+    function updateChatMessageContent(messageId, newContent) {
+        const record = messageStore.findById(messageId);
+        if (record) {
+            record.content = newContent;
+        }
+
+        if (!chatMessagesElement) return;
+
+        const messageEl = chatMessagesElement.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageEl) return;
+
+        const contentEl = messageEl.querySelector('.message-content');
+        if (!contentEl) return;
+
+        const shouldAutoScroll = isChatNearBottom();
+        contentEl.innerHTML = formatResponse(newContent);
+
+        if (shouldAutoScroll) {
+            chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+        }
     }
 
     function submitManualContextMessage() {
@@ -181,6 +207,7 @@ export function createChatUiManager({
 
     return {
         addChatMessage,
+        updateChatMessageContent,
         autoResizeManualInput,
         submitManualContextMessage,
         updateManualComposerState

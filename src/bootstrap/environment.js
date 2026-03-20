@@ -11,11 +11,6 @@ const OPTIONAL_ENV_DEFAULTS = Object.freeze({
   NODE_OPTIONS: '--max-old-space-size=4096'
 });
 
-const REQUIRED_ENV_KEYS = Object.freeze([
-  'GEMINI_API_KEY',
-  'ASSEMBLY_AI_API_KEY'
-]);
-
 function normalizeGeminiApiKeys(value) {
   const sourceValues = Array.isArray(value)
     ? value
@@ -67,13 +62,13 @@ function parsePositiveInteger(value, defaultValue) {
 
 function normalizeApplicationEnvironment(source = {}) {
   const geminiApiKeys = normalizeGeminiApiKeys(
-    source.GEMINI_API_KEY ?? source.geminiApiKey ?? source.geminiApiKeys
+    source.geminiApiKey ?? source.geminiApiKeys
   );
 
   return {
     geminiApiKey: geminiApiKeys.join(','),
     geminiApiKeys,
-    assemblyAiApiKey: String(source.ASSEMBLY_AI_API_KEY || source.assemblyAiApiKey || '').trim(),
+    assemblyAiApiKey: String(source.assemblyAiApiKey || '').trim(),
     hideFromScreenCapture: parseBoolean(
       source.HIDE_FROM_SCREEN_CAPTURE ?? source.hideFromScreenCapture,
       parseBoolean(OPTIONAL_ENV_DEFAULTS.HIDE_FROM_SCREEN_CAPTURE, true)
@@ -107,23 +102,8 @@ function syncProcessEnvironment(environment) {
 }
 
 function validateRequiredEnvironment(environment, envPath) {
-  const missingKeys = REQUIRED_ENV_KEYS.filter((key) => {
-    if (key === 'GEMINI_API_KEY') {
-      return !Array.isArray(environment.geminiApiKeys) || environment.geminiApiKeys.length === 0;
-    }
-
-    if (key === 'ASSEMBLY_AI_API_KEY') {
-      return !environment.assemblyAiApiKey;
-    }
-
-    return !process.env[key];
-  });
-
-  if (missingKeys.length > 0) {
-    throw new Error(
-      `Missing required environment values: ${missingKeys.join(', ')}. Add them to ${envPath} before starting the app.`
-    );
-  }
+  void environment;
+  void envPath;
 }
 
 function loadApplicationEnvironment(app) {
@@ -142,12 +122,8 @@ function loadApplicationEnvironment(app) {
 
 function buildEnvironmentFileContent(environment) {
   return [
-    '# Required API keys',
-    '# Get Gemini key at: https://makersuite.google.com/app/apikey',
-    '# Get AssemblyAI key at: https://www.assemblyai.com/dashboard',
-    '# Multiple Gemini keys are supported as comma-separated values',
-    `GEMINI_API_KEY=${environment.geminiApiKey}`,
-    `ASSEMBLY_AI_API_KEY=${environment.assemblyAiApiKey}`,
+    '# API keys are managed in the in-app Settings UI and stored in app state.',
+    '# Do not place API keys in this file.',
     '',
     '# Optional capture behavior',
     '# true = hide this app from screen sharing/screen capture',

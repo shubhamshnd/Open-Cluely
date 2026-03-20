@@ -187,6 +187,63 @@ export function setupEventListeners({
             return;
         }
 
+        if (isShortcutPressed?.(event, 'screenAi')) {
+            event.preventDefault();
+            if (screenAiBtn?.disabled) {
+                return;
+            }
+            analyzeScreenshotsOnly().catch((error) => {
+                console.error('Local Screen AI shortcut failed:', error);
+                addMonitorLog('error', 'shortcut-screen-ai-failed', error.message);
+            });
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'suggest')) {
+            event.preventDefault();
+            if (suggestBtn?.disabled) {
+                return;
+            }
+            getResponseSuggestions().catch((error) => {
+                console.error('Local Suggest shortcut failed:', error);
+                addMonitorLog('error', 'shortcut-suggest-failed', error.message);
+            });
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'notes')) {
+            event.preventDefault();
+            if (notesBtn?.disabled) {
+                return;
+            }
+            generateMeetingNotes().catch((error) => {
+                console.error('Local Notes shortcut failed:', error);
+                addMonitorLog('error', 'shortcut-notes-failed', error.message);
+            });
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'insights')) {
+            event.preventDefault();
+            if (insightsBtn?.disabled) {
+                return;
+            }
+            getConversationInsights().catch((error) => {
+                console.error('Local Insights shortcut failed:', error);
+                addMonitorLog('error', 'shortcut-insights-failed', error.message);
+            });
+            return;
+        }
+
+        if (isShortcutPressed?.(event, 'clearChat')) {
+            event.preventDefault();
+            clearStealthData().catch((error) => {
+                console.error('Local Clear Chat shortcut failed:', error);
+                addMonitorLog('error', 'shortcut-clear-chat-failed', error.message);
+            });
+            return;
+        }
+
         if (isShortcutPressed?.(event, 'emergencyHide')) {
             event.preventDefault();
             emergencyHide();

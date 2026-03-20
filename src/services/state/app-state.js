@@ -6,6 +6,8 @@ const APP_STATE_FILE_NAME = 'app-state.json';
 
 function getDefaultAppState() {
   return {
+    geminiApiKey: null,
+    assemblyAiApiKey: null,
     geminiApiKeyIndex: 0,
     geminiModel: null,
     assemblyAiSpeechModel: null,
@@ -19,6 +21,16 @@ function sanitizeAppState(state) {
   const nextState = getDefaultAppState();
 
   if (state && typeof state === 'object' && !Array.isArray(state)) {
+    if (typeof state.geminiApiKey === 'string') {
+      const geminiApiKey = state.geminiApiKey.trim();
+      nextState.geminiApiKey = geminiApiKey || null;
+    }
+
+    if (typeof state.assemblyAiApiKey === 'string') {
+      const assemblyAiApiKey = state.assemblyAiApiKey.trim();
+      nextState.assemblyAiApiKey = assemblyAiApiKey || null;
+    }
+
     const geminiApiKeyIndex = Number.parseInt(String(state.geminiApiKeyIndex ?? ''), 10);
     if (Number.isFinite(geminiApiKeyIndex) && geminiApiKeyIndex >= 0) {
       nextState.geminiApiKeyIndex = geminiApiKeyIndex;

@@ -190,6 +190,32 @@ class GeminiService {
         throw new Error('Daily token limit reached');
       }
 
+      // Streaming path: use generateContentStream when onChunk callback is provided
+      if (typeof request.onChunk === 'function') {
+        console.log(`[Gemini API] Streaming ${request.type} request started`);
+        const streamResult = await this.model.generateContentStream(request.data);
+        let fullText = '';
+        let chunkIndex = 0;
+
+        for await (const chunk of streamResult.stream) {
+          const chunkText = chunk.text();
+          if (chunkText) {
+            fullText += chunkText;
+            chunkIndex += 1;
+            if (!request._firstChunkSent) {
+              request._firstChunkSent = true;
+            }
+            request.onChunk({ text: chunkText, index: chunkIndex });
+          }
+        }
+
+        this.dailyTokenCount += this.estimateTokens(fullText);
+        console.log(`[Gemini API] Streaming ${request.type} request completed (${chunkIndex} chunks, ${fullText.length} chars)`);
+        return fullText;
+      }
+
+      // Non-streaming path (existing behavior)
+      console.log(`[Gemini API] Non-streaming ${request.type} request started`);
       let result;
       if (request.type === 'text') {
         result = await this.model.generateContent(request.data);
@@ -201,12 +227,19 @@ class GeminiService {
 
       this.dailyTokenCount += estimatedTokens;
 
-      return result.response.text();
+      const responseText = result.response.text();
+      console.log(`[Gemini API] Non-streaming ${request.type} request completed (${responseText.length} chars)`);
+      return responseText;
     } catch (error) {
       console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
 
       if (this.isQuotaExhaustedError(error)) {
         console.error('Quota-exhausted error detected. Skipping retries.');
+        throw error;
+      }
+
+      // Skip retries if streaming chunks were already sent to avoid duplicate content
+      if (request._firstChunkSent) {
         throw error;
       }
 
@@ -243,13 +276,14 @@ class GeminiService {
       .join('\n\n');
   }
 
-  async generateText(prompt) {
+  async generateText(prompt, options = {}) {
     return new Promise((resolve, reject) => {
       const request = {
         type: 'text',
         data: prompt,
         resolve,
-        reject
+        reject,
+        onChunk: typeof options.onChunk === 'function' ? options.onChunk : null
       };
 
       this.requestQueue.push(request);
@@ -257,13 +291,14 @@ class GeminiService {
     });
   }
 
-  async generateMultimodal(parts) {
+  async generateMultimodal(parts, options = {}) {
     return new Promise((resolve, reject) => {
       const request = {
         type: 'multimodal',
         data: parts,
         resolve,
-        reject
+        reject,
+        onChunk: typeof options.onChunk === 'function' ? options.onChunk : null
       };
 
       this.requestQueue.push(request);
@@ -281,10 +316,11 @@ class GeminiService {
       programmingLanguage: this.programmingLanguage
     });
 
+    const streamOptions = { onChunk: options.onChunk };
     const result = await this.generateMultimodal([
       { text: prompt },
       ...imageParts
-    ]);
+    ], streamOptions);
 
     this.addToHistory('assistant', `Screenshot analysis: ${result}`);
     return result;
@@ -316,7 +352,8 @@ class GeminiService {
       mode: options.mode || 'best-next-answer'
     });
 
-    const result = await this.generateText(prompt);
+    const streamOptions = { onChunk: options.onChunk };
+    const result = await this.generateText(prompt, streamOptions);
     this.addToHistory('assistant', `Ask AI: ${result}`);
     return result;
   }
@@ -333,10 +370,11 @@ class GeminiService {
       mode: options.mode || 'best-next-answer'
     });
 
+    const streamOptions = { onChunk: options.onChunk };
     const result = await this.generateMultimodal([
       { text: prompt },
       ...imageParts
-    ]);
+    ], streamOptions);
 
     this.addToHistory('assistant', `Ask AI: ${result}`);
     return result;
@@ -351,7 +389,8 @@ class GeminiService {
       context
     });
 
-    return this.generateText(prompt);
+    const streamOptions = { onChunk: options.onChunk };
+    return this.generateText(prompt, streamOptions);
   }
 
   async generateMeetingNotes(options = {}) {
@@ -362,20 +401,22 @@ class GeminiService {
       return 'No conversation history to summarize.';
     }
     const prompt = buildMeetingNotesPrompt({ contextString });
-    return this.generateText(prompt);
+    const streamOptions = { onChunk: options.onChunk };
+    return this.generateText(prompt, streamOptions);
   }
 
-  async generateFollowUpEmail() {
+  async generateFollowUpEmail(options = {}) {
     if (this.conversationHistory.length === 0) {
       return 'No conversation history to create email from.';
     }
 
     const contextString = this.getContextString();
     const prompt = buildFollowUpEmailPrompt({ contextString });
-    return this.generateText(prompt);
+    const streamOptions = { onChunk: options.onChunk };
+    return this.generateText(prompt, streamOptions);
   }
 
-  async answerQuestion(question) {
+  async answerQuestion(question, options = {}) {
     const contextString = this.getContextString();
     const prompt = buildAnswerQuestionPrompt({
       contextString,
@@ -383,7 +424,8 @@ class GeminiService {
       programmingLanguage: this.programmingLanguage
     });
 
-    const result = await this.generateText(prompt);
+    const streamOptions = { onChunk: options.onChunk };
+    const result = await this.generateText(prompt, streamOptions);
     this.addToHistory('user', question);
     this.addToHistory('assistant', result);
     return result;
@@ -397,7 +439,8 @@ class GeminiService {
       return 'Not enough conversation data for insights.';
     }
     const prompt = buildInsightsPrompt({ contextString });
-    return this.generateText(prompt);
+    const streamOptions = { onChunk: options.onChunk };
+    return this.generateText(prompt, streamOptions);
   }
 }
 

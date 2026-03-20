@@ -116,18 +116,18 @@ function createAssemblyAiService({
     const apiKey = getAssemblyApiKey();
 
     if (!apiKey) {
-      console.error('ASSEMBLY_AI_API_KEY not found');
+      console.error('AssemblyAI API key not configured in app settings');
       emitSttDebug({
         source: resolvedSource,
         level: 'error',
         event: 'missing-api-key',
-        message: 'ASSEMBLY_AI_API_KEY not configured'
+        message: 'AssemblyAI API key not configured in Settings'
       });
       sendToRenderer('vosk-error', {
         source: resolvedSource,
-        error: 'ASSEMBLY_AI_API_KEY not configured in .env'
+        error: 'AssemblyAI API key not configured. Add it in Settings.'
       });
-      return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured' };
+      return { success: false, error: 'AssemblyAI API key not configured. Add it in Settings.' };
     }
 
     if (isSourceStreaming(resolvedSource)) {
@@ -422,7 +422,7 @@ function createAssemblyAiService({
     const apiKey = getAssemblyApiKey();
 
     if (!apiKey) {
-      return { success: false, error: 'ASSEMBLY_AI_API_KEY not configured in .env' };
+      return { success: false, error: 'AssemblyAI API key not configured. Add it in Settings.' };
     }
 
     try {

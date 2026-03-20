@@ -114,9 +114,11 @@ const settingsPanel = document.getElementById('settings-panel');
 const closeSettingsBtn = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingGeminiKey = document.getElementById('setting-gemini-key');
+const toggleGeminiKeyVisibilityBtn = document.getElementById('toggle-gemini-key-visibility');
 const settingGeminiModel = document.getElementById('setting-gemini-model');
 const settingProgrammingLanguage = document.getElementById('setting-programming-language');
 const settingAssemblyKey = document.getElementById('setting-assembly-key');
+const toggleAssemblyKeyVisibilityBtn = document.getElementById('toggle-assembly-key-visibility');
 const settingAssemblyModel = document.getElementById('setting-assembly-model');
 const settingWindowOpacity = document.getElementById('setting-window-opacity');
 const settingWindowOpacityValue = document.getElementById('setting-window-opacity-value');
@@ -130,6 +132,15 @@ const MIN_WINDOW_HEIGHT = 380;
 const MAX_CHAT_INPUT_HEIGHT = 88;
 
 let isCloseConfirmationOpen = false;
+let hasGeminiApiKeysConfigured = false;
+let hasAssemblyAiApiKeyConfigured = false;
+const aiActionInFlightState = {
+    askAi: false,
+    screenAi: false,
+    suggest: false,
+    notes: false,
+    insights: false
+};
 const shortcutManager = createShortcutManager({ settingsShortcutsList });
 const windowAdjustmentManager = createWindowAdjustmentManager({
     windowResizeHandles,
@@ -159,14 +170,20 @@ const chatUiManager = createChatUiManager({
 const settingsPanelManager = createSettingsPanelManager({
     settingsPanel,
     settingGeminiKey,
+    toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
     settingProgrammingLanguage,
     settingAssemblyKey,
+    toggleAssemblyKeyVisibilityBtn,
     settingAssemblyModel,
     settingWindowOpacity,
     settingWindowOpacityValue,
     applySettingsShortcutConfig: (settings) => applySettingsShortcutConfig(settings),
-    showFeedback: (message, type) => showFeedback(message, type)
+    showFeedback: (message, type) => showFeedback(message, type),
+    onSettingsSaved: (settings) => {
+        applyApiKeyAvailabilityFromSettings(settings);
+        updateUI();
+    }
 });
 const transcriptionManager = createTranscriptionManager({
     transcriptionSourceState,
@@ -320,17 +337,127 @@ function isShortcutPressed(event, shortcutId) {
     return shortcutManager.isShortcutPressed(event, shortcutId);
 }
 
+function isAiActionInFlight(actionId) {
+    return Boolean(aiActionInFlightState[actionId]);
+}
+
+function setAiActionInFlight(actionId, inFlight) {
+    if (!Object.prototype.hasOwnProperty.call(aiActionInFlightState, actionId)) {
+        return;
+    }
+
+    const nextValue = Boolean(inFlight);
+    if (aiActionInFlightState[actionId] === nextValue) {
+        return;
+    }
+
+    aiActionInFlightState[actionId] = nextValue;
+    updateUI();
+}
+
+async function runAiActionWithLock(actionId, action) {
+    if (isAiActionInFlight(actionId)) {
+        return false;
+    }
+
+    setAiActionInFlight(actionId, true);
+    try {
+        await action();
+        return true;
+    } finally {
+        setAiActionInFlight(actionId, false);
+    }
+}
+
+let activeScreenAiStream = null;
+
+function createStreamHandler(actionId) {
+    let accumulatedText = '';
+    let messageRecord = null;
+    let removeChunkListener = null;
+    let loadingHidden = false;
+
+    function start(headingPrefix) {
+        accumulatedText = headingPrefix || '';
+        messageRecord = addChatMessage('ai-response', accumulatedText || '...');
+
+        removeChunkListener = window.electronAPI.onAiStreamChunk((data) => {
+            if (data.actionId !== actionId) return;
+            accumulatedText += data.text;
+            if (messageRecord) {
+                chatUiManager.updateChatMessageContent(messageRecord.id, accumulatedText);
+            }
+            if (!loadingHidden) {
+                loadingHidden = true;
+                hideLoadingOverlay();
+            }
+        });
+
+        return messageRecord;
+    }
+
+    function finalize(finalText) {
+        if (finalText && messageRecord) {
+            chatUiManager.updateChatMessageContent(messageRecord.id, finalText);
+        }
+    }
+
+    function cleanup() {
+        if (removeChunkListener) {
+            removeChunkListener();
+            removeChunkListener = null;
+        }
+    }
+
+    return { start, finalize, cleanup };
+}
+
+function hasConfiguredGeminiApiKeys(value) {
+    const keys = String(value ?? '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    return keys.length > 0;
+}
+
+function hasConfiguredAssemblyAiApiKey(value) {
+    return String(value ?? '').trim().length > 0;
+}
+
+function applyApiKeyAvailabilityFromSettings(settings) {
+    if (!settings || typeof settings !== 'object') {
+        hasGeminiApiKeysConfigured = false;
+        hasAssemblyAiApiKeyConfigured = false;
+        return;
+    }
+
+    if (typeof settings.hasGeminiApiKeys === 'boolean') {
+        hasGeminiApiKeysConfigured = settings.hasGeminiApiKeys;
+    } else {
+        hasGeminiApiKeysConfigured = hasConfiguredGeminiApiKeys(settings.geminiApiKey);
+    }
+
+    if (typeof settings.hasAssemblyAiApiKey === 'boolean') {
+        hasAssemblyAiApiKeyConfigured = settings.hasAssemblyAiApiKey;
+    } else {
+        hasAssemblyAiApiKeyConfigured = hasConfiguredAssemblyAiApiKey(settings.assemblyAiApiKey);
+    }
+}
+
 async function loadShortcutConfig() {
     if (!window.electronAPI?.getSettings) {
+        applyApiKeyAvailabilityFromSettings(null);
         return null;
     }
 
     try {
         const settings = await window.electronAPI.getSettings();
         applySettingsShortcutConfig(settings);
+        applyApiKeyAvailabilityFromSettings(settings);
         return settings;
     } catch (error) {
         console.error('Failed to load shortcut config:', error);
+        applyApiKeyAvailabilityFromSettings(null);
         return null;
     }
 }
@@ -400,6 +527,11 @@ function setSourceSelected(source, enabled) {
 }
 
 async function toggleMasterTranscription() {
+    if (!hasAssemblyAiApiKeyConfigured) {
+        showFeedback('AssemblyAI API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     return transcriptionManager.toggleMasterTranscription();
 }
 
@@ -427,6 +559,11 @@ function buildAskAiContextPayload() {
 }
 
 async function askAiWithSessionContext() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI?.askAiWithSessionContext) {
         showFeedback('Feature not available', 'error');
         return;
@@ -438,52 +575,72 @@ async function askAiWithSessionContext() {
         return;
     }
 
-    try {
-        setAnalyzing(true);
-        showLoadingOverlay('Analyzing full session context...');
-        const result = await window.electronAPI.askAiWithSessionContext(payload);
-        setAnalyzing(false);
-        hideLoadingOverlay();
+    await runAiActionWithLock('askAi', async () => {
+        const stream = createStreamHandler('askAi');
+        try {
+            setAnalyzing(true);
+            showLoadingOverlay('Analyzing full session context...');
+            stream.start('**Best Next Answer:**\n\n');
 
-        if (result?.success && result?.text) {
-            const heading = result.usedScreenshots
-                ? '**Best Next Answer (Transcript + Screen):**'
-                : '**Best Next Answer (Transcript):**';
-            addChatMessage('ai-response', `${heading}\n\n${result.text}`);
-            showFeedback('Ask AI ready', 'success');
-        } else {
-            throw new Error(result?.error || 'Ask AI failed');
+            const result = await window.electronAPI.askAiWithSessionContext(payload);
+
+            if (result?.success && result?.text) {
+                const heading = result.usedScreenshots
+                    ? '**Best Next Answer (Transcript + Screen):**'
+                    : '**Best Next Answer (Transcript):**';
+                stream.finalize(`${heading}\n\n${result.text}`);
+                showFeedback('Ask AI ready', 'success');
+            } else {
+                throw new Error(result?.error || 'Ask AI failed');
+            }
+        } catch (error) {
+            console.error('Ask AI error:', error);
+            showFeedback('Ask AI failed', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
+            stream.cleanup();
+            setAnalyzing(false);
+            hideLoadingOverlay();
         }
-    } catch (error) {
-        console.error('Ask AI error:', error);
-        setAnalyzing(false);
-        hideLoadingOverlay();
-        showFeedback('Ask AI failed', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 async function analyzeScreenshotsOnly() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
     if (bundle.enabledScreenshotIds.length === 0) {
         showFeedback('No enabled screenshots to analyze', 'error');
         return;
     }
 
-    try {
-        setAnalyzing(true);
-        showLoadingOverlay('Analyzing screenshots...');
+    await runAiActionWithLock('screenAi', async () => {
+        const stream = createStreamHandler('screenAi');
+        activeScreenAiStream = stream;
+        try {
+            setAnalyzing(true);
+            showLoadingOverlay('Analyzing screenshots...');
+            stream.start('');
 
-        await window.electronAPI.analyzeStealthWithContext({
-            contextString: bundle.contextString,
-            enabledScreenshotIds: bundle.enabledScreenshotIds
-        });
-    } catch (error) {
-        console.error('Analysis error:', error);
-        showFeedback('Analysis failed', 'error');
-        setAnalyzing(false);
-        hideLoadingOverlay();
-    }
+            await window.electronAPI.analyzeStealthWithContext({
+                contextString: bundle.contextString,
+                enabledScreenshotIds: bundle.enabledScreenshotIds
+            });
+        } catch (error) {
+            console.error('Analysis error:', error);
+            showFeedback('Analysis failed', 'error');
+            setAnalyzing(false);
+            hideLoadingOverlay();
+            // Clean up on error since onAnalysisResult may not fire
+            stream.cleanup();
+            activeScreenAiStream = null;
+        }
+        // Don't cleanup in finally - onAnalysisResult handles it for success path
+        // This avoids a race where the invoke resolves before the event is delivered
+    });
 }
 
 async function clearStealthData() {
@@ -547,107 +704,138 @@ async function closeApplication() {
 // NEW CLUELY-STYLE FEATURES
 
 async function getResponseSuggestions() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI || !window.electronAPI.suggestResponse) {
         showFeedback('Feature not available', 'error');
         return;
     }
 
-    try {
-        showFeedback('Generating suggestions...', 'info');
-        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        if (!bundle.contextString) {
-            showFeedback('No enabled context available for suggestions', 'error');
-            return;
-        }
+    await runAiActionWithLock('suggest', async () => {
+        const stream = createStreamHandler('suggest');
+        try {
+            showFeedback('Generating suggestions...', 'info');
+            const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+            const transcriptOnlyContext = String(bundle.transcriptContext || '').trim();
+            if (!transcriptOnlyContext) {
+                showFeedback('No enabled transcript context available for suggestions', 'error');
+                return;
+            }
 
-        const result = await window.electronAPI.suggestResponse({
-            context: bundle.sessionSummary || 'Current meeting conversation',
-            contextString: bundle.contextString
-        });
+            stream.start('\u{1F4A1} **What should I say?**\n\n');
 
-        if (result.success && result.suggestions) {
-            addChatMessage('ai-response', `\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
-            showFeedback('Suggestions generated', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to generate suggestions');
+            const result = await window.electronAPI.suggestResponse({
+                context: bundle.sessionSummary || 'Current meeting conversation',
+                contextString: transcriptOnlyContext
+            });
+
+            if (result.success && result.suggestions) {
+                stream.finalize(`\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
+                showFeedback('Suggestions generated', 'success');
+            } else {
+                throw new Error(result.error || 'Failed to generate suggestions');
+            }
+        } catch (error) {
+            console.error('Error getting suggestions:', error);
+            showFeedback('Failed to generate suggestions', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
+            stream.cleanup();
         }
-    } catch (error) {
-        console.error('Error getting suggestions:', error);
-        showFeedback('Failed to generate suggestions', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 async function generateMeetingNotes() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI || !window.electronAPI.generateMeetingNotes) {
         showFeedback('Feature not available', 'error');
         return;
     }
 
-    try {
-        showFeedback('Generating meeting notes...', 'info');
-        setAnalyzing(true);
-        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        if (!bundle.contextString) {
+    await runAiActionWithLock('notes', async () => {
+        const stream = createStreamHandler('notes');
+        try {
+            showFeedback('Generating meeting notes...', 'info');
+            setAnalyzing(true);
+            const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+            if (!bundle.contextString) {
+                showFeedback('No enabled context available for notes', 'error');
+                return;
+            }
+
+            stream.start('\u{1F4DD} **Meeting Notes**\n\n');
+
+            const result = await window.electronAPI.generateMeetingNotes({
+                contextString: bundle.contextString
+            });
+
+            if (result.success && result.notes) {
+                stream.finalize(`\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
+                showFeedback('Meeting notes generated', 'success');
+            } else {
+                throw new Error(result.error || 'Failed to generate notes');
+            }
+        } catch (error) {
+            console.error('Error generating notes:', error);
+            showFeedback('Failed to generate notes', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
+            stream.cleanup();
             setAnalyzing(false);
-            showFeedback('No enabled context available for notes', 'error');
-            return;
         }
-
-        const result = await window.electronAPI.generateMeetingNotes({
-            contextString: bundle.contextString
-        });
-
-        setAnalyzing(false);
-
-        if (result.success && result.notes) {
-            addChatMessage('ai-response', `\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
-            showFeedback('Meeting notes generated', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to generate notes');
-        }
-    } catch (error) {
-        console.error('Error generating notes:', error);
-        setAnalyzing(false);
-        showFeedback('Failed to generate notes', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 async function getConversationInsights() {
+    if (!hasGeminiApiKeysConfigured) {
+        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        return;
+    }
+
     if (!window.electronAPI || !window.electronAPI.getConversationInsights) {
         showFeedback('Feature not available', 'error');
         return;
     }
 
-    try {
-        showFeedback('Analyzing conversation...', 'info');
-        setAnalyzing(true);
-        const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
-        if (!bundle.contextString) {
+    await runAiActionWithLock('insights', async () => {
+        const stream = createStreamHandler('insights');
+        try {
+            showFeedback('Analyzing conversation...', 'info');
+            setAnalyzing(true);
+            const bundle = buildFilteredAiContextBundle({ charBudget: AI_CONTEXT_CHAR_BUDGET, emitTruncationLog: true });
+            if (!bundle.contextString) {
+                showFeedback('No enabled context available for insights', 'error');
+                return;
+            }
+
+            stream.start('\u{1F4CA} **Conversation Insights**\n\n');
+
+            const result = await window.electronAPI.getConversationInsights({
+                contextString: bundle.contextString
+            });
+
+            if (result.success && result.insights) {
+                stream.finalize(`\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
+                showFeedback('Insights generated', 'success');
+            } else {
+                throw new Error(result.error || 'Failed to get insights');
+            }
+        } catch (error) {
+            console.error('Error getting insights:', error);
+            showFeedback('Failed to get insights', 'error');
+            addChatMessage('system', `Error: ${error.message}`);
+        } finally {
+            stream.cleanup();
             setAnalyzing(false);
-            showFeedback('No enabled context available for insights', 'error');
-            return;
         }
-
-        const result = await window.electronAPI.getConversationInsights({
-            contextString: bundle.contextString
-        });
-
-        setAnalyzing(false);
-
-        if (result.success && result.insights) {
-            addChatMessage('ai-response', `\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
-            showFeedback('Insights generated', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to get insights');
-        }
-    } catch (error) {
-        console.error('Error getting insights:', error);
-        setAnalyzing(false);
-        showFeedback('Failed to get insights', 'error');
-        addChatMessage('system', `Error: ${error.message}`);
-    }
+    });
 }
 
 // SETTINGS FUNCTIONS
@@ -661,7 +849,11 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-    await settingsPanelManager.saveSettings();
+    const result = await settingsPanelManager.saveSettings();
+    if (result?.success && result?.settings) {
+        applyApiKeyAvailabilityFromSettings(result.settings);
+        updateUI();
+    }
 }
 
 // UI Helper functions
@@ -681,14 +873,45 @@ function updateUI() {
     });
     const hasTranscriptContext = aiBundle.transcriptContext.length > 0;
     const hasEnabledScreenshots = aiBundle.enabledScreenshotIds.length > 0;
+    const hasAiContext = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
+    const canRunAiActions = hasGeminiApiKeysConfigured;
+    const canRunTranscription = hasAssemblyAiApiKeyConfigured;
+    const askAiInFlight = isAiActionInFlight('askAi');
+    const screenAiInFlight = isAiActionInFlight('screenAi');
+    const suggestInFlight = isAiActionInFlight('suggest');
+    const notesInFlight = isAiActionInFlight('notes');
+    const insightsInFlight = isAiActionInFlight('insights');
 
     if (analyzeBtn) {
-        const hasContent = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
-        analyzeBtn.disabled = isAnalyzing || !hasContent;
+        analyzeBtn.disabled = isAnalyzing || askAiInFlight || !canRunAiActions || !hasAiContext;
     }
 
     if (screenAiBtn) {
-        screenAiBtn.disabled = isAnalyzing || !hasEnabledScreenshots;
+        screenAiBtn.disabled = isAnalyzing || screenAiInFlight || !canRunAiActions || !hasEnabledScreenshots;
+    }
+
+    if (suggestBtn) {
+        suggestBtn.disabled = isAnalyzing || suggestInFlight || !canRunAiActions || !hasTranscriptContext;
+    }
+
+    if (notesBtn) {
+        notesBtn.disabled = isAnalyzing || notesInFlight || !canRunAiActions || !hasAiContext;
+    }
+
+    if (insightsBtn) {
+        insightsBtn.disabled = isAnalyzing || insightsInFlight || !canRunAiActions || !hasAiContext;
+    }
+
+    if (transcriptionToggle) {
+        transcriptionToggle.disabled = !canRunTranscription;
+    }
+
+    if (sourceSystemToggle) {
+        sourceSystemToggle.disabled = !canRunTranscription;
+    }
+
+    if (sourceMicToggle) {
+        sourceMicToggle.disabled = !canRunTranscription;
     }
 }
 
@@ -916,7 +1139,15 @@ function setupIpcListeners() {
         transcriptionManager,
         toggleMasterTranscription,
         askAiWithSessionContext,
-        addMonitorLog
+        isAskAiShortcutEnabled: () => Boolean(analyzeBtn && !analyzeBtn.disabled),
+        addMonitorLog,
+        getActiveScreenAiStream: () => activeScreenAiStream,
+        clearActiveScreenAiStream: () => {
+            if (activeScreenAiStream) {
+                activeScreenAiStream.cleanup();
+                activeScreenAiStream = null;
+            }
+        }
     });
 }
 

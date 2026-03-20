@@ -97,7 +97,7 @@ function createGeminiRuntime() {
 
     try {
       if (!apiKey) {
-        console.error('GEMINI_API_KEY not found in environment variables');
+        console.error('Gemini API key not configured in app settings');
         geminiService = null;
         return null;
       }
@@ -249,7 +249,7 @@ function createGeminiRuntime() {
     }
 
     if (!hasApiKeys()) {
-      throw new Error('No API key configured. Please add GEMINI_API_KEY to your .env file.');
+      throw new Error('No Gemini API key configured. Add it in Settings.');
     }
 
     const totalKeys = geminiApiKeys.length;

@@ -11,7 +11,10 @@ export function setupIpcListeners({
     transcriptionManager,
     toggleMasterTranscription,
     askAiWithSessionContext,
-    addMonitorLog
+    isAskAiShortcutEnabled,
+    addMonitorLog,
+    getActiveScreenAiStream,
+    clearActiveScreenAiStream
 }) {
     if (!windowApi) {
         console.error('electronAPI not available');
@@ -31,19 +34,33 @@ export function setupIpcListeners({
     windowApi.onAnalysisStart(() => {
         setAnalyzing(true);
         showLoadingOverlay();
-        addChatMessage('system', 'Analyzing screenshots...');
+        const stream = typeof getActiveScreenAiStream === 'function' ? getActiveScreenAiStream() : null;
+        if (!stream) {
+            addChatMessage('system', 'Analyzing screenshots...');
+        }
     });
 
     windowApi.onAnalysisResult((data) => {
         setAnalyzing(false);
         hideLoadingOverlay();
 
+        const stream = typeof getActiveScreenAiStream === 'function' ? getActiveScreenAiStream() : null;
+        console.log('[onAnalysisResult] stream active:', !!stream, 'has error:', !!data.error);
         if (data.error) {
             addChatMessage('system', `Error: ${data.error}`);
             showFeedback('Analysis failed', 'error');
+        } else if (stream) {
+            stream.finalize(data.text);
+            showFeedback('Analysis complete', 'success');
         } else {
+            console.log('[onAnalysisResult] No active stream - creating new message');
             addChatMessage('ai-response', data.text);
             showFeedback('Analysis complete', 'success');
+        }
+
+        // Clean up the screen AI stream after processing the result
+        if (typeof clearActiveScreenAiStream === 'function') {
+            clearActiveScreenAiStream();
         }
     });
 
@@ -91,6 +108,11 @@ export function setupIpcListeners({
 
     if (windowApi.onTriggerAskAi) {
         windowApi.onTriggerAskAi(() => {
+            if (typeof isAskAiShortcutEnabled === 'function' && !isAskAiShortcutEnabled()) {
+                addMonitorLog('info', 'shortcut-ask-ai-blocked', 'Global Ask AI shortcut ignored because Ask AI is disabled');
+                return;
+            }
+
             addMonitorLog('info', 'shortcut-event', 'Global Ask AI shortcut triggered');
             askAiWithSessionContext().catch((error) => {
                 console.error('Global Ask AI trigger failed:', error);
