@@ -1,5 +1,11 @@
 const GeminiService = require('../../../services/ai/gemini-service');
+const OllamaService = require('../../../services/ai/ollama-service');
 const {
+  resolveAiProvider,
+  getAiProviders,
+  getDefaultAiProvider,
+  getDefaultOllamaBaseUrl,
+  getDefaultOllamaModel,
   resolveGeminiModel,
   resolveProgrammingLanguage,
   getGeminiModels,
@@ -32,8 +38,12 @@ function normalizeGeminiApiKeys(keys) {
 
 function createGeminiRuntime() {
   let geminiService = null;
+  let ollamaService = null;
+  let activeAiProvider = getDefaultAiProvider();
   let activeGeminiModel = getDefaultGeminiModel();
   let activeProgrammingLanguage = getDefaultProgrammingLanguage();
+  let activeOllamaBaseUrl = getDefaultOllamaBaseUrl();
+  let activeOllamaModel = getDefaultOllamaModel();
   let geminiApiKeys = [];
   let activeApiKeyIndex = 0;
   let activeKeyIndexChangeHandler = null;
@@ -245,7 +255,23 @@ function createGeminiRuntime() {
 
   async function executeWithKeyFailover(operation) {
     if (typeof operation !== 'function') {
-      throw new Error('Gemini failover operation must be a function.');
+      throw new Error('AI failover operation must be a function.');
+    }
+
+    // For Ollama, no key failover — just execute directly
+    if (activeAiProvider === 'ollama') {
+      if (!ollamaService) {
+        initializeOllamaService();
+      }
+      if (!ollamaService) {
+        throw new Error('Ollama service not available. Check that Ollama is running.');
+      }
+      return await operation(ollamaService, {
+        activeApiKeyIndex: 0,
+        activeApiKey: '',
+        attempt: 1,
+        totalKeys: 0
+      });
     }
 
     if (!hasApiKeys()) {
@@ -298,7 +324,83 @@ function createGeminiRuntime() {
     throw createAllKeysUnavailableError(lastSwitchEligibleError);
   }
 
+  function initializeOllamaService(
+    baseUrl = activeOllamaBaseUrl,
+    modelName = activeOllamaModel,
+    programmingLanguage = activeProgrammingLanguage
+  ) {
+    activeOllamaBaseUrl = String(baseUrl || getDefaultOllamaBaseUrl()).replace(/\/+$/, '');
+    activeOllamaModel = String(modelName || getDefaultOllamaModel()).trim();
+    activeProgrammingLanguage = resolveProgrammingLanguage(programmingLanguage);
+
+    try {
+      console.log(
+        'Initializing Ollama AI Service with model and language:',
+        activeOllamaModel,
+        activeProgrammingLanguage
+      );
+
+      if (ollamaService) {
+        ollamaService.updateConfiguration({
+          baseUrl: activeOllamaBaseUrl,
+          modelName: activeOllamaModel,
+          programmingLanguage: activeProgrammingLanguage
+        });
+      } else {
+        ollamaService = new OllamaService({
+          baseUrl: activeOllamaBaseUrl,
+          modelName: activeOllamaModel,
+          programmingLanguage: activeProgrammingLanguage
+        });
+      }
+
+      console.log('Ollama AI Service initialized successfully');
+      return ollamaService;
+    } catch (error) {
+      ollamaService = null;
+      console.error('Failed to initialize Ollama AI Service:', error);
+      return null;
+    }
+  }
+
+  function initializeAiService() {
+    if (activeAiProvider === 'ollama') {
+      return initializeOllamaService(activeOllamaBaseUrl, activeOllamaModel, activeProgrammingLanguage);
+    }
+    return initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
+  }
+
+  function setActiveAiProvider(providerName) {
+    activeAiProvider = resolveAiProvider(providerName);
+    return activeAiProvider;
+  }
+
+  function getActiveAiProvider() {
+    return activeAiProvider;
+  }
+
+  function setActiveOllamaBaseUrl(baseUrl) {
+    activeOllamaBaseUrl = String(baseUrl || getDefaultOllamaBaseUrl()).replace(/\/+$/, '');
+    return activeOllamaBaseUrl;
+  }
+
+  function getActiveOllamaBaseUrl() {
+    return activeOllamaBaseUrl;
+  }
+
+  function setActiveOllamaModel(modelName) {
+    activeOllamaModel = String(modelName || getDefaultOllamaModel()).trim();
+    return activeOllamaModel;
+  }
+
+  function getActiveOllamaModel() {
+    return activeOllamaModel;
+  }
+
   function getService() {
+    if (activeAiProvider === 'ollama') {
+      return ollamaService;
+    }
     return geminiService;
   }
 
@@ -326,6 +428,8 @@ function createGeminiRuntime() {
 
   return {
     initializeGeminiService,
+    initializeOllamaService,
+    initializeAiService,
     setKeys,
     getApiKeys,
     hasApiKeys,
@@ -336,10 +440,20 @@ function createGeminiRuntime() {
     isAllKeysUnavailableError,
     setActiveKeyIndexChangeHandler,
     getService,
+    getAiProviders,
+    getDefaultAiProvider,
+    getActiveAiProvider,
+    setActiveAiProvider,
     getGeminiModels,
     getDefaultGeminiModel,
     getActiveGeminiModel,
     setActiveGeminiModel,
+    getDefaultOllamaBaseUrl,
+    getDefaultOllamaModel,
+    getActiveOllamaBaseUrl,
+    setActiveOllamaBaseUrl,
+    getActiveOllamaModel,
+    setActiveOllamaModel,
     getProgrammingLanguages,
     getDefaultProgrammingLanguage,
     getActiveProgrammingLanguage,

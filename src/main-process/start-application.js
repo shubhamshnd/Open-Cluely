@@ -106,25 +106,34 @@ async function startApplication() {
   function loadPersistedAppState() {
     appState = loadAppState(app);
 
+    const activeAiProvider = geminiRuntime.setActiveAiProvider(appState.aiProvider);
     const keyState = geminiRuntime.setKeys(
       normalizeGeminiApiKeys(appState?.geminiApiKey),
       appState.geminiApiKeyIndex
     );
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
+    const activeOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(appState.ollamaBaseUrl);
+    const activeOllamaModel = geminiRuntime.setActiveOllamaModel(appState.ollamaModel);
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
     const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
     const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
 
     if (
+      appState.aiProvider !== activeAiProvider ||
       appState.geminiApiKeyIndex !== keyState.activeApiKeyIndex ||
       appState.geminiModel !== activeGeminiModel ||
+      appState.ollamaBaseUrl !== activeOllamaBaseUrl ||
+      appState.ollamaModel !== activeOllamaModel ||
       appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
       appState.programmingLanguage !== activeProgrammingLanguage ||
       appState.windowOpacityLevel !== activeWindowOpacityLevel
     ) {
       appState = saveAppState(app, {
+        aiProvider: activeAiProvider,
         geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: activeGeminiModel,
+        ollamaBaseUrl: activeOllamaBaseUrl,
+        ollamaModel: activeOllamaModel,
         assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
         programmingLanguage: activeProgrammingLanguage,
         windowOpacityLevel: activeWindowOpacityLevel
@@ -132,8 +141,10 @@ async function startApplication() {
     }
 
     console.log('Loaded app state from:', getAppStatePath(app));
+    console.log('Restored AI provider from app state:', activeAiProvider);
     console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
     console.log('Restored Gemini model from app state:', activeGeminiModel);
+    console.log('Restored Ollama config from app state:', activeOllamaModel, 'at', activeOllamaBaseUrl);
     console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
     console.log('Restored programming language from app state:', activeProgrammingLanguage);
     console.log(`Restored window opacity level from app state: ${activeWindowOpacityLevel}/10`);
@@ -233,11 +244,19 @@ async function startApplication() {
       console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
     });
 
-    geminiRuntime.initializeGeminiService(
-      geminiRuntime.getActiveApiKey(),
-      geminiRuntime.getActiveGeminiModel(),
-      geminiRuntime.getActiveProgrammingLanguage()
-    );
+    if (geminiRuntime.getActiveAiProvider() === 'ollama') {
+      geminiRuntime.initializeOllamaService(
+        geminiRuntime.getActiveOllamaBaseUrl(),
+        geminiRuntime.getActiveOllamaModel(),
+        geminiRuntime.getActiveProgrammingLanguage()
+      );
+    } else {
+      geminiRuntime.initializeGeminiService(
+        geminiRuntime.getActiveApiKey(),
+        geminiRuntime.getActiveGeminiModel(),
+        geminiRuntime.getActiveProgrammingLanguage()
+      );
+    }
 
     app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
     app.commandLine.appendSwitch('ignore-certificate-errors');

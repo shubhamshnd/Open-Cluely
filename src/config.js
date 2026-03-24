@@ -1,3 +1,11 @@
+// AI provider configuration.
+// Supported providers: 'gemini' and 'ollama'.
+const AI_PROVIDERS = ['gemini', 'ollama'];
+const DEFAULT_AI_PROVIDER = 'gemini';
+
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
+const DEFAULT_OLLAMA_MODEL = 'llama3.2';
+
 // Gemini model configuration.
 // The first model in this list is treated as the default model everywhere.
 const GEMINI_MODELS = [
@@ -141,6 +149,31 @@ const KEYBOARD_SHORTCUTS = [
   }
 ];
 
+// AI provider configuration functions
+function getAiProviders() {
+  return [...AI_PROVIDERS];
+}
+
+function getDefaultAiProvider() {
+  return DEFAULT_AI_PROVIDER;
+}
+
+function isConfiguredAiProvider(providerName) {
+  return AI_PROVIDERS.includes(providerName);
+}
+
+function resolveAiProvider(providerName) {
+  return isConfiguredAiProvider(providerName) ? providerName : DEFAULT_AI_PROVIDER;
+}
+
+function getDefaultOllamaBaseUrl() {
+  return DEFAULT_OLLAMA_BASE_URL;
+}
+
+function getDefaultOllamaModel() {
+  return DEFAULT_OLLAMA_MODEL;
+}
+
 // Gemini model configuration functions
 function getGeminiModels() {
   if (!Array.isArray(GEMINI_MODELS) || GEMINI_MODELS.length === 0) {
@@ -247,6 +280,12 @@ function getKeyboardShortcutAccelerator(shortcutId) {
 }
 
 module.exports = {
+  getAiProviders,
+  getDefaultAiProvider,
+  getDefaultOllamaBaseUrl,
+  getDefaultOllamaModel,
+  isConfiguredAiProvider,
+  resolveAiProvider,
   getAssemblyAiSpeechModels,
   getDefaultAssemblyAiSpeechModel,
   getGeminiModels,

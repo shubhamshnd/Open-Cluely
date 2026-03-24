@@ -6,10 +6,13 @@ const APP_STATE_FILE_NAME = 'app-state.json';
 
 function getDefaultAppState() {
   return {
+    aiProvider: null,
     geminiApiKey: null,
     assemblyAiApiKey: null,
     geminiApiKeyIndex: 0,
     geminiModel: null,
+    ollamaBaseUrl: null,
+    ollamaModel: null,
     assemblyAiSpeechModel: null,
     programmingLanguage: null,
     windowOpacityLevel: 10,
@@ -21,6 +24,11 @@ function sanitizeAppState(state) {
   const nextState = getDefaultAppState();
 
   if (state && typeof state === 'object' && !Array.isArray(state)) {
+    const aiProvider = String(state.aiProvider ?? '').trim().toLowerCase();
+    if (aiProvider === 'gemini' || aiProvider === 'ollama') {
+      nextState.aiProvider = aiProvider;
+    }
+
     if (typeof state.geminiApiKey === 'string') {
       const geminiApiKey = state.geminiApiKey.trim();
       nextState.geminiApiKey = geminiApiKey || null;
@@ -38,6 +46,14 @@ function sanitizeAppState(state) {
 
     if (typeof state.geminiModel === 'string' && state.geminiModel.trim()) {
       nextState.geminiModel = state.geminiModel.trim();
+    }
+
+    if (typeof state.ollamaBaseUrl === 'string' && state.ollamaBaseUrl.trim()) {
+      nextState.ollamaBaseUrl = state.ollamaBaseUrl.trim();
+    }
+
+    if (typeof state.ollamaModel === 'string' && state.ollamaModel.trim()) {
+      nextState.ollamaModel = state.ollamaModel.trim();
     }
 
     if (typeof state.assemblyAiSpeechModel === 'string' && state.assemblyAiSpeechModel.trim()) {

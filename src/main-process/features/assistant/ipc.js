@@ -21,7 +21,11 @@
       return getAllKeysUnavailableMessage();
     }
 
-    if (normalizedMessage.includes('no api key configured')) {
+    if (normalizedMessage.includes('ollama service not available') || normalizedMessage.includes('econnrefused')) {
+      return 'Cannot connect to Ollama. Make sure Ollama is running locally.';
+    }
+
+    if (normalizedMessage.includes('no api key configured') || normalizedMessage.includes('no gemini api key')) {
       return 'No Gemini API key configured. Add it in Settings.';
     }
 

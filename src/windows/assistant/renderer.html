@@ -207,24 +207,51 @@
       </div>
       <div class="settings-body">
         <div class="settings-group">
-          <label class="settings-label">Gemini API Key(s)</label>
-          <div class="settings-input-row">
-            <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key(s), comma-separated..." />
-            <button
-              type="button"
-              id="toggle-gemini-key-visibility"
-              class="settings-input-toggle"
-              aria-label="Show Gemini API key"
-              aria-pressed="false"
-            >
-              Show
-            </button>
-          </div>
-          <div class="settings-helper-text">Multiple Gemini keys are supported as comma-separated values.</div>
+          <label class="settings-label">AI Provider</label>
+          <select id="setting-ai-provider" class="settings-input">
+            <option value="gemini">Gemini</option>
+            <option value="ollama">Ollama (Local)</option>
+          </select>
         </div>
-        <div class="settings-group">
-          <label class="settings-label">Gemini Model</label>
-          <select id="setting-gemini-model" class="settings-input"></select>
+        <div id="gemini-settings-group">
+          <div class="settings-group">
+            <label class="settings-label">Gemini API Key(s)</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-gemini-key" class="settings-input" placeholder="Enter Gemini API key(s), comma-separated..." />
+              <button
+                type="button"
+                id="toggle-gemini-key-visibility"
+                class="settings-input-toggle"
+                aria-label="Show Gemini API key"
+                aria-pressed="false"
+              >
+                Show
+              </button>
+            </div>
+            <div class="settings-helper-text">Multiple Gemini keys are supported as comma-separated values.</div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Gemini Model</label>
+            <select id="setting-gemini-model" class="settings-input"></select>
+          </div>
+        </div>
+        <div id="ollama-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">Ollama Server URL</label>
+            <input type="text" id="setting-ollama-base-url" class="settings-input" placeholder="http://localhost:11434" />
+            <div class="settings-helper-text">URL of your running Ollama instance.</div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Ollama Model</label>
+            <div class="settings-input-row">
+              <input type="text" id="setting-ollama-model" class="settings-input" placeholder="llama3.2" />
+              <button type="button" id="fetch-ollama-models" class="settings-input-toggle" aria-label="Fetch available Ollama models">
+                Fetch
+              </button>
+            </div>
+            <div class="settings-helper-text">Enter a model name or click Fetch to list installed models.</div>
+            <select id="setting-ollama-model-select" class="settings-input hidden"></select>
+          </div>
         </div>
         <div class="settings-group">
           <label class="settings-label">Programming Language</label>

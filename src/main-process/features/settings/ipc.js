@@ -23,6 +23,7 @@ function registerSettingsIpc({
     const assemblyAiApiKey = typeof appState?.assemblyAiApiKey === 'string' ? appState.assemblyAiApiKey : '';
 
     return {
+      aiProvider: geminiRuntime.getActiveAiProvider(),
       geminiApiKey,
       assemblyAiApiKey,
       hasGeminiApiKeys: geminiApiKey.split(',').map((value) => value.trim()).filter(Boolean).length > 0,
@@ -30,6 +31,10 @@ function registerSettingsIpc({
       geminiModel: geminiRuntime.getActiveGeminiModel(),
       geminiModels: geminiRuntime.getGeminiModels(),
       defaultGeminiModel: geminiRuntime.getDefaultGeminiModel(),
+      ollamaBaseUrl: geminiRuntime.getActiveOllamaBaseUrl(),
+      ollamaModel: geminiRuntime.getActiveOllamaModel(),
+      defaultOllamaBaseUrl: geminiRuntime.getDefaultOllamaBaseUrl(),
+      defaultOllamaModel: geminiRuntime.getDefaultOllamaModel(),
       programmingLanguage: geminiRuntime.getActiveProgrammingLanguage(),
       programmingLanguages: geminiRuntime.getProgrammingLanguages(),
       defaultProgrammingLanguage: geminiRuntime.getDefaultProgrammingLanguage(),
@@ -69,9 +74,12 @@ function registerSettingsIpc({
 
     try {
       const appEnvironment = getAppEnvironment();
+      const nextAiProvider = geminiRuntime.setActiveAiProvider(settings.aiProvider);
       const nextGeminiApiKey = String(settings.geminiApiKey || '').trim();
       const nextAssemblyAiApiKey = String(settings.assemblyAiApiKey || '').trim();
       const nextGeminiModel = geminiRuntime.setActiveGeminiModel(settings.geminiModel);
+      const nextOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(settings.ollamaBaseUrl);
+      const nextOllamaModel = geminiRuntime.setActiveOllamaModel(settings.ollamaModel);
       const nextAssemblyModel = setAssemblyAiSpeechModel(settings.assemblyAiSpeechModel);
       const nextProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(settings.programmingLanguage);
       const nextWindowOpacityLevel = windowController.setWindowOpacityLevel(settings.windowOpacityLevel);
@@ -87,10 +95,13 @@ function registerSettingsIpc({
 
       const keyState = geminiRuntime.setKeys(nextGeminiApiKey, 0);
       const updatedAppState = saveAppState(app, {
+        aiProvider: nextAiProvider,
         geminiApiKey: nextGeminiApiKey,
         assemblyAiApiKey: nextAssemblyAiApiKey,
         geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: nextGeminiModel,
+        ollamaBaseUrl: nextOllamaBaseUrl,
+        ollamaModel: nextOllamaModel,
         assemblyAiSpeechModel: nextAssemblyModel,
         programmingLanguage: nextProgrammingLanguage,
         windowOpacityLevel: nextWindowOpacityLevel
@@ -101,15 +112,25 @@ function registerSettingsIpc({
 
       console.log('Saved app state to:', getAppStatePath(app));
       console.log('Settings saved to:', updatedEnvironment.envPath);
+      console.log('Applied AI provider:', nextAiProvider);
       console.log('Applied programming language:', nextProgrammingLanguage);
       console.log(`Applied window opacity level: ${nextWindowOpacityLevel}/10`);
-      console.log(`Applied Gemini API key index: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
 
-      geminiRuntime.initializeGeminiService(
-        keyState.activeApiKey,
-        nextGeminiModel,
-        nextProgrammingLanguage
-      );
+      if (nextAiProvider === 'ollama') {
+        console.log(`Applied Ollama model: ${nextOllamaModel} at ${nextOllamaBaseUrl}`);
+        geminiRuntime.initializeOllamaService(
+          nextOllamaBaseUrl,
+          nextOllamaModel,
+          nextProgrammingLanguage
+        );
+      } else {
+        console.log(`Applied Gemini API key index: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
+        geminiRuntime.initializeGeminiService(
+          keyState.activeApiKey,
+          nextGeminiModel,
+          nextProgrammingLanguage
+        );
+      }
 
       return { success: true };
     } catch (error) {

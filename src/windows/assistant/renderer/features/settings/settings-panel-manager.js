@@ -4,10 +4,17 @@ function clamp(value, min, max) {
 
 export function createSettingsPanelManager({
     settingsPanel,
+    settingAiProvider,
+    geminiSettingsGroup,
+    ollamaSettingsGroup,
     settingGeminiKey,
     toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
     settingProgrammingLanguage,
+    settingOllamaBaseUrl,
+    settingOllamaModel,
+    settingOllamaModelSelect,
+    fetchOllamaModelsBtn,
     settingAssemblyKey,
     toggleAssemblyKeyVisibilityBtn,
     settingAssemblyModel,
@@ -60,6 +67,99 @@ export function createSettingsPanelManager({
         toggleButton.addEventListener('click', () => {
             const nextVisible = inputElement.type !== 'text';
             setApiKeyFieldVisibility(inputElement, toggleButton, providerName, nextVisible);
+        });
+    }
+
+    function updateProviderVisibility(provider) {
+        const isGemini = provider !== 'ollama';
+
+        if (geminiSettingsGroup) {
+            geminiSettingsGroup.classList.toggle('hidden', !isGemini);
+        }
+        if (ollamaSettingsGroup) {
+            ollamaSettingsGroup.classList.toggle('hidden', isGemini);
+        }
+    }
+
+    function bindProviderToggle() {
+        if (!settingAiProvider) {
+            return;
+        }
+
+        settingAiProvider.addEventListener('change', () => {
+            updateProviderVisibility(settingAiProvider.value);
+        });
+    }
+
+    async function fetchOllamaModels() {
+        if (!settingOllamaBaseUrl || !settingOllamaModelSelect) {
+            return;
+        }
+
+        const baseUrl = settingOllamaBaseUrl.value.trim() || 'http://localhost:11434';
+
+        try {
+            if (fetchOllamaModelsBtn) {
+                fetchOllamaModelsBtn.textContent = '...';
+                fetchOllamaModelsBtn.disabled = true;
+            }
+
+            const response = await fetch(`${baseUrl}/api/tags`);
+            if (!response.ok) {
+                throw new Error(`Ollama API returned ${response.status}`);
+            }
+
+            const data = await response.json();
+            const models = Array.isArray(data.models) ? data.models : [];
+
+            if (models.length === 0) {
+                showFeedback?.('No models found. Pull a model first with: ollama pull <model>', 'error');
+                return;
+            }
+
+            settingOllamaModelSelect.innerHTML = '';
+            models.forEach((model) => {
+                const option = document.createElement('option');
+                option.value = model.name;
+                option.textContent = model.name;
+                settingOllamaModelSelect.appendChild(option);
+            });
+
+            // Pre-select current model if it's in the list
+            const currentModel = settingOllamaModel ? settingOllamaModel.value.trim() : '';
+            const modelNames = models.map((m) => m.name);
+            if (currentModel && modelNames.includes(currentModel)) {
+                settingOllamaModelSelect.value = currentModel;
+            }
+
+            settingOllamaModelSelect.classList.remove('hidden');
+
+            // When user picks from dropdown, update the text input
+            settingOllamaModelSelect.addEventListener('change', () => {
+                if (settingOllamaModel) {
+                    settingOllamaModel.value = settingOllamaModelSelect.value;
+                }
+            }, { once: false });
+
+            showFeedback?.(`Found ${models.length} model(s). Select one from the dropdown.`, 'success');
+        } catch (error) {
+            console.error('Failed to fetch Ollama models:', error);
+            showFeedback?.(`Could not reach Ollama at ${baseUrl}. Is it running?`, 'error');
+        } finally {
+            if (fetchOllamaModelsBtn) {
+                fetchOllamaModelsBtn.textContent = 'Fetch';
+                fetchOllamaModelsBtn.disabled = false;
+            }
+        }
+    }
+
+    function bindFetchOllamaModels() {
+        if (!fetchOllamaModelsBtn) {
+            return;
+        }
+
+        fetchOllamaModelsBtn.addEventListener('click', () => {
+            fetchOllamaModels();
         });
     }
 
@@ -144,8 +244,23 @@ export function createSettingsPanelManager({
             const settings = await window.electronAPI.getSettings();
             if (settings && !settings.error) {
                 applySettingsShortcutConfig?.(settings);
+
+                // AI Provider
+                const activeProvider = settings.aiProvider || 'gemini';
+                if (settingAiProvider) {
+                    settingAiProvider.value = activeProvider;
+                }
+                updateProviderVisibility(activeProvider);
+
+                // Gemini settings
                 if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
                 populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
+
+                // Ollama settings
+                if (settingOllamaBaseUrl) settingOllamaBaseUrl.value = settings.ollamaBaseUrl || 'http://localhost:11434';
+                if (settingOllamaModel) settingOllamaModel.value = settings.ollamaModel || 'llama3.2';
+                if (settingOllamaModelSelect) settingOllamaModelSelect.classList.add('hidden');
+
                 populateProgrammingLanguageOptions(
                     settings.programmingLanguages,
                     settings.programmingLanguage || settings.defaultProgrammingLanguage
@@ -181,8 +296,12 @@ export function createSettingsPanelManager({
 
     async function saveSettings() {
         try {
-            if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
-                throw new Error('Gemini models are not configured.');
+            const aiProvider = settingAiProvider ? settingAiProvider.value : 'gemini';
+
+            if (aiProvider === 'gemini') {
+                if (!settingGeminiModel || settingGeminiModel.options.length === 0) {
+                    throw new Error('Gemini models are not configured.');
+                }
             }
 
             if (!settingProgrammingLanguage || settingProgrammingLanguage.options.length === 0) {
@@ -194,9 +313,12 @@ export function createSettingsPanelManager({
             }
 
             const settings = {
+                aiProvider,
                 geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
                 assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
-                geminiModel: settingGeminiModel.value,
+                geminiModel: settingGeminiModel ? settingGeminiModel.value : '',
+                ollamaBaseUrl: settingOllamaBaseUrl ? settingOllamaBaseUrl.value.trim() : '',
+                ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : '',
                 programmingLanguage: settingProgrammingLanguage.value,
                 assemblyAiSpeechModel: settingAssemblyModel.value,
                 windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
@@ -205,7 +327,7 @@ export function createSettingsPanelManager({
             const result = await window.electronAPI.saveSettings(settings);
 
             if (result.success) {
-                showFeedback?.('Settings saved. Latest API keys and AI settings are active now; voice model applies next session.', 'success');
+                showFeedback?.('Settings saved. Latest AI settings are active now; voice model applies next session.', 'success');
                 onSettingsSaved?.(settings);
                 closeSettings();
                 return { success: true, settings };
@@ -222,6 +344,8 @@ export function createSettingsPanelManager({
 
     bindApiKeyVisibilityToggle(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini');
     bindApiKeyVisibilityToggle(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI');
+    bindProviderToggle();
+    bindFetchOllamaModels();
 
     return {
         normalizeWindowOpacityLevel,

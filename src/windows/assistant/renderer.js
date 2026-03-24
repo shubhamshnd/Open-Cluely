@@ -113,9 +113,16 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsPanel = document.getElementById('settings-panel');
 const closeSettingsBtn = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
+const settingAiProvider = document.getElementById('setting-ai-provider');
+const geminiSettingsGroup = document.getElementById('gemini-settings-group');
+const ollamaSettingsGroup = document.getElementById('ollama-settings-group');
 const settingGeminiKey = document.getElementById('setting-gemini-key');
 const toggleGeminiKeyVisibilityBtn = document.getElementById('toggle-gemini-key-visibility');
 const settingGeminiModel = document.getElementById('setting-gemini-model');
+const settingOllamaBaseUrl = document.getElementById('setting-ollama-base-url');
+const settingOllamaModel = document.getElementById('setting-ollama-model');
+const settingOllamaModelSelect = document.getElementById('setting-ollama-model-select');
+const fetchOllamaModelsBtn = document.getElementById('fetch-ollama-models');
 const settingProgrammingLanguage = document.getElementById('setting-programming-language');
 const settingAssemblyKey = document.getElementById('setting-assembly-key');
 const toggleAssemblyKeyVisibilityBtn = document.getElementById('toggle-assembly-key-visibility');
@@ -169,10 +176,17 @@ const chatUiManager = createChatUiManager({
 });
 const settingsPanelManager = createSettingsPanelManager({
     settingsPanel,
+    settingAiProvider,
+    geminiSettingsGroup,
+    ollamaSettingsGroup,
     settingGeminiKey,
     toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
     settingProgrammingLanguage,
+    settingOllamaBaseUrl,
+    settingOllamaModel,
+    settingOllamaModelSelect,
+    fetchOllamaModelsBtn,
     settingAssemblyKey,
     toggleAssemblyKeyVisibilityBtn,
     settingAssemblyModel,
@@ -431,7 +445,10 @@ function applyApiKeyAvailabilityFromSettings(settings) {
         return;
     }
 
-    if (typeof settings.hasGeminiApiKeys === 'boolean') {
+    // Ollama doesn't require API keys, so treat it as always configured
+    if (settings.aiProvider === 'ollama') {
+        hasGeminiApiKeysConfigured = true;
+    } else if (typeof settings.hasGeminiApiKeys === 'boolean') {
         hasGeminiApiKeysConfigured = settings.hasGeminiApiKeys;
     } else {
         hasGeminiApiKeysConfigured = hasConfiguredGeminiApiKeys(settings.geminiApiKey);
