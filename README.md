@@ -311,3 +311,6 @@ If you want to exclude generated artifacts while experimenting:
 ```powershell
 npx repomix . --style plain -o repomix-output.txt -i "repomix-output.txt,cache/**"
 ```
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=shubhamshnd/Open-Cluely&type=Date)](https://star-history.com/#shubhamshnd/Open-Cluely&Date)
