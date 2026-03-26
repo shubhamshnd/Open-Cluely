@@ -1,17 +1,17 @@
 /* COMPACT GLASS OVERLAY - CLUELY STYLE WITH CHAT INTERFACE */
 
 :root {
-  --glass-shell-bg: rgba(255, 255, 255, 0.3);
-  --glass-shell-border: rgba(255, 255, 255, 0.32);
-  --glass-panel-bg: rgba(255, 255, 255, 0.24);
-  --glass-panel-border: rgba(255, 255, 255, 0.28);
-  --glass-header-bg: rgba(255, 255, 255, 0.32);
-  --glass-control-bg: rgba(255, 255, 255, 0.32);
-  --glass-control-border: rgba(255, 255, 255, 0.34);
-  --glass-input-bg: rgba(255, 255, 255, 0.46);
-  --glass-input-focus-bg: rgba(255, 255, 255, 0.56);
-  --glass-message-bg: rgba(255, 255, 255, 0.28);
-  --glass-settings-bg: rgba(255, 255, 255, 0.4);
+  --glass-shell-bg: rgba(255, 255, 255, 0.05);
+  --glass-shell-border: rgba(255, 255, 255, 0.3);
+  --glass-panel-bg: rgba(255, 255, 255, 0.05);
+  --glass-panel-border: rgba(255, 255, 255, 0.3);
+  --glass-header-bg: rgba(255, 255, 255, 0.08);
+  --glass-control-bg: rgba(255, 255, 255, 0.1);
+  --glass-control-border: rgba(255, 255, 255, 0.3);
+  --glass-input-bg: rgba(255, 255, 255, 0.1);
+  --glass-input-focus-bg: rgba(255, 255, 255, 0.15);
+  --glass-message-bg: rgba(255, 255, 255, 0.05);
+  --glass-settings-bg: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -29,7 +29,7 @@ button {
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: transparent !important;
-  color: #000;
+  color: #fff;
   overflow: hidden;
   cursor: default;
   font-size: 11px;
@@ -56,7 +56,8 @@ body {
   /* Cluely-style glass effect */
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
 
   -webkit-app-region: no-drag;
   opacity: 1;
@@ -253,7 +254,7 @@ body {
 .timer {
   font-size: 11px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   font-family: 'SF Mono', Monaco, Consolas, monospace;
   min-width: 35px;
 }
@@ -342,7 +343,7 @@ body {
 .action-btn {
   background: var(--glass-control-bg);
   border: 1px solid var(--glass-control-border);
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   padding: 6px 8px;
   border-radius: 6px;
   font-size: 10px;
@@ -391,8 +392,8 @@ body {
   height: 20px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.24);
-  color: rgba(0, 0, 0, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -402,7 +403,7 @@ body {
 
 .source-toggle:hover {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .source-toggle:disabled {
@@ -431,7 +432,7 @@ body {
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.15);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -487,7 +488,7 @@ body {
 .action-btn.screen-ai-btn {
   background: rgba(14, 165, 233, 0.28);
   border-color: rgba(14, 165, 233, 0.5);
-  color: rgba(0, 0, 0, 0.88);
+  color: rgba(255, 255, 255, 0.95);
   font-weight: 700;
   padding: 6px 10px;
 }
@@ -594,7 +595,7 @@ body {
   padding: 5px 6px;
   border-radius: 8px;
   border: 1px solid var(--glass-panel-border);
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(18px);
 }
 
@@ -610,7 +611,7 @@ body {
   font-weight: 800;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .monitor-master-state {
@@ -644,14 +645,14 @@ body {
   padding: 2px 5px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.26);
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .monitor-source-label {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .monitor-status-badge {
@@ -684,7 +685,7 @@ body {
   min-width: 0;
   font-size: 9px;
   line-height: 1.2;
-  color: rgba(0, 0, 0, 0.76);
+  color: rgba(255, 255, 255, 0.8);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -704,9 +705,9 @@ body {
   line-height: 1.2;
   padding: 1px 5px;
   border-radius: 3px;
-  color: rgba(0, 0, 0, 0.78);
-  background: rgba(255, 255, 255, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .monitor-log-entry.error {
@@ -772,7 +773,7 @@ body.chat-resizing * {
 .chat-title {
   font-size: 11px;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -795,7 +796,7 @@ body.chat-resizing * {
   align-items: flex-end;
   gap: 5px;
   border-top: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(14px);
   cursor: default;
 }
@@ -805,15 +806,15 @@ body.chat-resizing * {
   min-height: 22px;
   max-height: 88px;
   padding: 3px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
   resize: none;
   outline: none;
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(0, 0, 0, 0.9);
-  background: rgba(255, 255, 255, 0.38);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
   font-family: inherit;
   cursor: default;
 }
@@ -824,13 +825,13 @@ body.chat-resizing * {
 }
 
 .chat-manual-input::placeholder {
-  color: rgba(0, 0, 0, 0.48);
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .chat-manual-send {
   border: 1px solid rgba(59, 130, 246, 0.5);
   background: rgba(59, 130, 246, 0.22);
-  color: rgba(0, 0, 0, 0.84);
+  color: rgba(255, 255, 255, 0.95);
   border-radius: 6px;
   font-size: 10px;
   font-weight: 700;
@@ -859,41 +860,46 @@ body.chat-resizing * {
   border-radius: 7px;
   backdrop-filter: blur(15px);
   transition: all 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .chat-message.voice-message {
-  background: rgba(34, 197, 94, 0.25);
+  background: rgba(34, 197, 94, 0.08);
   border-left: 3px solid rgba(34, 197, 94, 0.8);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  border-left-color: rgba(34, 197, 94, 0.8);
 }
 
 .chat-message.screenshot-message {
-  background: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.08);
   border-left: 3px solid rgba(59, 130, 246, 0.8);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  border-left-color: rgba(59, 130, 246, 0.8);
 }
 
 .chat-message.ai-response-message {
-  background: rgba(147, 51, 234, 0.25);
+  background: rgba(147, 51, 234, 0.08);
   border-left: 3px solid rgba(147, 51, 234, 0.8);
-  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.15);
+  border-color: rgba(147, 51, 234, 0.3);
+  border-left-color: rgba(147, 51, 234, 0.8);
 }
 
 .chat-message.system-message {
-  background: rgba(156, 163, 175, 0.25);
+  background: rgba(156, 163, 175, 0.08);
   border-left: 3px solid rgba(156, 163, 175, 0.8);
-  box-shadow: 0 2px 8px rgba(156, 163, 175, 0.15);
+  border-color: rgba(156, 163, 175, 0.3);
+  border-left-color: rgba(156, 163, 175, 0.8);
 }
 
 .chat-message.interim {
-  background: rgba(255, 193, 7, 0.1);
+  background: rgba(255, 193, 7, 0.05);
   border-left: 3px solid rgba(255, 193, 7, 0.6);
   opacity: 0.8;
 }
 
 .chat-message.partial {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(34, 197, 94, 0.05);
   border-left: 3px solid rgba(34, 197, 94, 0.8);
   opacity: 0.9;
   animation: pulse 1.5s ease-in-out infinite;
@@ -922,7 +928,7 @@ body.chat-resizing * {
 
 .partial-text {
   font-style: italic;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .message-header {
@@ -940,7 +946,7 @@ body.chat-resizing * {
 
 .message-time {
   font-size: 9px;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.6);
   font-family: 'SF Mono', Monaco, Consolas, monospace;
   margin-left: 2px;
 }
@@ -952,27 +958,28 @@ body.chat-resizing * {
   letter-spacing: 0.04em;
   padding: 1px 4px;
   border-radius: 3px;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .message-content {
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(0, 0, 0, 0.95);
+  color: rgba(255, 255, 255, 0.95);
   -webkit-user-select: text;
   user-select: text;
   word-wrap: break-word;
-  background: var(--glass-message-bg);
+  background: rgba(255, 255, 255, 0.03);
   padding: 4px 6px;
   border-radius: 5px;
   font-weight: 500;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .ai-include-toggle {
   border: 1px solid rgba(255, 255, 255, 0.42);
   background: rgba(16, 185, 129, 0.26);
-  color: rgba(0, 0, 0, 0.84);
+  color: rgba(255, 255, 255, 0.9);
   border-radius: 999px;
   padding: 1px 6px;
   font-size: 9px;
@@ -996,7 +1003,7 @@ body.chat-resizing * {
 .message-copy-btn {
   border: 1px solid rgba(255, 255, 255, 0.42);
   background: rgba(59, 130, 246, 0.18);
-  color: rgba(0, 0, 0, 0.84);
+  color: rgba(255, 255, 255, 0.9);
   border-radius: 4px;
   width: 18px;
   height: 18px;
@@ -1053,14 +1060,14 @@ body.chat-resizing * {
 }
 
 .message-content.system-message {
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.6);
   font-style: italic;
 }
 
 .message-content.ai-response {
-  color: rgba(0, 0, 0, 0.98);
+  color: rgba(255, 255, 255, 0.98);
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.05);
   font-size: 11px;
 }
 
@@ -1106,7 +1113,7 @@ body.chat-resizing * {
   gap: 6px;
   font-size: 11px;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .ai-response-icon {
@@ -1121,7 +1128,7 @@ body.chat-resizing * {
 .close-btn {
   background: var(--glass-control-bg);
   border: 1px solid var(--glass-control-border);
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   padding: 4px;
   border-radius: 4px;
   cursor: pointer;
@@ -1148,7 +1155,7 @@ body.chat-resizing * {
 .result-text {
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -1223,7 +1230,7 @@ body.chat-resizing * {
 }
 
 .result-text strong, .message-content strong {
-  color: rgba(0, 0, 0, 0.95);
+  color: rgba(255, 255, 255, 0.98);
   font-weight: 800;
   background: rgba(255, 215, 0, 0.15);
   padding: 1px 3px;
@@ -1233,7 +1240,7 @@ body.chat-resizing * {
 .result-text h1, .message-content h1,
 .result-text h2, .message-content h2,
 .result-text h3, .message-content h3 {
-  color: rgba(0, 0, 0, 0.95);
+  color: rgba(255, 255, 255, 0.95);
   font-weight: 700;
   margin: 8px 0 4px 0;
   background: rgba(100, 180, 255, 0.15);
@@ -1250,7 +1257,7 @@ body.chat-resizing * {
 
 .result-text li, .message-content li {
   margin: 3px 0;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* COMPACT LOADING OVERLAY */
@@ -1260,7 +1267,7 @@ body.chat-resizing * {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(30px);
   display: flex;
   flex-direction: column;
@@ -1294,7 +1301,7 @@ body.chat-resizing * {
 
 .loading-text {
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-weight: 600;
   line-height: 1.5;
   max-width: 300px;
@@ -1303,7 +1310,7 @@ body.chat-resizing * {
 .loading-text small {
   display: block;
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 400;
   margin-top: 4px;
 }
@@ -1493,8 +1500,8 @@ body.chat-resizing * {
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.32);
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 12px;
   box-shadow: 0 12px 36px rgba(15, 23, 42, 0.22);
   backdrop-filter: blur(24px);
@@ -1503,13 +1510,13 @@ body.chat-resizing * {
 .close-confirmation-title {
   font-size: 13px;
   font-weight: 800;
-  color: rgba(0, 0, 0, 0.86);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .close-confirmation-text {
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(0, 0, 0, 0.72);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .close-confirmation-actions {
@@ -1531,13 +1538,13 @@ body.chat-resizing * {
 }
 
 .close-confirmation-btn-secondary {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: rgba(255, 255, 255, 0.45);
-  color: rgba(0, 0, 0, 0.76);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .close-confirmation-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .close-confirmation-btn-danger {
@@ -1567,7 +1574,7 @@ body.chat-resizing * {
 .settings-title {
   font-size: 12px;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .settings-body {
@@ -1588,7 +1595,7 @@ body.chat-resizing * {
 .settings-label {
   font-size: 10px;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(255, 255, 255, 0.8);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1606,7 +1613,7 @@ body.chat-resizing * {
   border-radius: 999px;
   background: rgba(59, 130, 246, 0.18);
   border: 1px solid rgba(59, 130, 246, 0.28);
-  color: rgba(15, 23, 42, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 10px;
   font-weight: 700;
   text-align: center;
@@ -1615,11 +1622,11 @@ body.chat-resizing * {
 
 .settings-input {
   background: var(--glass-input-bg);
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-family: 'SF Mono', Monaco, Consolas, monospace;
   outline: none;
   transition: all 0.2s ease;
@@ -1644,7 +1651,7 @@ body.chat-resizing * {
   border-radius: 6px;
   border: 1px solid rgba(59, 130, 246, 0.45);
   background: rgba(59, 130, 246, 0.16);
-  color: rgba(15, 23, 42, 0.85);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 10px;
   font-weight: 700;
   font-family: inherit;
@@ -1669,14 +1676,14 @@ body.chat-resizing * {
 }
 
 .settings-input::placeholder {
-  color: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.4);
 }
 
 select.settings-input {
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%23e2e8f0' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 6px center;
   padding-right: 22px;
@@ -1736,8 +1743,8 @@ select.settings-input {
   gap: 8px;
   padding: 4px 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .settings-shortcut-meta {
@@ -1753,7 +1760,7 @@ select.settings-input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(15, 23, 42, 0.8);
+  color: rgba(255, 255, 255, 0.85);
   flex: 0 0 auto;
 }
 
@@ -1766,7 +1773,7 @@ select.settings-input {
 .settings-shortcut-button {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.76);
+  color: rgba(255, 255, 255, 0.85);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1781,7 +1788,7 @@ select.settings-input {
 
 .settings-shortcut-description {
   font-size: 9px;
-  color: rgba(0, 0, 0, 0.58);
+  color: rgba(255, 255, 255, 0.6);
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1791,7 +1798,7 @@ select.settings-input {
 .settings-shortcut-key {
   font-size: 10px;
   font-weight: 700;
-  color: rgba(15, 23, 42, 0.84);
+  color: rgba(255, 255, 255, 0.9);
   font-family: 'SF Mono', Monaco, Consolas, monospace;
   padding: 2px 6px;
   border-radius: 999px;
@@ -1801,20 +1808,20 @@ select.settings-input {
 
 .settings-shortcuts-empty {
   font-size: 10px;
-  color: rgba(0, 0, 0, 0.58);
+  color: rgba(255, 255, 255, 0.6);
   padding: 4px 0;
 }
 
 .settings-helper-text {
   font-size: 9px;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.6);
   line-height: 1.35;
 }
 
 .settings-helper-text code {
   font-size: 9px;
-  background: rgba(255, 255, 255, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 4px;
   padding: 1px 4px;
 }
@@ -1853,17 +1860,17 @@ select.settings-input {
 
 /* THEME: DARK MODE */
 body.theme-dark {
-  --glass-shell-bg: rgba(8, 14, 28, 0.72);
-  --glass-shell-border: rgba(148, 163, 184, 0.34);
-  --glass-panel-bg: rgba(15, 23, 42, 0.56);
+  --glass-shell-bg: rgba(8, 14, 28, 0.08);
+  --glass-shell-border: rgba(148, 163, 184, 0.3);
+  --glass-panel-bg: rgba(15, 23, 42, 0.08);
   --glass-panel-border: rgba(148, 163, 184, 0.24);
-  --glass-header-bg: rgba(30, 41, 59, 0.55);
-  --glass-control-bg: rgba(30, 41, 59, 0.62);
-  --glass-control-border: rgba(148, 163, 184, 0.36);
-  --glass-input-bg: rgba(15, 23, 42, 0.74);
-  --glass-input-focus-bg: rgba(30, 41, 59, 0.82);
-  --glass-message-bg: rgba(15, 23, 42, 0.56);
-  --glass-settings-bg: rgba(2, 6, 23, 0.72);
+  --glass-header-bg: rgba(30, 41, 59, 0.1);
+  --glass-control-bg: rgba(30, 41, 59, 0.15);
+  --glass-control-border: rgba(148, 163, 184, 0.3);
+  --glass-input-bg: rgba(15, 23, 42, 0.15);
+  --glass-input-focus-bg: rgba(30, 41, 59, 0.2);
+  --glass-message-bg: rgba(15, 23, 42, 0.08);
+  --glass-settings-bg: rgba(2, 6, 23, 0.1);
   color: rgba(226, 232, 240, 0.94);
 }
 
@@ -2035,9 +2042,9 @@ body.theme-dark .message-content .key-points {
 
 body.theme-dark .result-text strong,
 body.theme-dark .message-content strong {
-  color: rgba(15, 23, 42, 0.95);
-  background: rgba(250, 204, 21, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.5);
+  color: rgba(255, 255, 255, 0.98);
+  background: rgba(250, 204, 21, 0.2);
+  box-shadow: none;
 }
 
 body.theme-dark .ai-include-toggle {
