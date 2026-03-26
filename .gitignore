@@ -50,5 +50,8 @@ Thumbs.db
 cache/
 logs.txt
 
+# Archives
+*.zip
+
 #.md files
 # notes.md
