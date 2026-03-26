@@ -8,10 +8,6 @@ logs/
 *.log
 npm-debug.log*
 
-# LF
-
-*.zip
-
 # Dependency directories
 pids/
 *.pid
