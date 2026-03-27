@@ -21,6 +21,7 @@ Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview A
 - Multiple Gemini API keys are supported as a comma-separated list, with automatic failover on quota or authentication errors.
 - Settings support Gemini model selection, AssemblyAI speech model selection, programming language preference, and window opacity.
 - Session state is persisted to `cache/app-state.json`, and screenshot retention is bounded by `MAX_SCREENSHOTS`.
+- **Mobile companion** — a built-in web server exposes a mobile-optimised chat interface on `http://localhost:7823`. Connect your phone over USB tethering and control the assistant from your pocket.
 
 ## AI Action Buttons
 
@@ -183,6 +184,32 @@ The first item in each model/language list is treated as the default.
 - Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
 - Saving settings from the UI writes API-key values and selection state to `cache/app-state.json`.
 
+## Mobile Companion
+
+When the app starts, a lightweight HTTP + WebSocket server starts automatically on `http://localhost:7823`. Connect your phone over USB tethering and open that URL in your mobile browser — no app install required.
+
+### Setup (one time)
+
+1. Plug your phone into your PC with a USB cable.
+2. On Android: **Settings → Network → Hotspot & Tethering → USB Tethering** (enable).
+   On iOS: **Settings → Personal Hotspot** (enable, connect via USB).
+3. Open `http://localhost:7823` in your phone's browser.
+
+### Mobile interface
+
+| Button | What it does |
+|--------|-------------|
+| **Screenshot** | Triggers a stealth desktop capture. A badge shows the current count. |
+| **Ask AI** | Sends the typed context (and any captured screenshots) to the AI; response streams in real time. |
+| **Mic** | Starts your phone's microphone, streams PCM audio over the USB connection to AssemblyAI, and shows live transcripts in the chat. |
+| **Clear** | Clears the Gemini conversation history and STT buffer. |
+
+The text input above the toolbar lets you type a question or extra context before pressing **Ask AI** or the send button. Both the desktop and mobile views stay in sync — transcripts, AI responses, and screenshot events appear on both screens simultaneously.
+
+> The server binds to `127.0.0.1` only, so it is not reachable from the wider network.
+
+---
+
 ## Basic Workflow
 
 1. Launch the app and confirm your API keys and models in Settings.
@@ -194,10 +221,12 @@ The first item in each model/language list is treated as the default.
    - **Screen AI** when the problem is on your screen and you want a direct solution
    - **Notes** to capture a structured record of what was discussed and decided
 5. Toggle noisy messages to `Off` before the next AI call so the prompt stays focused on what matters.
+6. Optionally use the **mobile companion** on your phone for discreet control — trigger screenshots, ask AI, or run the mic without touching the desktop.
 
 ## Project Structure (Brief)
 
 - `src/main-process/` is the Electron control plane (startup flow, window behavior, global shortcuts, and IPC registration).
+- `src/main-process/features/mobile-server/` is the mobile companion — HTTP + WebSocket server (`server.js`) and the mobile UI (`mobile.html`).
 - `src/services/` contains reusable domain logic (Gemini prompts/runtime behavior, AssemblyAI streaming/transcript history, persisted app-state).
 - `src/windows/assistant/preload/` is the renderer-safe API boundary (`window.electronAPI` invoke + event wrappers).
 - `src/windows/assistant/renderer/features/` contains modular UI logic (chat, listeners, settings, transcription, context bundling, layout).
@@ -209,6 +238,8 @@ Detailed, file-by-file ownership is documented in [`notes.md`](./notes.md).
 src/
   bootstrap/             Environment loading, validation, and persistence
   main-process/          Startup orchestration, IPC wiring, window control, assistant runtime
+    features/
+      mobile-server/     Mobile companion HTTP+WS server and mobile UI HTML
   services/
     ai/                  Gemini service + prompt builders
     assembly-ai/         Streaming STT service + transcript history manager
@@ -294,6 +325,7 @@ For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTI
 - Preserve Electron boundaries: renderer code should go through `preload` and IPC, not import main-process modules directly.
 - Keep cursor behavior stealth-safe: interactive controls intentionally do not switch to per-button pointer cursors. This prevents screen-sharing viewers from inferring user actions from cursor-shape changes while hidden mode is active.
 - Add new UI logic under `src/windows/assistant/renderer/features/` and new domain logic under `src/services/` or `src/main-process/features/`.
+- The mobile server (`src/main-process/features/mobile-server/`) binds to `127.0.0.1` only. Do not change the bind address without also adding authentication.
 - Treat [`src/windows/legacy/`](./src/windows/legacy/) as reference material unless you are intentionally reviving an old experiment.
 - Re-test both `npm start` and the relevant packaging path when changing startup flow, window behavior, screenshots, IPC, or global shortcuts.
 - Keep real keys out of Git. Use `.env`, and rely on `.env.example` for the documented contract.
