@@ -35,6 +35,7 @@ const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
 const { logStartupConfiguration } = require('./startup-logging');
+const { createMobileServer } = require('./features/mobile-server/server');
 
 function resolveStartupOptions(argv = process.argv) {
   const normalizedArgs = Array.isArray(argv)
@@ -64,13 +65,26 @@ async function startApplication() {
   let screenshotManager = null;
   let windowController = null;
 
-  const sendToRenderer = createSafeSender(() => {
+  const mobileServer = createMobileServer({
+    getGeminiRuntime:    () => geminiRuntime,
+    getScreenshotManager: () => screenshotManager,
+    getAssemblyAiService: () => assemblyAiService
+  });
+
+  const baseSendToRenderer = createSafeSender(() => {
     if (!windowController) {
       return null;
     }
 
     return windowController.getMainWindow();
   });
+
+  // Augmented sender: events flow to both the Electron renderer and all
+  // connected mobile WebSocket clients simultaneously.
+  const sendToRenderer = (channel, data) => {
+    baseSendToRenderer(channel, data);
+    mobileServer.broadcast(channel, data);
+  };
 
   const assemblyAiService = createAssemblyAiService({
     WebSocket,
@@ -154,6 +168,7 @@ async function startApplication() {
     assemblyAiService.dispose();
     screenshotManager.cleanupTransientResources();
     windowController.unregisterShortcuts();
+    mobileServer.close();
   }
 
   function quitApplication() {
