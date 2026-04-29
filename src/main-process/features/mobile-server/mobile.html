@@ -492,7 +492,8 @@
       clearTimeout(reconnectTimer);
 
       try {
-        ws = new WebSocket('ws://localhost:7823');
+        const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${wsScheme}://${location.host}`);
       } catch (err) {
         scheduleReconnect();
         return;

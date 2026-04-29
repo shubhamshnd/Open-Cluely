@@ -2,8 +2,22 @@
 
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+
+function getLanAddresses() {
+  const out = [];
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        out.push({ name, address: iface.address });
+      }
+    }
+  }
+  return out;
+}
 
 const MOBILE_PORT = 7823;
 const MOBILE_HTML_PATH = path.join(__dirname, 'mobile.html');
@@ -230,9 +244,15 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
 
   // ── Start listening ────────────────────────────────────────────────────────
 
-  httpServer.listen(MOBILE_PORT, '127.0.0.1', () => {
-    console.log(`[MobileServer] Mobile companion available at http://localhost:${MOBILE_PORT}`);
-    console.log('[MobileServer] Connect your phone via USB tethering and open that URL in your mobile browser');
+  httpServer.listen(MOBILE_PORT, '0.0.0.0', () => {
+    console.log(`[MobileServer] Listening on 0.0.0.0:${MOBILE_PORT}`);
+    console.log(`[MobileServer] Local:   http://localhost:${MOBILE_PORT}`);
+    for (const { name, address } of getLanAddresses()) {
+      console.log(`[MobileServer] Network: http://${address}:${MOBILE_PORT}  (${name})`);
+    }
+    console.log('[MobileServer] On the phone, open one of the Network URLs.');
+    console.log('[MobileServer] If the phone is connected to the PC over USB tethering,');
+    console.log('[MobileServer] the PC IP visible to the phone is usually 192.168.42.X.');
   });
 
   httpServer.on('error', (err) => {
