@@ -67,8 +67,7 @@ async function startApplication() {
 
   const mobileServer = createMobileServer({
     getGeminiRuntime:    () => geminiRuntime,
-    getScreenshotManager: () => screenshotManager,
-    getAssemblyAiService: () => assemblyAiService
+    getScreenshotManager: () => screenshotManager
   });
 
   const baseSendToRenderer = createSafeSender(() => {
