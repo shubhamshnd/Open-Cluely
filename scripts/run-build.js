@@ -21,15 +21,15 @@ const platformArgs = (() => {
 })();
 
 const args = [...platformArgs, ...process.argv.slice(2)];
-const builderBin = path.join(
-  __dirname,
-  '..',
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder'
-);
 
-const child = spawn(builderBin, args, { stdio: 'inherit', env, shell: false });
+// Invoke electron-builder via Node directly to avoid spawning the .cmd
+// shim on Windows (which needs shell:true and triggers a deprecation
+// warning). The CLI module path is stable across versions.
+const builderCli = require.resolve('electron-builder/out/cli/cli.js');
+const child = spawn(process.execPath, [builderCli, ...args], {
+  stdio: 'inherit',
+  env
+});
 
 child.on('exit', (code, signal) => {
   if (signal) {
