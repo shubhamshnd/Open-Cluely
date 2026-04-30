@@ -17,7 +17,9 @@ export function createTranscriptionManager({
     monitorLiveMic,
     monitorLogList,
     addChatMessage,
-    showFeedback
+    showFeedback,
+    isAutoScrollEnabled = () => true,
+    isChatNearBottom = () => true
 }) {
     let micAudioContext = null;
     let micMediaStream = null;
@@ -487,7 +489,9 @@ export function createTranscriptionManager({
             }
             systemPartialDiv.querySelector('.message-content').textContent = trimmed;
         }
-        chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+        if (isAutoScrollEnabled() && isChatNearBottom()) {
+            chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+        }
     }
 
     function handleVoskFinal(data) {

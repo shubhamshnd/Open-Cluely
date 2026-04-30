@@ -21,7 +21,7 @@ Open source alternative for Cluely and Parakeetai. Your Real-Time AI Interview A
 - Multiple Gemini API keys are supported as a comma-separated list, with automatic failover on quota or authentication errors.
 - Settings support Gemini model selection, AssemblyAI speech model selection, programming language preference, and window opacity.
 - Session state is persisted to `cache/app-state.json`, and screenshot retention is bounded by `MAX_SCREENSHOTS`.
-- **Mobile companion** — a built-in web server exposes a mobile-optimised chat interface on `http://localhost:7823`. Connect your phone over USB tethering and control the assistant from your pocket.
+- **Mobile companion** — a built-in web server exposes a mobile-optimised chat interface on port `7823`. Open the **Network** URL printed at startup (e.g. `http://192.168.1.42:7823`) on a phone that shares the same network as the PC. USB tethering, Wi-Fi hotspot from the phone, or both being on the same Wi-Fi all work.
 
 ## AI Action Buttons
 
@@ -186,14 +186,16 @@ The first item in each model/language list is treated as the default.
 
 ## Mobile Companion
 
-When the app starts, a lightweight HTTP + WebSocket server starts automatically on `http://localhost:7823`. Connect your phone over USB tethering and open that URL in your mobile browser — no app install required.
+When the app starts, a lightweight HTTP + WebSocket server starts automatically on port `7823`, bound to all interfaces. Open the **Network** URL printed at startup (e.g. `http://192.168.1.42:7823`) on a phone that shares the same network as the PC. USB tethering, Wi-Fi hotspot from the phone, or both being on the same Wi-Fi all work — no app install required.
 
 ### Setup (one time)
 
-1. Plug your phone into your PC with a USB cable.
-2. On Android: **Settings → Network → Hotspot & Tethering → USB Tethering** (enable).
-   On iOS: **Settings → Personal Hotspot** (enable, connect via USB).
-3. Open `http://localhost:7823` in your phone's browser.
+1. Make sure the phone and PC can reach each other over the network. Any of these works:
+   - **USB tethering** — plug your phone into your PC and enable tethering. On Android: **Settings → Network → Hotspot & Tethering → USB Tethering**. On iOS: **Settings → Personal Hotspot** (then connect via USB).
+   - **Phone Wi-Fi hotspot** — turn on the phone's hotspot and connect the PC to it.
+   - **Same Wi-Fi** — connect both devices to the same Wi-Fi network.
+2. Look at the Electron app's terminal output for lines like `[MobileServer] Network: http://192.168.1.42:7823  (Wi-Fi)`.
+3. Open one of those Network URLs in your phone's browser.
 
 ### Mobile interface
 
@@ -206,7 +208,7 @@ When the app starts, a lightweight HTTP + WebSocket server starts automatically 
 
 The text input above the toolbar lets you type a question or extra context before pressing **Ask AI** or the send button. Both the desktop and mobile views stay in sync — transcripts, AI responses, and screenshot events appear on both screens simultaneously.
 
-> The server binds to `127.0.0.1` only, so it is not reachable from the wider network.
+> The server binds to `0.0.0.0`. Anyone who can reach the host on port 7823 can drive the assistant — only run the app on networks you trust, or pair this with a firewall rule that allows only your phone's IP.
 
 ---
 
@@ -325,7 +327,7 @@ For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTI
 - Preserve Electron boundaries: renderer code should go through `preload` and IPC, not import main-process modules directly.
 - Keep cursor behavior stealth-safe: interactive controls intentionally do not switch to per-button pointer cursors. This prevents screen-sharing viewers from inferring user actions from cursor-shape changes while hidden mode is active.
 - Add new UI logic under `src/windows/assistant/renderer/features/` and new domain logic under `src/services/` or `src/main-process/features/`.
-- The mobile server (`src/main-process/features/mobile-server/`) binds to `127.0.0.1` only. Do not change the bind address without also adding authentication.
+- The mobile server (`src/main-process/features/mobile-server/`) binds to `0.0.0.0`. Anyone who can reach the host on port 7823 can drive the assistant — only run the app on networks you trust, or pair this with a firewall rule that allows only your phone's IP.
 - Treat [`src/windows/legacy/`](./src/windows/legacy/) as reference material unless you are intentionally reviving an old experiment.
 - Re-test both `npm start` and the relevant packaging path when changing startup flow, window behavior, screenshots, IPC, or global shortcuts.
 - Keep real keys out of Git. Use `.env`, and rely on `.env.example` for the documented contract.

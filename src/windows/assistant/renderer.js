@@ -44,7 +44,7 @@ const audioPipeline = createAudioPipeline({
 });
 
 const transcriptBufferManager = createTranscriptBufferManager({
-    mergeWindowMs: 2400,
+    mergeWindowMs: 3500,
     onBuffer: ({ source, text, segments }) => {
         addMonitorLog('info', 'final-buffer', 'Buffered transcript segment', source, {
             segments,
@@ -80,6 +80,31 @@ const chatMessagesElement = document.getElementById('chat-messages');
 const chatComposer = document.getElementById('chat-composer');
 const chatManualInput = document.getElementById('chat-manual-input');
 const chatManualSend = document.getElementById('chat-manual-send');
+const chatAutoScrollToggle = document.getElementById('chat-autoscroll-toggle');
+
+const AUTOSCROLL_STORAGE_KEY = 'open-cluely.autoScrollEnabled';
+let autoScrollEnabledState = (() => {
+    try {
+        const raw = localStorage.getItem(AUTOSCROLL_STORAGE_KEY);
+        if (raw === null) return true;
+        return raw === '1';
+    } catch (_) {
+        return true;
+    }
+})();
+function isAutoScrollEnabled() { return autoScrollEnabledState; }
+function setAutoScrollEnabled(value) {
+    autoScrollEnabledState = !!value;
+    try { localStorage.setItem(AUTOSCROLL_STORAGE_KEY, autoScrollEnabledState ? '1' : '0'); } catch (_) {}
+    paintAutoScrollToggle();
+}
+function paintAutoScrollToggle() {
+    if (!chatAutoScrollToggle) return;
+    const enabled = autoScrollEnabledState;
+    chatAutoScrollToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    chatAutoScrollToggle.classList.toggle('off', !enabled);
+    chatAutoScrollToggle.title = enabled ? 'Auto-scroll on (click to disable)' : 'Auto-scroll off (click to enable)';
+}
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
@@ -172,7 +197,8 @@ const chatUiManager = createChatUiManager({
         chatMessagesArray = messages;
     },
     showFeedback: (message, type) => showFeedback(message, type),
-    addMonitorLog: (...args) => addMonitorLog(...args)
+    addMonitorLog: (...args) => addMonitorLog(...args),
+    isAutoScrollEnabled
 });
 const settingsPanelManager = createSettingsPanelManager({
     settingsPanel,
@@ -216,7 +242,9 @@ const transcriptionManager = createTranscriptionManager({
     monitorLiveMic,
     monitorLogList,
     addChatMessage: (type, content, options) => addChatMessage(type, content, options),
-    showFeedback: (message, type) => showFeedback(message, type)
+    showFeedback: (message, type) => showFeedback(message, type),
+    isAutoScrollEnabled,
+    isChatNearBottom: () => chatUiManager.isChatNearBottom()
 });
 
 // Initialize
@@ -234,6 +262,10 @@ async function init() {
     setupEventListeners();
     setupIpcListeners();
     setupWindowAdjustments();
+    if (chatAutoScrollToggle) {
+        chatAutoScrollToggle.addEventListener('click', () => setAutoScrollEnabled(!autoScrollEnabledState));
+        paintAutoScrollToggle();
+    }
     applyTheme(resolveInitialThemePreference(settings), { persist: false });
     updateUI();
     transcriptionManager.updateTranscriptionUI();

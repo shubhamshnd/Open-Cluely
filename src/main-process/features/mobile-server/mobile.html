@@ -123,7 +123,7 @@
     }
 
     .messages:empty::after {
-      content: 'No messages yet.\nTake a screenshot or start the mic.';
+      content: 'No messages yet.\nTake a screenshot or type a question.';
       display: block;
       text-align: center;
       color: var(--text-muted);
@@ -296,11 +296,9 @@
 
     .tool-btn.screenshot svg { color: var(--blue); }
     .tool-btn.ask-ai     svg { color: var(--purple); }
-    .tool-btn.mic        svg { color: var(--text-muted); transition: color 0.2s; }
+    .tool-btn.autoscroll svg { color: var(--green); }
     .tool-btn.clear      svg { color: var(--text-muted); }
-
-    .tool-btn.mic.active svg        { color: var(--red); }
-    .tool-btn.mic.active .btn-label { color: var(--red); }
+    .tool-btn.autoscroll.off svg, .tool-btn.autoscroll.off .btn-label { opacity: 0.45; }
 
     /* Screenshot badge */
     .ss-badge {
@@ -322,17 +320,6 @@
     }
 
     .ss-badge.show { display: flex; }
-
-    /* Mic pulse animation when active */
-    @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.4); }
-      50%       { box-shadow: 0 0 0 8px rgba(248, 81, 73, 0); }
-    }
-
-    .tool-btn.mic.active {
-      animation: pulse 1.5s ease-in-out infinite;
-      border-radius: 14px;
-    }
 
     /* ── Toast ───────────────────────────────────────────────────────────── */
     .toast {
@@ -418,14 +405,12 @@
       <span class="btn-label">Ask AI</span>
     </button>
 
-    <button class="tool-btn mic" id="btnMic" onclick="toggleMic()">
+    <button class="tool-btn autoscroll" id="btnAutoScroll" onclick="toggleAutoScroll()" aria-pressed="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-        <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-        <line x1="12" y1="19" x2="12" y2="23"/>
-        <line x1="8" y1="23" x2="16" y2="23"/>
+        <polyline points="7 13 12 18 17 13"/>
+        <line x1="12" y1="18" x2="12" y2="4"/>
       </svg>
-      <span class="btn-label" id="micLabel">Mic</span>
+      <span class="btn-label" id="autoScrollLabel">Auto-scroll</span>
     </button>
 
     <button class="tool-btn clear" id="btnClear" onclick="clearConversation()">
@@ -450,13 +435,8 @@
 
     let ws              = null;
     let isConnected     = false;
-    let micActive       = false;
-    let audioCtx        = null;
-    let mediaStream     = null;
-    let workletNode     = null;
     let streamBuffer    = '';
     let streamEl        = null;   // current streaming AI message element
-    let partialMsgEl    = null;   // partial transcript element
     let screenshotsCount = 0;
     let toastTimer      = null;
     let reconnectTimer  = null;
@@ -466,8 +446,6 @@
     const messagesEl   = document.getElementById('messages');
     const statusPill   = document.getElementById('statusPill');
     const statusText   = document.getElementById('statusText');
-    const btnMic       = document.getElementById('btnMic');
-    const micLabel     = document.getElementById('micLabel');
     const ssBadge      = document.getElementById('ssBadge');
     const contextInput = document.getElementById('contextInput');
     const toastEl      = document.getElementById('toast');
@@ -492,13 +470,12 @@
       clearTimeout(reconnectTimer);
 
       try {
-        ws = new WebSocket('ws://localhost:7823');
+        const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${wsScheme}://${location.host}`);
       } catch (err) {
         scheduleReconnect();
         return;
       }
-
-      ws.binaryType = 'arraybuffer';
 
       ws.onopen = () => {
         isConnected = true;
@@ -510,7 +487,6 @@
         isConnected = false;
         statusPill.classList.remove('connected');
         statusText.textContent = 'Reconnecting';
-        if (micActive) doStopMic();
         scheduleReconnect();
       };
 
@@ -569,35 +545,11 @@
           }
           break;
 
-        case 'vosk-partial':
-          updatePartial(data.text || '');
-          break;
-
         case 'vosk-final': {
-          clearPartial();
           const label = data.source === 'system' ? 'Host' : 'You (mic)';
           addTranscriptMsg(data.text || '', label);
           break;
         }
-
-        case 'vosk-status':
-          if (data.status === 'listening') {
-            micLabel.textContent = 'Listening';
-          } else if (data.status === 'loading') {
-            micLabel.textContent = 'Connecting';
-          } else if (data.status === 'stopped') {
-            micLabel.textContent = 'Mic';
-          }
-          break;
-
-        case 'vosk-stopped':
-          doStopMic();
-          break;
-
-        case 'vosk-error':
-          showToast(data.error || 'STT error', 'error');
-          doStopMic();
-          break;
 
         case 'clear-done':
           clearMessages();
@@ -640,61 +592,6 @@
     function clearConversation() {
       if (!isConnected) { showToast('Not connected', 'error'); return; }
       sendJson({ type: 'clear-conversation' });
-    }
-
-    function toggleMic() {
-      if (micActive) {
-        sendJson({ type: 'stop-mic' });
-        doStopMic();
-      } else {
-        doStartMic();
-      }
-    }
-
-    async function doStartMic() {
-      if (!isConnected) { showToast('Not connected', 'error'); return; }
-
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-
-        // Request 16 kHz — browser resamples internally; AssemblyAI expects 16 kHz
-        audioCtx = new AudioContext({ sampleRate: 16000 });
-        await audioCtx.audioWorklet.addModule('/pcm-worklet.js');
-
-        const source = audioCtx.createMediaStreamSource(mediaStream);
-        workletNode  = new AudioWorkletNode(audioCtx, 'pcm-capture-processor');
-        source.connect(workletNode);
-
-        workletNode.port.onmessage = (e) => {
-          // e.data is Float32Array; convert to Int16 PCM and send as binary
-          const float32 = e.data;
-          const int16   = new Int16Array(float32.length);
-          for (let i = 0; i < float32.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
-          }
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(int16.buffer);
-          }
-        };
-
-        sendJson({ type: 'start-mic' });
-        micActive = true;
-        btnMic.classList.add('active');
-        micLabel.textContent = 'Mic On';
-      } catch (err) {
-        showToast(`Mic error: ${err.message}`, 'error');
-        doStopMic();
-      }
-    }
-
-    function doStopMic() {
-      if (workletNode)  { workletNode.disconnect(); workletNode = null; }
-      if (audioCtx)     { audioCtx.close().catch(() => {}); audioCtx = null; }
-      if (mediaStream)  { mediaStream.getTracks().forEach((t) => t.stop()); mediaStream = null; }
-
-      micActive = false;
-      btnMic.classList.remove('active');
-      micLabel.textContent = 'Mic';
     }
 
     // ── DOM helpers ───────────────────────────────────────────────────────────
@@ -749,33 +646,35 @@
       return el;
     }
 
-    function updatePartial(text) {
-      if (!partialMsgEl) {
-        partialMsgEl = document.createElement('div');
-        partialMsgEl.className = 'msg left partial';
-        const bubble = document.createElement('div');
-        bubble.className = 'msg-bubble';
-        partialMsgEl.appendChild(bubble);
-        messagesEl.appendChild(partialMsgEl);
-      }
-      partialMsgEl.querySelector('.msg-bubble').textContent = text;
-      scrollBottom();
-    }
-
-    function clearPartial() {
-      if (partialMsgEl) { partialMsgEl.remove(); partialMsgEl = null; }
-    }
-
     function clearMessages() {
       messagesEl.innerHTML = '';
-      partialMsgEl = null;
       streamEl     = null;
       streamBuffer = '';
       screenshotsCount = 0;
       updateBadge();
     }
 
+    const AUTOSCROLL_KEY = 'open-cluely.autoScrollEnabled';
+    function autoScrollEnabled() {
+      try { return localStorage.getItem(AUTOSCROLL_KEY) !== '0'; } catch (_) { return true; }
+    }
+    function setAutoScrollEnabled(value) {
+      try { localStorage.setItem(AUTOSCROLL_KEY, value ? '1' : '0'); } catch (_) {}
+      paintAutoScrollBtn();
+    }
+    function paintAutoScrollBtn() {
+      const btn = document.getElementById('btnAutoScroll');
+      const label = document.getElementById('autoScrollLabel');
+      if (!btn) return;
+      const enabled = autoScrollEnabled();
+      btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      btn.classList.toggle('off', !enabled);
+      if (label) label.textContent = enabled ? 'Auto-scroll' : 'Scroll off';
+    }
+    function toggleAutoScroll() { setAutoScrollEnabled(!autoScrollEnabled()); }
+
     function scrollBottom() {
+      if (!autoScrollEnabled()) return;
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
@@ -803,6 +702,7 @@
 
     // ── Boot ──────────────────────────────────────────────────────────────────
 
+    paintAutoScrollBtn();
     connect();
   </script>
 </body>

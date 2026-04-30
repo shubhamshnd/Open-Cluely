@@ -2,14 +2,27 @@
 
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 
+function getLanAddresses() {
+  const out = [];
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        out.push({ name, address: iface.address });
+      }
+    }
+  }
+  return out;
+}
+
 const MOBILE_PORT = 7823;
 const MOBILE_HTML_PATH = path.join(__dirname, 'mobile.html');
-const WORKLET_PATH = path.join(__dirname, '..', '..', '..', 'windows', 'assistant', 'pcm-capture-worklet.js');
 
-function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssemblyAiService }) {
+function createMobileServer({ getGeminiRuntime, getScreenshotManager }) {
   const clients = new Set();
 
   function broadcast(channel, data) {
@@ -28,7 +41,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
     } catch (_) { /* ignore */ }
   }
 
-  // ── HTTP server (serves mobile UI + PCM worklet) ──────────────────────────
+  // ── HTTP server (serves mobile UI) ────────────────────────────────────────
 
   const httpServer = http.createServer((req, res) => {
     const url = (req.url || '/').split('?')[0];
@@ -41,18 +54,6 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
       } catch (err) {
         res.writeHead(500);
         res.end('Mobile UI unavailable');
-      }
-      return;
-    }
-
-    if (url === '/pcm-worklet.js') {
-      try {
-        const js = fs.readFileSync(WORKLET_PATH, 'utf8');
-        res.writeHead(200, { 'Content-Type': 'application/javascript' });
-        res.end(js);
-      } catch (err) {
-        res.writeHead(500);
-        res.end('Worklet unavailable');
       }
       return;
     }
@@ -75,16 +76,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
       screenshotsCount: screenshotMgr ? screenshotMgr.getScreenshotsCount() : 0
     });
 
-    ws.on('message', async (rawData, isBinary) => {
-      // Binary = PCM audio chunk from mobile microphone
-      if (isBinary) {
-        const assemblyAiSvc = getAssemblyAiService();
-        if (assemblyAiSvc) {
-          assemblyAiSvc.handleAudioChunk({ source: 'mic', data: rawData });
-        }
-        return;
-      }
-
+    ws.on('message', async (rawData, _isBinary) => {
       let msg;
       try {
         msg = JSON.parse(rawData.toString());
@@ -95,7 +87,6 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
 
       const geminiRuntime = getGeminiRuntime();
       const screenshotManager = getScreenshotManager();
-      const assemblyAiService = getAssemblyAiService();
 
       switch (msg.type) {
 
@@ -126,10 +117,6 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
           if (!contextString && !screenshotManager?.hasScreenshots()) {
             sendTo(ws, 'error', { message: 'Take a screenshot or type a question first.' });
             break;
-          }
-
-          if (assemblyAiService) {
-            assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai-mobile');
           }
 
           // Fire-and-forget; stream events go back via broadcast
@@ -187,27 +174,9 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
           try {
             const geminiService = geminiRuntime?.getService();
             if (geminiService) geminiService.clearHistory();
-            if (assemblyAiService) assemblyAiService.resetSttHistoryBuffers();
             broadcast('clear-done', {});
           } catch (err) {
             sendTo(ws, 'error', { message: `Clear failed: ${err.message}` });
-          }
-          break;
-        }
-
-        // ── Microphone control ─────────────────────────────────────────────
-        case 'start-mic': {
-          if (!assemblyAiService) {
-            sendTo(ws, 'error', { message: 'STT service not ready' });
-            break;
-          }
-          assemblyAiService.startAssemblyAiStream('mic');
-          break;
-        }
-
-        case 'stop-mic': {
-          if (assemblyAiService) {
-            assemblyAiService.stopVoiceRecognition({ source: 'mic' });
           }
           break;
         }
@@ -230,9 +199,15 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, getAssembl
 
   // ── Start listening ────────────────────────────────────────────────────────
 
-  httpServer.listen(MOBILE_PORT, '127.0.0.1', () => {
-    console.log(`[MobileServer] Mobile companion available at http://localhost:${MOBILE_PORT}`);
-    console.log('[MobileServer] Connect your phone via USB tethering and open that URL in your mobile browser');
+  httpServer.listen(MOBILE_PORT, '0.0.0.0', () => {
+    console.log(`[MobileServer] Listening on 0.0.0.0:${MOBILE_PORT}`);
+    console.log(`[MobileServer] Local:   http://localhost:${MOBILE_PORT}`);
+    for (const { name, address } of getLanAddresses()) {
+      console.log(`[MobileServer] Network: http://${address}:${MOBILE_PORT}  (${name})`);
+    }
+    console.log('[MobileServer] On the phone, open one of the Network URLs.');
+    console.log('[MobileServer] If the phone is connected to the PC over USB tethering,');
+    console.log('[MobileServer] the PC IP visible to the phone is usually 192.168.42.X.');
   });
 
   httpServer.on('error', (err) => {
