@@ -105,6 +105,61 @@ function paintAutoScrollToggle() {
     chatAutoScrollToggle.classList.toggle('off', !enabled);
     chatAutoScrollToggle.title = enabled ? 'Auto-scroll on (click to disable)' : 'Auto-scroll off (click to enable)';
 }
+
+const mobileServerPill = document.getElementById('mobile-server-pill');
+const mobileServerPillLabel = document.getElementById('mobile-server-pill-label');
+let mobileServerStatus = { listening: false, port: 7823, urls: [], clientCount: 0, error: null };
+
+function paintMobileServerPill() {
+    if (!mobileServerPill || !mobileServerPillLabel) return;
+
+    mobileServerPill.classList.remove('off', 'idle', 'connected');
+
+    if (!mobileServerStatus.listening) {
+        mobileServerPill.classList.add('off');
+        mobileServerPillLabel.textContent = mobileServerStatus.error ? 'Mobile · error' : 'Mobile · off';
+        mobileServerPill.title = mobileServerStatus.error
+            ? `Mobile companion not running: ${mobileServerStatus.error}`
+            : 'Mobile companion not running';
+        return;
+    }
+
+    const firstUrl = mobileServerStatus.urls[0]?.url;
+    const count = mobileServerStatus.clientCount || 0;
+    mobileServerPill.classList.add(count > 0 ? 'connected' : 'idle');
+
+    if (firstUrl) {
+        mobileServerPillLabel.textContent = `${firstUrl.replace(/^http:\/\//, '')}` + (count > 0 ? ` · ${count}` : '');
+    } else {
+        mobileServerPillLabel.textContent = `:${mobileServerStatus.port}` + (count > 0 ? ` · ${count}` : ' · no LAN');
+    }
+
+    const lines = [
+        count > 0
+            ? `Mobile companion: ${count} client(s) connected`
+            : 'Mobile companion listening (no clients yet — click for help)',
+        ...mobileServerStatus.urls.map(({ url, name }) => `${url}  (${name})`)
+    ];
+    if (mobileServerStatus.urls.length === 0) {
+        lines.push('No non-loopback IPv4 interface detected.');
+    }
+    lines.push('Click to copy URL. If a phone on the same network cannot reach this URL, allow inbound TCP 7823 in Windows Firewall.');
+    mobileServerPill.title = lines.join('\n');
+}
+
+async function copyMobileUrlToClipboard() {
+    const url = mobileServerStatus.urls[0]?.url;
+    if (!url) {
+        showFeedback('Mobile server has no LAN URL yet', 'error');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(url);
+        showFeedback(`Copied ${url}`, 'success');
+    } catch (err) {
+        showFeedback('Could not copy URL', 'error');
+    }
+}
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
@@ -265,6 +320,24 @@ async function init() {
     if (chatAutoScrollToggle) {
         chatAutoScrollToggle.addEventListener('click', () => setAutoScrollEnabled(!autoScrollEnabledState));
         paintAutoScrollToggle();
+    }
+    if (mobileServerPill) {
+        mobileServerPill.addEventListener('click', copyMobileUrlToClipboard);
+        paintMobileServerPill();
+        if (window.electronAPI?.onMobileServerStatus) {
+            window.electronAPI.onMobileServerStatus((data) => {
+                mobileServerStatus = { ...mobileServerStatus, ...(data || {}) };
+                paintMobileServerPill();
+            });
+        }
+        if (window.electronAPI?.getMobileServerStatus) {
+            window.electronAPI.getMobileServerStatus().then((data) => {
+                if (data && typeof data === 'object') {
+                    mobileServerStatus = { ...mobileServerStatus, ...data };
+                    paintMobileServerPill();
+                }
+            }).catch(() => {});
+        }
     }
     applyTheme(resolveInitialThemePreference(settings), { persist: false });
     updateUI();

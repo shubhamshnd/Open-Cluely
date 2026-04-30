@@ -79,12 +79,16 @@ function sanitizeAppState(state) {
 }
 
 function getAppStateBaseDir(app) {
+  // Dev: project root next to package.json so devs can inspect state easily.
   if (app && !app.isPackaged) {
     return path.join(__dirname, '..', '..', '..');
   }
 
+  // Packaged: userData (e.g. %APPDATA%/<productName> on Windows). Critical for
+  // portable builds — the EXE extracts to a temp dir each launch, so writing
+  // beside the EXE means state is wiped every run.
   if (app) {
-    return path.dirname(app.getPath('exe'));
+    return app.getPath('userData');
   }
 
   return path.join(__dirname, '..', '..', '..');

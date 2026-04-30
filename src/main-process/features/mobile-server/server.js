@@ -22,8 +22,34 @@ function getLanAddresses() {
 const MOBILE_PORT = 7823;
 const MOBILE_HTML_PATH = path.join(__dirname, 'mobile.html');
 
-function createMobileServer({ getGeminiRuntime, getScreenshotManager }) {
+function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesktop }) {
   const clients = new Set();
+  const status = {
+    listening: false,
+    port: MOBILE_PORT,
+    urls: [],
+    clientCount: 0,
+    error: null
+  };
+
+  function emitStatus() {
+    if (typeof notifyDesktop === 'function') {
+      try { notifyDesktop('mobile-server-status', { ...status }); } catch (_) { /* ignore */ }
+    }
+  }
+
+  function refreshUrls() {
+    status.urls = getLanAddresses().map(({ name, address }) => ({
+      name,
+      address,
+      url: `http://${address}:${MOBILE_PORT}`
+    }));
+  }
+
+  function setClientCount(n) {
+    status.clientCount = n;
+    emitStatus();
+  }
 
   function broadcast(channel, data) {
     if (clients.size === 0) return;
@@ -68,6 +94,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager }) {
 
   wss.on('connection', (ws) => {
     clients.add(ws);
+    setClientCount(clients.size);
     console.log(`[MobileServer] Client connected (total: ${clients.size})`);
 
     // Send initial state
@@ -188,29 +215,37 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager }) {
 
     ws.on('close', () => {
       clients.delete(ws);
+      setClientCount(clients.size);
       console.log(`[MobileServer] Client disconnected (total: ${clients.size})`);
     });
 
     ws.on('error', (err) => {
       console.error('[MobileServer] WebSocket error:', err.message);
       clients.delete(ws);
+      setClientCount(clients.size);
     });
   });
 
   // ── Start listening ────────────────────────────────────────────────────────
 
   httpServer.listen(MOBILE_PORT, '0.0.0.0', () => {
+    refreshUrls();
+    status.listening = true;
+    status.error = null;
+    emitStatus();
     console.log(`[MobileServer] Listening on 0.0.0.0:${MOBILE_PORT}`);
     console.log(`[MobileServer] Local:   http://localhost:${MOBILE_PORT}`);
-    for (const { name, address } of getLanAddresses()) {
-      console.log(`[MobileServer] Network: http://${address}:${MOBILE_PORT}  (${name})`);
+    for (const { name, url } of status.urls) {
+      console.log(`[MobileServer] Network: ${url}  (${name})`);
     }
     console.log('[MobileServer] On the phone, open one of the Network URLs.');
-    console.log('[MobileServer] If the phone is connected to the PC over USB tethering,');
-    console.log('[MobileServer] the PC IP visible to the phone is usually 192.168.42.X.');
+    console.log('[MobileServer] If the phone cannot reach the PC, allow inbound TCP 7823 in Windows Firewall.');
   });
 
   httpServer.on('error', (err) => {
+    status.listening = false;
+    status.error = err.message;
+    emitStatus();
     if (err.code === 'EADDRINUSE') {
       console.error(`[MobileServer] Port ${MOBILE_PORT} already in use — mobile companion disabled`);
     } else {
@@ -220,10 +255,15 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager }) {
 
   return {
     broadcast,
+    getStatus: () => ({ ...status }),
+    emitStatus,
     close() {
       try {
         wss.close();
         httpServer.close();
+        status.listening = false;
+        status.clientCount = 0;
+        emitStatus();
       } catch (_) { /* ignore */ }
     }
   };

@@ -271,6 +271,47 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.mobile-server-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 14px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.35);
+  color: rgba(226, 232, 240, 0.85);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-app-region: no-drag;
+  font-family: inherit;
+}
+
+.mobile-server-pill:hover {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(148, 163, 184, 0.55);
+}
+
+.mobile-server-pill.off {
+  opacity: 0.6;
+}
+
+.mobile-server-pill.idle {
+  border-color: rgba(217, 119, 6, 0.5);
+  color: rgba(252, 211, 77, 0.95);
+}
+
+.mobile-server-pill.connected {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.18);
+  color: rgba(187, 247, 208, 0.98);
+}
+
+.mobile-server-pill svg {
+  flex-shrink: 0;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(1.2); }

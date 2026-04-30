@@ -2,11 +2,35 @@
 
 This guide will help you build the app as a disguised Chrome executable.
 
+## Quick start (one command)
+
+```bash
+npm install
+npm run build
+```
+
+`npm run build` auto-detects your platform (`--win portable`, `--mac`, or
+`--linux`) and produces the disguised binary in `dist/` (`dist/GoogleChrome.exe`
+on Windows). No native compilers, Visual Studio Build Tools, or Python are
+required — there are no native node modules left in the dependency tree.
+
+If you need a specific platform target from any host:
+
+```bash
+npm run build:win
+npm run build:mac
+npm run build:linux
+```
+
 ## Prerequisites
 
-1. **Node.js and npm** installed
-2. **All dependencies** installed (`npm install`)
-3. **Chrome icon files** (see below)
+1. **Node.js and npm** installed (Node 18+ is fine; the bundled Electron pulls
+   its own runtime).
+2. **Dependencies installed** with `npm install`. There is no `postinstall`
+   step that rebuilds native modules, so installs are quick and never fail
+   on a fresh machine.
+3. **Chrome icon files** are pre-included for Windows. See below if you want to
+   replace them or need icons for other platforms.
 
 ## Step 1: Check Existing Icons
 

@@ -65,17 +65,21 @@ async function startApplication() {
   let screenshotManager = null;
   let windowController = null;
 
-  const mobileServer = createMobileServer({
-    getGeminiRuntime:    () => geminiRuntime,
-    getScreenshotManager: () => screenshotManager
-  });
-
   const baseSendToRenderer = createSafeSender(() => {
     if (!windowController) {
       return null;
     }
 
     return windowController.getMainWindow();
+  });
+
+  // Mobile server reports its own status (listening, URLs, client count) to
+  // the desktop renderer via the un-augmented sender — we don't want it
+  // bouncing back to mobile clients.
+  const mobileServer = createMobileServer({
+    getGeminiRuntime:    () => geminiRuntime,
+    getScreenshotManager: () => screenshotManager,
+    notifyDesktop:        baseSendToRenderer
   });
 
   // Augmented sender: events flow to both the Electron renderer and all
@@ -184,6 +188,8 @@ async function startApplication() {
       app.exit(0);
     }, 50);
   }
+
+  ipcMain.handle('mobile-server-get-status', () => mobileServer.getStatus());
 
   registerAssistantIpc({
     ipcMain,

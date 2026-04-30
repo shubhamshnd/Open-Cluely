@@ -4,17 +4,17 @@
   "description": "Invisible AI assistant for meetings - undetectable during screen share",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron .",
-    "start:hidden": "electron . --start-hidden",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win portable",
-    "dev": "electron . --enable-logging",
-    "postinstall": "electron-builder install-app-deps"
+    "start": "node scripts/run-electron.js",
+    "start:hidden": "node scripts/run-electron.js --start-hidden",
+    "dev": "node scripts/run-electron.js --enable-logging",
+    "build": "node scripts/run-build.js",
+    "build:win": "node scripts/run-build.js --win portable",
+    "build:mac": "node scripts/run-build.js --mac",
+    "build:linux": "node scripts/run-build.js --linux"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^16.3.1",
-    "node-window-manager": "^2.2.4",
     "screenshot-desktop": "^1.15.0",
     "ws": "^8.19.0"
   },
@@ -38,8 +38,7 @@
       "!dist/**/*"
     ],
     "asarUnpack": [
-      "node_modules/screenshot-desktop/**/*",
-      "node_modules/node-window-manager/**/*"
+      "node_modules/screenshot-desktop/**/*"
     ],
     "extraResources": [
       {
