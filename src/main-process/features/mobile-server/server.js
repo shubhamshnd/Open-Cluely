@@ -228,6 +228,11 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
           try {
             const geminiService = geminiRuntime?.getService();
             if (geminiService) geminiService.clearHistory();
+            if (screenshotManager?.clearStealth) screenshotManager.clearStealth();
+            // Tell the desktop renderer to wipe its chat UI as well.
+            if (typeof notifyDesktop === 'function') {
+              notifyDesktop('clear-from-mobile', {});
+            }
             broadcast('clear-done', {});
           } catch (err) {
             sendTo(ws, 'error', { message: `Clear failed: ${err.message}` });

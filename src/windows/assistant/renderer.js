@@ -334,6 +334,16 @@ async function init() {
         chatAutoScrollToggle.addEventListener('click', () => setAutoScrollEnabled(!autoScrollEnabledState));
         paintAutoScrollToggle();
     }
+    if (window.electronAPI?.onClearFromMobile) {
+        window.electronAPI.onClearFromMobile(() => {
+            screenshotsCount = 0;
+            messageStore.clear();
+            chatMessagesArray = messageStore.getMessages();
+            chatMessagesElement.innerHTML = '';
+            updateUI();
+            showFeedback('Cleared from mobile', 'info');
+        });
+    }
     if (mobileServerPill) {
         mobileServerPill.addEventListener('click', copyMobileUrlToClipboard);
         paintMobileServerPill();
