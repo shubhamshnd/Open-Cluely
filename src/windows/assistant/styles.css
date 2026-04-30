@@ -828,6 +828,32 @@ body.chat-resizing * {
   color: rgba(255, 255, 255, 0.45);
 }
 
+.chat-autoscroll-toggle {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+
+.chat-autoscroll-toggle:hover {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+.chat-autoscroll-toggle.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
 .chat-manual-send {
   border: 1px solid rgba(59, 130, 246, 0.5);
   background: rgba(59, 130, 246, 0.22);

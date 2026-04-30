@@ -10,7 +10,8 @@ export function createChatUiManager({
     updateUi,
     onMessagesChanged,
     showFeedback,
-    addMonitorLog
+    addMonitorLog,
+    isAutoScrollEnabled = () => true
 }) {
     function formatResponse(text) {
         return String(text || '')
@@ -115,7 +116,7 @@ export function createChatUiManager({
         messageDiv.innerHTML = messageContent;
         chatMessagesElement.appendChild(messageDiv);
 
-        if (shouldAutoScroll) {
+        if (shouldAutoScroll && isAutoScrollEnabled()) {
             chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
         }
 
@@ -177,7 +178,7 @@ export function createChatUiManager({
         const shouldAutoScroll = isChatNearBottom();
         contentEl.innerHTML = formatResponse(newContent);
 
-        if (shouldAutoScroll) {
+        if (shouldAutoScroll && isAutoScrollEnabled()) {
             chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
         }
     }
@@ -210,6 +211,7 @@ export function createChatUiManager({
         updateChatMessageContent,
         autoResizeManualInput,
         submitManualContextMessage,
-        updateManualComposerState
+        updateManualComposerState,
+        isChatNearBottom
     };
 }

@@ -296,7 +296,9 @@
 
     .tool-btn.screenshot svg { color: var(--blue); }
     .tool-btn.ask-ai     svg { color: var(--purple); }
+    .tool-btn.autoscroll svg { color: var(--green); }
     .tool-btn.clear      svg { color: var(--text-muted); }
+    .tool-btn.autoscroll.off svg, .tool-btn.autoscroll.off .btn-label { opacity: 0.45; }
 
     /* Screenshot badge */
     .ss-badge {
@@ -401,6 +403,14 @@
         <path d="M12 2l2.09 6.26L20.18 10l-4.73 4.74 1.18 6.26L12 18l-4.63 3 1.18-6.26L3.82 10l6.09-1.74z"/>
       </svg>
       <span class="btn-label">Ask AI</span>
+    </button>
+
+    <button class="tool-btn autoscroll" id="btnAutoScroll" onclick="toggleAutoScroll()" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="7 13 12 18 17 13"/>
+        <line x1="12" y1="18" x2="12" y2="4"/>
+      </svg>
+      <span class="btn-label" id="autoScrollLabel">Auto-scroll</span>
     </button>
 
     <button class="tool-btn clear" id="btnClear" onclick="clearConversation()">
@@ -644,7 +654,27 @@
       updateBadge();
     }
 
+    const AUTOSCROLL_KEY = 'open-cluely.autoScrollEnabled';
+    function autoScrollEnabled() {
+      try { return localStorage.getItem(AUTOSCROLL_KEY) !== '0'; } catch (_) { return true; }
+    }
+    function setAutoScrollEnabled(value) {
+      try { localStorage.setItem(AUTOSCROLL_KEY, value ? '1' : '0'); } catch (_) {}
+      paintAutoScrollBtn();
+    }
+    function paintAutoScrollBtn() {
+      const btn = document.getElementById('btnAutoScroll');
+      const label = document.getElementById('autoScrollLabel');
+      if (!btn) return;
+      const enabled = autoScrollEnabled();
+      btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      btn.classList.toggle('off', !enabled);
+      if (label) label.textContent = enabled ? 'Auto-scroll' : 'Scroll off';
+    }
+    function toggleAutoScroll() { setAutoScrollEnabled(!autoScrollEnabled()); }
+
     function scrollBottom() {
+      if (!autoScrollEnabled()) return;
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
@@ -672,6 +702,7 @@
 
     // ── Boot ──────────────────────────────────────────────────────────────────
 
+    paintAutoScrollBtn();
     connect();
   </script>
 </body>
