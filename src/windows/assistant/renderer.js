@@ -124,12 +124,13 @@ function paintMobileServerPill() {
         return;
     }
 
-    const firstUrl = mobileServerStatus.urls[0]?.url;
+    const firstReal = mobileServerStatus.urls.find((u) => !u.virtual) || mobileServerStatus.urls[0];
+    const firstUrl = firstReal?.url;
     const count = mobileServerStatus.clientCount || 0;
     mobileServerPill.classList.add(count > 0 ? 'connected' : 'idle');
 
     if (firstUrl) {
-        mobileServerPillLabel.textContent = `${firstUrl.replace(/^http:\/\//, '')}` + (count > 0 ? ` · ${count}` : '');
+        mobileServerPillLabel.textContent = firstUrl.replace(/^http:\/\//, '') + (count > 0 ? ` · ${count}` : '');
     } else {
         mobileServerPillLabel.textContent = `:${mobileServerStatus.port}` + (count > 0 ? ` · ${count}` : ' · no LAN');
     }
@@ -138,17 +139,29 @@ function paintMobileServerPill() {
         count > 0
             ? `Mobile companion: ${count} client(s) connected`
             : 'Mobile companion listening (no clients yet — click for help)',
-        ...mobileServerStatus.urls.map(({ url, name }) => `${url}  (${name})`)
+        ...mobileServerStatus.urls.map(({ url, name, virtual }) => virtual
+            ? `${url}  (${name}) — virtual adapter, phone probably cannot reach this`
+            : `${url}  (${name})`
+        )
     ];
     if (mobileServerStatus.urls.length === 0) {
         lines.push('No non-loopback IPv4 interface detected.');
     }
-    lines.push('Click to copy URL. If a phone on the same network cannot reach this URL, allow inbound TCP 7823 in Windows Firewall.');
+    if (mobileServerStatus.urls.some((u) => u.virtual) && mobileServerStatus.urls.some((u) => !u.virtual)) {
+        lines.push('Use the first non-virtual URL on the phone.');
+    }
+    lines.push('');
+    lines.push('Click to copy URL. If the phone times out, run this once in elevated PowerShell:');
+    lines.push('  New-NetFirewallRule -DisplayName "Open-Cluely Mobile" -Direction Inbound -LocalPort 7823 -Protocol TCP -Action Allow -Profile Any');
     mobileServerPill.title = lines.join('\n');
 }
 
+function copyMobileUrlPickReal() {
+    return mobileServerStatus.urls.find((u) => !u.virtual)?.url || mobileServerStatus.urls[0]?.url;
+}
+
 async function copyMobileUrlToClipboard() {
-    const url = mobileServerStatus.urls[0]?.url;
+    const url = copyMobileUrlPickReal();
     if (!url) {
         showFeedback('Mobile server has no LAN URL yet', 'error');
         return;
