@@ -44,7 +44,7 @@ const audioPipeline = createAudioPipeline({
 });
 
 const transcriptBufferManager = createTranscriptBufferManager({
-    mergeWindowMs: 2400,
+    mergeWindowMs: 3500,
     onBuffer: ({ source, text, segments }) => {
         addMonitorLog('info', 'final-buffer', 'Buffered transcript segment', source, {
             segments,

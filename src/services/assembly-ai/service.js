@@ -38,7 +38,7 @@ function createAssemblyAiService({
   const sttHistoryManager = createSttHistoryManager({
     getGeminiService,
     emitSttDebug,
-    mergeWindowMs: 2400
+    mergeWindowMs: 3500
   });
 
   function cleanupAssemblyWs(ws) {
