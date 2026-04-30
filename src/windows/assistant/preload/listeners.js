@@ -96,6 +96,11 @@ function createEventActions(ipcRenderer) {
     label: 'onSttDebug'
   });
 
+  const onMobileServerStatus = createEventListener(ipcRenderer, {
+    channel: 'mobile-server-status',
+    label: 'onMobileServerStatus'
+  });
+
   return {
     onScreenshotTakenStealth,
     onAnalysisStart,
@@ -115,7 +120,8 @@ function createEventActions(ipcRenderer) {
     onAiStreamEnd,
     onToggleVoiceRecognition,
     onTriggerAskAi,
-    onSttDebug: (callback) => rawOnSttDebug((data) => callback(data || {}))
+    onSttDebug: (callback) => rawOnSttDebug((data) => callback(data || {})),
+    onMobileServerStatus
   };
 }
 

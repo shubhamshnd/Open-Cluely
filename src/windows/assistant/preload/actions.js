@@ -170,6 +170,12 @@ function createInvokeActions(ipcRenderer) {
       channel: 'close-app',
       label: 'closeApp',
       fallback: (error) => ({ error: error.message })
+    }),
+
+    getMobileServerStatus: invokeWithFallback(ipcRenderer, {
+      channel: 'mobile-server-get-status',
+      label: 'getMobileServerStatus',
+      fallback: () => ({ listening: false, port: 7823, urls: [], clientCount: 0, error: null })
     })
   };
 }

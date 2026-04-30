@@ -203,10 +203,32 @@ When the app starts, a lightweight HTTP + WebSocket server starts automatically 
 |--------|-------------|
 | **Screenshot** | Triggers a stealth desktop capture. A badge shows the current count. |
 | **Ask AI** | Sends the typed context (and any captured screenshots) to the AI; response streams in real time. |
-| **Mic** | Starts your phone's microphone, streams PCM audio over the USB connection to AssemblyAI, and shows live transcripts in the chat. |
-| **Clear** | Clears the Gemini conversation history and STT buffer. |
+| **Auto-scroll** | Toggles whether new messages snap the view to the bottom. |
+| **Clear** | Clears the Gemini conversation history. |
 
-The text input above the toolbar lets you type a question or extra context before pressing **Ask AI** or the send button. Both the desktop and mobile views stay in sync — transcripts, AI responses, and screenshot events appear on both screens simultaneously.
+The text input above the toolbar lets you type a question or extra context before pressing **Ask AI** or the send button. The desktop view always shows the live transcript; the mobile view receives finalised transcripts and AI streams in sync.
+
+The desktop top bar shows a **Mobile** pill with the LAN URL and connected-client count. Click it to copy the URL — handy for typing into the phone browser.
+
+### If the URL doesn't work on a phone
+
+If the phone shows `connection refused` or just times out while loading the URL, **Windows Firewall is almost always the cause**. Allow inbound TCP 7823 once, from an elevated PowerShell prompt:
+
+```powershell
+New-NetFirewallRule -DisplayName "Open-Cluely Mobile" -Direction Inbound -LocalPort 7823 -Protocol TCP -Action Allow
+```
+
+To remove the rule later:
+
+```powershell
+Remove-NetFirewallRule -DisplayName "Open-Cluely Mobile"
+```
+
+Other things to check:
+
+- The **Mobile** pill in the desktop top bar must be lit (green or amber). Grey means the server is not running.
+- The phone must be on a network that can route to the PC. Public Wi-Fi often blocks peer-to-peer traffic; switch to USB tethering or a phone hotspot.
+- A VPN client on the PC sometimes hijacks LAN routing. Disconnect it, or add the LAN range to its split-tunnel exceptions.
 
 > The server binds to `0.0.0.0`. Anyone who can reach the host on port 7823 can drive the assistant — only run the app on networks you trust, or pair this with a firewall rule that allows only your phone's IP.
 
