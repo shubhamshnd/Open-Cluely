@@ -215,8 +215,10 @@ The desktop top bar shows a **Mobile** pill with the LAN URL and connected-clien
 If the phone shows `connection refused` or just times out while loading the URL, **Windows Firewall is almost always the cause**. Allow inbound TCP 7823 once, from an elevated PowerShell prompt:
 
 ```powershell
-New-NetFirewallRule -DisplayName "Open-Cluely Mobile" -Direction Inbound -LocalPort 7823 -Protocol TCP -Action Allow
+New-NetFirewallRule -DisplayName "Open-Cluely Mobile" -Direction Inbound -LocalPort 7823 -Protocol TCP -Action Allow -Profile Any
 ```
+
+`-Profile Any` is important: rules created without it default to Domain/Private profiles only. A phone hotspot or unknown public Wi-Fi is usually classified as **Public**, which the default rule does not cover. This is the most common reason "other tools on ports 5000/5500 work but ours doesn't" — VS Code's Live Server and similar dev tools often add a `Profile=Any` rule the first time they prompt.
 
 To remove the rule later:
 
@@ -227,8 +229,17 @@ Remove-NetFirewallRule -DisplayName "Open-Cluely Mobile"
 Other things to check:
 
 - The **Mobile** pill in the desktop top bar must be lit (green or amber). Grey means the server is not running.
-- The phone must be on a network that can route to the PC. Public Wi-Fi often blocks peer-to-peer traffic; switch to USB tethering or a phone hotspot.
+- Use a **non-virtual** LAN URL. Docker, WSL, VMware, Hyper-V, Tailscale, and similar tools add IPv4 interfaces that the phone cannot route to. The startup log and the pill tooltip flag these with `[virtual — phone probably cannot reach]`; pick a different URL.
+- The phone must be on a network that can route to the PC. Public Wi-Fi (especially café/hotel) often blocks peer-to-peer traffic; switch to USB tethering or a phone hotspot.
 - A VPN client on the PC sometimes hijacks LAN routing. Disconnect it, or add the LAN range to its split-tunnel exceptions.
+
+Quick test (one-liner, from any shell on the PC) to confirm whether the firewall is the blocker:
+
+```powershell
+Test-NetConnection -ComputerName <your-LAN-IP> -Port 7823
+```
+
+If `TcpTestSucceeded : True` from the PC but the phone still cannot connect, the firewall rule is missing or wrong-profile. If `TcpTestSucceeded : False` even from the PC itself, the server isn't really listening (check the **Mobile** pill).
 
 > The server binds to `0.0.0.0`. Anyone who can reach the host on port 7823 can drive the assistant — only run the app on networks you trust, or pair this with a firewall rule that allows only your phone's IP.
 

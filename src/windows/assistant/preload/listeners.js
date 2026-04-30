@@ -101,6 +101,11 @@ function createEventActions(ipcRenderer) {
     label: 'onMobileServerStatus'
   });
 
+  const onClearFromMobile = createEventListener(ipcRenderer, {
+    channel: 'clear-from-mobile',
+    label: 'onClearFromMobile'
+  });
+
   return {
     onScreenshotTakenStealth,
     onAnalysisStart,
@@ -121,7 +126,8 @@ function createEventActions(ipcRenderer) {
     onToggleVoiceRecognition,
     onTriggerAskAi,
     onSttDebug: (callback) => rawOnSttDebug((data) => callback(data || {})),
-    onMobileServerStatus
+    onMobileServerStatus,
+    onClearFromMobile
   };
 }
 

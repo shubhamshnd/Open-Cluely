@@ -6,17 +6,43 @@ const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 
+// Names that almost always belong to virtual adapters (Docker, WSL, VPN,
+// hypervisors). Phones cannot route to these IPs, so we want the real
+// Wi-Fi/Ethernet adapter to appear first in the URL list.
+const VIRTUAL_ADAPTER_PATTERNS = [
+  /vethernet/i,
+  /wsl/i,
+  /vmware/i,
+  /virtualbox/i,
+  /hyper-?v/i,
+  /docker/i,
+  /tailscale/i,
+  /zerotier/i,
+  /\btap\b/i,
+  /\btun\b/i,
+  /loopback/i,
+  /^ppp/i,
+  /openvpn/i,
+  /utun/i
+];
+
+function isVirtualAdapter(name = '') {
+  return VIRTUAL_ADAPTER_PATTERNS.some((re) => re.test(name));
+}
+
 function getLanAddresses() {
-  const out = [];
+  const real = [];
+  const virtual = [];
   const ifaces = os.networkInterfaces();
   for (const name of Object.keys(ifaces)) {
     for (const iface of ifaces[name] || []) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        out.push({ name, address: iface.address });
+        const entry = { name, address: iface.address, virtual: isVirtualAdapter(name) };
+        if (entry.virtual) virtual.push(entry); else real.push(entry);
       }
     }
   }
-  return out;
+  return [...real, ...virtual];
 }
 
 const MOBILE_PORT = 7823;
@@ -39,9 +65,10 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
   }
 
   function refreshUrls() {
-    status.urls = getLanAddresses().map(({ name, address }) => ({
+    status.urls = getLanAddresses().map(({ name, address, virtual }) => ({
       name,
       address,
+      virtual: !!virtual,
       url: `http://${address}:${MOBILE_PORT}`
     }));
   }
@@ -201,6 +228,11 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
           try {
             const geminiService = geminiRuntime?.getService();
             if (geminiService) geminiService.clearHistory();
+            if (screenshotManager?.clearStealth) screenshotManager.clearStealth();
+            // Tell the desktop renderer to wipe its chat UI as well.
+            if (typeof notifyDesktop === 'function') {
+              notifyDesktop('clear-from-mobile', {});
+            }
             broadcast('clear-done', {});
           } catch (err) {
             sendTo(ws, 'error', { message: `Clear failed: ${err.message}` });
@@ -235,8 +267,9 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
     emitStatus();
     console.log(`[MobileServer] Listening on 0.0.0.0:${MOBILE_PORT}`);
     console.log(`[MobileServer] Local:   http://localhost:${MOBILE_PORT}`);
-    for (const { name, url } of status.urls) {
-      console.log(`[MobileServer] Network: ${url}  (${name})`);
+    for (const { name, url, virtual } of status.urls) {
+      const tag = virtual ? '  [virtual — phone probably cannot reach]' : '';
+      console.log(`[MobileServer] Network: ${url}  (${name})${tag}`);
     }
     console.log('[MobileServer] On the phone, open one of the Network URLs.');
     console.log('[MobileServer] If the phone cannot reach the PC, allow inbound TCP 7823 in Windows Firewall.');
