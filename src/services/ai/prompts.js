@@ -197,13 +197,15 @@ ${screenshotDirective}
   documentation, slide, chat thread, or other.
 - Read every visible token: constraints, sample I/O, error messages, function signatures,
   platform indicators.
+- Use the attached image as the source of truth. Extracted OCR text is supplemental and may
+  contain recognition errors; verify it against the image before relying on it.
 - Match the platform's required I/O exactly (LeetCode signature vs. stdin/stdout, etc.).
 
 === LANGUAGE FOR CODE ===
 If — and only if — the domain is coding, prefer ${resolvedLanguage} unless the screen clearly
 demands another language. ${buildLanguageBestPractices(resolvedLanguage)}
 
-${buildContextBlock('Conversation history', contextString)}${buildContextBlock('Additional context', additionalContext)}`.trim();
+${buildContextBlock('Conversation history', contextString)}${buildContextBlock('Extracted screen text (supplemental)', additionalContext)}`.trim();
 }
 
 // ─── SUGGEST ──────────────────────────────────────────────────────────────────

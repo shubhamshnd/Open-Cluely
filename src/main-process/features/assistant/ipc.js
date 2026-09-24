@@ -1,6 +1,7 @@
 ﻿function registerAssistantIpc({
   ipcMain,
   screenshotManager,
+  ocrService,
   windowController,
   geminiRuntime,
   assemblyAiService,
@@ -94,7 +95,7 @@
     try {
       sendToRenderer('analysis-start');
 
-      const { imageParts } = await screenshotManager.buildImagePartsFromScreenshots({
+      const { imageParts, entries } = await screenshotManager.buildImagePartsFromScreenshots({
         strict: true,
         includeIds: enabledScreenshotIds
       });
@@ -111,6 +112,9 @@
       };
       sendToRenderer('ai-stream-start', { actionId: 'screenAi' });
 
+      const ocrText = geminiRuntime.getActiveAiProvider() === 'gemini'
+        ? await ocrService.extractTextFromEntries(entries)
+        : '';
       const text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
           throw new Error('AI model not initialized. Please check your API key.');
@@ -118,7 +122,7 @@
 
         return geminiService.analyzeScreenshots(
           imageParts,
-          '',
+          ocrText,
           { contextStringOverride: contextString, onChunk }
         );
       });
@@ -225,7 +229,7 @@
       let text = '';
 
       if (screenshotManager.hasScreenshots()) {
-        const { imageParts } = await screenshotManager.buildImagePartsFromScreenshots({
+        const { imageParts, entries } = await screenshotManager.buildImagePartsFromScreenshots({
           strict: false,
           includeIds: enabledScreenshotIds
         });
@@ -233,6 +237,9 @@
         if (imageParts.length > 0) {
           usedScreenshots = true;
           usedScreenshotCount = imageParts.length;
+          const ocrText = geminiRuntime.getActiveAiProvider() === 'gemini'
+            ? await ocrService.extractTextFromEntries(entries)
+            : '';
           text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
             if (!geminiService || !geminiService.model) {
               throw new Error('AI model not initialized. Please check your API key.');
@@ -240,7 +247,7 @@
 
             return geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
               contextString,
-              transcriptContext,
+              transcriptContext: [transcriptContext, ocrText].filter(Boolean).join('\n\n'),
               sessionSummary,
               screenshotCount: imageParts.length,
               mode,

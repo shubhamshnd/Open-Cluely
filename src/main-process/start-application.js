@@ -30,6 +30,7 @@ const { createGeminiRuntime } = require('./features/assistant/gemini-runtime');
 const { createScreenshotManager } = require('./features/assistant/screenshot-manager');
 const { registerAssistantIpc } = require('./features/assistant/ipc');
 const { createAssemblyAiService } = require('../services/assembly-ai/service');
+const { createOcrService } = require('../services/ocr/service');
 const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
@@ -64,6 +65,7 @@ async function startApplication() {
 
   let screenshotManager = null;
   let windowController = null;
+  const ocrService = createOcrService();
 
   const baseSendToRenderer = createSafeSender(() => {
     if (!windowController) {
@@ -170,6 +172,9 @@ async function startApplication() {
   function cleanupTransientResources() {
     assemblyAiService.dispose();
     screenshotManager.cleanupTransientResources();
+    ocrService.dispose().catch((error) => {
+      console.error('Failed to dispose OCR worker:', error);
+    });
     windowController.unregisterShortcuts();
     mobileServer.close();
   }
@@ -194,6 +199,7 @@ async function startApplication() {
   registerAssistantIpc({
     ipcMain,
     screenshotManager,
+    ocrService,
     windowController,
     geminiRuntime,
     assemblyAiService,
