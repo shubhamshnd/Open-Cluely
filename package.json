@@ -7,6 +7,7 @@
     "start": "node scripts/run-electron.js",
     "start:hidden": "node scripts/run-electron.js --start-hidden",
     "dev": "node scripts/run-electron.js --enable-logging",
+    "test": "node --test test",
     "build": "node scripts/run-build.js",
     "build:win": "node scripts/run-build.js --win portable",
     "build:mac": "node scripts/run-build.js --mac",
@@ -16,6 +17,7 @@
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^16.3.1",
     "screenshot-desktop": "^1.15.0",
+    "tesseract.js": "^6.0.1",
     "ws": "^8.19.0"
   },
   "devDependencies": {

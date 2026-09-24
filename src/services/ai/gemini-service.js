@@ -313,7 +313,8 @@ class GeminiService {
     const prompt = buildScreenshotAnalysisPrompt({
       contextString,
       additionalContext,
-      programmingLanguage: this.programmingLanguage
+      programmingLanguage: this.programmingLanguage,
+      screenshotCount: imageParts.length
     });
 
     const streamOptions = { onChunk: options.onChunk };
