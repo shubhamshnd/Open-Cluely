@@ -11,6 +11,8 @@ function getDefaultAppState() {
     assemblyAiApiKey: null,
     geminiApiKeyIndex: 0,
     geminiModel: null,
+    deepseekApiKey: null,
+    deepseekModel: null,
     ollamaBaseUrl: null,
     ollamaModel: null,
     assemblyAiSpeechModel: null,
@@ -25,7 +27,7 @@ function sanitizeAppState(state) {
 
   if (state && typeof state === 'object' && !Array.isArray(state)) {
     const aiProvider = String(state.aiProvider ?? '').trim().toLowerCase();
-    if (aiProvider === 'gemini' || aiProvider === 'ollama') {
+    if (aiProvider === 'gemini' || aiProvider === 'deepseek' || aiProvider === 'ollama') {
       nextState.aiProvider = aiProvider;
     }
 
@@ -46,6 +48,15 @@ function sanitizeAppState(state) {
 
     if (typeof state.geminiModel === 'string' && state.geminiModel.trim()) {
       nextState.geminiModel = state.geminiModel.trim();
+    }
+
+    if (typeof state.deepseekApiKey === 'string') {
+      const deepseekApiKey = state.deepseekApiKey.trim();
+      nextState.deepseekApiKey = deepseekApiKey || null;
+    }
+
+    if (typeof state.deepseekModel === 'string' && state.deepseekModel.trim()) {
+      nextState.deepseekModel = state.deepseekModel.trim();
     }
 
     if (typeof state.ollamaBaseUrl === 'string' && state.ollamaBaseUrl.trim()) {

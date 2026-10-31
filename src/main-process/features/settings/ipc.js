@@ -20,17 +20,23 @@ function registerSettingsIpc({
     const appEnvironment = getAppEnvironment();
     const appState = getAppState();
     const geminiApiKey = typeof appState?.geminiApiKey === 'string' ? appState.geminiApiKey : '';
+    const deepseekApiKey = typeof appState?.deepseekApiKey === 'string' ? appState.deepseekApiKey : '';
     const assemblyAiApiKey = typeof appState?.assemblyAiApiKey === 'string' ? appState.assemblyAiApiKey : '';
 
     return {
       aiProvider: geminiRuntime.getActiveAiProvider(),
       geminiApiKey,
+      deepseekApiKey,
       assemblyAiApiKey,
       hasGeminiApiKeys: geminiApiKey.split(',').map((value) => value.trim()).filter(Boolean).length > 0,
+      hasDeepSeekApiKey: deepseekApiKey.trim().length > 0,
       hasAssemblyAiApiKey: assemblyAiApiKey.length > 0,
       geminiModel: geminiRuntime.getActiveGeminiModel(),
       geminiModels: geminiRuntime.getGeminiModels(),
       defaultGeminiModel: geminiRuntime.getDefaultGeminiModel(),
+      deepseekModel: geminiRuntime.getActiveDeepSeekModel(),
+      deepseekModels: geminiRuntime.getDeepSeekModels(),
+      defaultDeepSeekModel: geminiRuntime.getDefaultDeepSeekModel(),
       ollamaBaseUrl: geminiRuntime.getActiveOllamaBaseUrl(),
       ollamaModel: geminiRuntime.getActiveOllamaModel(),
       defaultOllamaBaseUrl: geminiRuntime.getDefaultOllamaBaseUrl(),
@@ -76,8 +82,10 @@ function registerSettingsIpc({
       const appEnvironment = getAppEnvironment();
       const nextAiProvider = geminiRuntime.setActiveAiProvider(settings.aiProvider);
       const nextGeminiApiKey = String(settings.geminiApiKey || '').trim();
+      const nextDeepSeekApiKey = geminiRuntime.setActiveDeepSeekApiKey(settings.deepseekApiKey);
       const nextAssemblyAiApiKey = String(settings.assemblyAiApiKey || '').trim();
       const nextGeminiModel = geminiRuntime.setActiveGeminiModel(settings.geminiModel);
+      const nextDeepSeekModel = geminiRuntime.setActiveDeepSeekModel(settings.deepseekModel);
       const nextOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(settings.ollamaBaseUrl);
       const nextOllamaModel = geminiRuntime.setActiveOllamaModel(settings.ollamaModel);
       const nextAssemblyModel = setAssemblyAiSpeechModel(settings.assemblyAiSpeechModel);
@@ -97,9 +105,11 @@ function registerSettingsIpc({
       const updatedAppState = saveAppState(app, {
         aiProvider: nextAiProvider,
         geminiApiKey: nextGeminiApiKey,
+        deepseekApiKey: nextDeepSeekApiKey,
         assemblyAiApiKey: nextAssemblyAiApiKey,
         geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: nextGeminiModel,
+        deepseekModel: nextDeepSeekModel,
         ollamaBaseUrl: nextOllamaBaseUrl,
         ollamaModel: nextOllamaModel,
         assemblyAiSpeechModel: nextAssemblyModel,
@@ -121,6 +131,13 @@ function registerSettingsIpc({
         geminiRuntime.initializeOllamaService(
           nextOllamaBaseUrl,
           nextOllamaModel,
+          nextProgrammingLanguage
+        );
+      } else if (nextAiProvider === 'deepseek') {
+        console.log(`Applied DeepSeek model: ${nextDeepSeekModel}`);
+        geminiRuntime.initializeDeepSeekService(
+          nextDeepSeekApiKey,
+          nextDeepSeekModel,
           nextProgrammingLanguage
         );
       } else {

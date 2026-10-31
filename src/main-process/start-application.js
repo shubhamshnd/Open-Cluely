@@ -1,4 +1,4 @@
-﻿const {
+const {
   app,
   dialog,
   desktopCapturer,
@@ -131,6 +131,8 @@ async function startApplication() {
       appState.geminiApiKeyIndex
     );
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
+    const activeDeepSeekApiKey = geminiRuntime.setActiveDeepSeekApiKey(appState.deepseekApiKey);
+    const activeDeepSeekModel = geminiRuntime.setActiveDeepSeekModel(appState.deepseekModel);
     const activeOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(appState.ollamaBaseUrl);
     const activeOllamaModel = geminiRuntime.setActiveOllamaModel(appState.ollamaModel);
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
@@ -141,6 +143,7 @@ async function startApplication() {
       appState.aiProvider !== activeAiProvider ||
       appState.geminiApiKeyIndex !== keyState.activeApiKeyIndex ||
       appState.geminiModel !== activeGeminiModel ||
+      appState.deepseekModel !== activeDeepSeekModel ||
       appState.ollamaBaseUrl !== activeOllamaBaseUrl ||
       appState.ollamaModel !== activeOllamaModel ||
       appState.assemblyAiSpeechModel !== activeAssemblyAiSpeechModel ||
@@ -151,6 +154,8 @@ async function startApplication() {
         aiProvider: activeAiProvider,
         geminiApiKeyIndex: keyState.activeApiKeyIndex,
         geminiModel: activeGeminiModel,
+        deepseekApiKey: activeDeepSeekApiKey || null,
+        deepseekModel: activeDeepSeekModel,
         ollamaBaseUrl: activeOllamaBaseUrl,
         ollamaModel: activeOllamaModel,
         assemblyAiSpeechModel: activeAssemblyAiSpeechModel,
@@ -163,6 +168,7 @@ async function startApplication() {
     console.log('Restored AI provider from app state:', activeAiProvider);
     console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
     console.log('Restored Gemini model from app state:', activeGeminiModel);
+    console.log('Restored DeepSeek model from app state:', activeDeepSeekModel);
     console.log('Restored Ollama config from app state:', activeOllamaModel, 'at', activeOllamaBaseUrl);
     console.log('Restored AssemblyAI speech model from app state:', activeAssemblyAiSpeechModel);
     console.log('Restored programming language from app state:', activeProgrammingLanguage);
@@ -274,6 +280,12 @@ async function startApplication() {
       geminiRuntime.initializeOllamaService(
         geminiRuntime.getActiveOllamaBaseUrl(),
         geminiRuntime.getActiveOllamaModel(),
+        geminiRuntime.getActiveProgrammingLanguage()
+      );
+    } else if (geminiRuntime.getActiveAiProvider() === 'deepseek') {
+      geminiRuntime.initializeDeepSeekService(
+        geminiRuntime.getActiveDeepSeekApiKey(),
+        geminiRuntime.getActiveDeepSeekModel(),
         geminiRuntime.getActiveProgrammingLanguage()
       );
     } else {

@@ -1,11 +1,16 @@
 const GeminiService = require('../../../services/ai/gemini-service');
 const OllamaService = require('../../../services/ai/ollama-service');
+const DeepSeekService = require('../../../services/ai/deepseek-service');
 const {
   resolveAiProvider,
   getAiProviders,
   getDefaultAiProvider,
   getDefaultOllamaBaseUrl,
   getDefaultOllamaModel,
+  getDefaultDeepSeekBaseUrl,
+  getDeepSeekModels,
+  getDefaultDeepSeekModel,
+  resolveDeepSeekModel,
   resolveGeminiModel,
   resolveProgrammingLanguage,
   getGeminiModels,
@@ -39,11 +44,14 @@ function normalizeGeminiApiKeys(keys) {
 function createGeminiRuntime() {
   let geminiService = null;
   let ollamaService = null;
+  let deepseekService = null;
   let activeAiProvider = getDefaultAiProvider();
   let activeGeminiModel = getDefaultGeminiModel();
   let activeProgrammingLanguage = getDefaultProgrammingLanguage();
   let activeOllamaBaseUrl = getDefaultOllamaBaseUrl();
   let activeOllamaModel = getDefaultOllamaModel();
+  let activeDeepSeekApiKey = '';
+  let activeDeepSeekModel = getDefaultDeepSeekModel();
   let geminiApiKeys = [];
   let activeApiKeyIndex = 0;
   let activeKeyIndexChangeHandler = null;
@@ -93,8 +101,22 @@ function createGeminiRuntime() {
     return geminiApiKeys[activeApiKeyIndex] || '';
   }
 
-  function hasApiKeys() {
+  function hasGeminiApiKeys() {
     return geminiApiKeys.length > 0;
+  }
+
+  function hasDeepSeekApiKey() {
+    return Boolean(activeDeepSeekApiKey && activeDeepSeekApiKey.trim().length > 0);
+  }
+
+  function hasApiKeys() {
+    if (activeAiProvider === 'ollama') {
+      return true;
+    }
+    if (activeAiProvider === 'deepseek') {
+      return hasDeepSeekApiKey();
+    }
+    return hasGeminiApiKeys();
   }
 
   function initializeGeminiService(
@@ -140,10 +162,54 @@ function createGeminiRuntime() {
     }
   }
 
+  function initializeDeepSeekService(
+    apiKey = activeDeepSeekApiKey,
+    modelName = activeDeepSeekModel,
+    programmingLanguage = activeProgrammingLanguage
+  ) {
+    activeDeepSeekApiKey = String(apiKey || '').trim();
+    activeDeepSeekModel = resolveDeepSeekModel(modelName);
+    activeProgrammingLanguage = resolveProgrammingLanguage(programmingLanguage);
+
+    try {
+      if (!activeDeepSeekApiKey) {
+        console.error('DeepSeek API key not configured in app settings');
+        deepseekService = null;
+        return null;
+      }
+
+      console.log(
+        'Initializing DeepSeek AI Service with model and language:',
+        activeDeepSeekModel,
+        activeProgrammingLanguage
+      );
+
+      if (deepseekService) {
+        deepseekService.updateConfiguration({
+          apiKey: activeDeepSeekApiKey,
+          modelName: activeDeepSeekModel,
+          programmingLanguage: activeProgrammingLanguage
+        });
+      } else {
+        deepseekService = new DeepSeekService(activeDeepSeekApiKey, {
+          modelName: activeDeepSeekModel,
+          programmingLanguage: activeProgrammingLanguage
+        });
+      }
+
+      console.log('DeepSeek AI Service initialized successfully');
+      return deepseekService;
+    } catch (error) {
+      deepseekService = null;
+      console.error('Failed to initialize DeepSeek AI Service:', error);
+      return null;
+    }
+  }
+
   function setKeys(apiKeys, preferredIndex = 0) {
     geminiApiKeys = normalizeGeminiApiKeys(apiKeys);
 
-    if (!hasApiKeys()) {
+    if (!hasGeminiApiKeys()) {
       setActiveApiKeyIndex(0);
       geminiService = null;
       return {
@@ -167,7 +233,7 @@ function createGeminiRuntime() {
   }
 
   function switchToNextKey() {
-    if (!hasApiKeys()) {
+    if (!hasGeminiApiKeys()) {
       return {
         switched: false,
         activeApiKeyIndex,
@@ -274,7 +340,26 @@ function createGeminiRuntime() {
       });
     }
 
-    if (!hasApiKeys()) {
+    // For DeepSeek, execute using configured DeepSeek service
+    if (activeAiProvider === 'deepseek') {
+      if (!hasDeepSeekApiKey()) {
+        throw new Error('No DeepSeek API key configured. Add it in Settings.');
+      }
+      if (!deepseekService || deepseekService.apiKey !== activeDeepSeekApiKey) {
+        initializeDeepSeekService(activeDeepSeekApiKey, activeDeepSeekModel, activeProgrammingLanguage);
+      }
+      if (!deepseekService) {
+        throw new Error('DeepSeek service not available. Check your API key in Settings.');
+      }
+      return await operation(deepseekService, {
+        activeApiKeyIndex: 0,
+        activeApiKey: activeDeepSeekApiKey,
+        attempt: 1,
+        totalKeys: 1
+      });
+    }
+
+    if (!hasGeminiApiKeys()) {
       throw new Error('No Gemini API key configured. Add it in Settings.');
     }
 
@@ -367,6 +452,9 @@ function createGeminiRuntime() {
     if (activeAiProvider === 'ollama') {
       return initializeOllamaService(activeOllamaBaseUrl, activeOllamaModel, activeProgrammingLanguage);
     }
+    if (activeAiProvider === 'deepseek') {
+      return initializeDeepSeekService(activeDeepSeekApiKey, activeDeepSeekModel, activeProgrammingLanguage);
+    }
     return initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
   }
 
@@ -397,9 +485,30 @@ function createGeminiRuntime() {
     return activeOllamaModel;
   }
 
+  function setActiveDeepSeekApiKey(apiKey) {
+    activeDeepSeekApiKey = String(apiKey || '').trim();
+    return activeDeepSeekApiKey;
+  }
+
+  function getActiveDeepSeekApiKey() {
+    return activeDeepSeekApiKey;
+  }
+
+  function setActiveDeepSeekModel(modelName) {
+    activeDeepSeekModel = resolveDeepSeekModel(modelName);
+    return activeDeepSeekModel;
+  }
+
+  function getActiveDeepSeekModel() {
+    return activeDeepSeekModel;
+  }
+
   function getService() {
     if (activeAiProvider === 'ollama') {
       return ollamaService;
+    }
+    if (activeAiProvider === 'deepseek') {
+      return deepseekService;
     }
     return geminiService;
   }
@@ -429,10 +538,13 @@ function createGeminiRuntime() {
   return {
     initializeGeminiService,
     initializeOllamaService,
+    initializeDeepSeekService,
     initializeAiService,
     setKeys,
     getApiKeys,
     hasApiKeys,
+    hasGeminiApiKeys,
+    hasDeepSeekApiKey,
     getActiveApiKey,
     getActiveApiKeyIndex: () => activeApiKeyIndex,
     switchToNextKey,
@@ -454,6 +566,13 @@ function createGeminiRuntime() {
     setActiveOllamaBaseUrl,
     getActiveOllamaModel,
     setActiveOllamaModel,
+    getDefaultDeepSeekBaseUrl,
+    getDeepSeekModels,
+    getDefaultDeepSeekModel,
+    getActiveDeepSeekApiKey,
+    setActiveDeepSeekApiKey,
+    getActiveDeepSeekModel,
+    setActiveDeepSeekModel,
     getProgrammingLanguages,
     getDefaultProgrammingLanguage,
     getActiveProgrammingLanguage,

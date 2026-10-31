@@ -208,10 +208,14 @@ const closeSettingsBtn = document.getElementById('close-settings');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingAiProvider = document.getElementById('setting-ai-provider');
 const geminiSettingsGroup = document.getElementById('gemini-settings-group');
+const deepseekSettingsGroup = document.getElementById('deepseek-settings-group');
 const ollamaSettingsGroup = document.getElementById('ollama-settings-group');
 const settingGeminiKey = document.getElementById('setting-gemini-key');
 const toggleGeminiKeyVisibilityBtn = document.getElementById('toggle-gemini-key-visibility');
 const settingGeminiModel = document.getElementById('setting-gemini-model');
+const settingDeepSeekKey = document.getElementById('setting-deepseek-key');
+const toggleDeepSeekKeyVisibilityBtn = document.getElementById('toggle-deepseek-key-visibility');
+const settingDeepSeekModel = document.getElementById('setting-deepseek-model');
 const settingOllamaBaseUrl = document.getElementById('setting-ollama-base-url');
 const settingOllamaModel = document.getElementById('setting-ollama-model');
 const settingOllamaModelSelect = document.getElementById('setting-ollama-model-select');
@@ -272,10 +276,14 @@ const settingsPanelManager = createSettingsPanelManager({
     settingsPanel,
     settingAiProvider,
     geminiSettingsGroup,
+    deepseekSettingsGroup,
     ollamaSettingsGroup,
     settingGeminiKey,
     toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
+    settingDeepSeekKey,
+    toggleDeepSeekKeyVisibilityBtn,
+    settingDeepSeekModel,
     settingProgrammingLanguage,
     settingOllamaBaseUrl,
     settingOllamaModel,
@@ -576,6 +584,12 @@ function applyApiKeyAvailabilityFromSettings(settings) {
     // Ollama doesn't require API keys, so treat it as always configured
     if (settings.aiProvider === 'ollama') {
         hasGeminiApiKeysConfigured = true;
+    } else if (settings.aiProvider === 'deepseek') {
+        if (typeof settings.hasDeepSeekApiKey === 'boolean') {
+            hasGeminiApiKeysConfigured = settings.hasDeepSeekApiKey;
+        } else {
+            hasGeminiApiKeysConfigured = String(settings.deepseekApiKey ?? '').trim().length > 0;
+        }
     } else if (typeof settings.hasGeminiApiKeys === 'boolean') {
         hasGeminiApiKeysConfigured = settings.hasGeminiApiKeys;
     } else {
@@ -705,7 +719,7 @@ function buildAskAiContextPayload() {
 
 async function askAiWithSessionContext() {
     if (!hasGeminiApiKeysConfigured) {
-        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        showFeedback('AI API key missing. Add it in Settings.', 'error');
         return;
     }
 
@@ -752,7 +766,7 @@ async function askAiWithSessionContext() {
 
 async function analyzeScreenshotsOnly() {
     if (!hasGeminiApiKeysConfigured) {
-        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        showFeedback('AI API key missing. Add it in Settings.', 'error');
         return;
     }
 
@@ -850,7 +864,7 @@ async function closeApplication() {
 
 async function getResponseSuggestions() {
     if (!hasGeminiApiKeysConfigured) {
-        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        showFeedback('AI API key missing. Add it in Settings.', 'error');
         return;
     }
 
@@ -895,7 +909,7 @@ async function getResponseSuggestions() {
 
 async function generateMeetingNotes() {
     if (!hasGeminiApiKeysConfigured) {
-        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        showFeedback('AI API key missing. Add it in Settings.', 'error');
         return;
     }
 
@@ -940,7 +954,7 @@ async function generateMeetingNotes() {
 
 async function getConversationInsights() {
     if (!hasGeminiApiKeysConfigured) {
-        showFeedback('Gemini API key missing. Add it in Settings.', 'error');
+        showFeedback('AI API key missing. Add it in Settings.', 'error');
         return;
     }
 
@@ -1302,8 +1316,3 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-
-
-
-
-
