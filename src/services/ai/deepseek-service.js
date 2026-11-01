@@ -22,6 +22,15 @@ const {
   buildSuggestResponsePrompt
 } = require('./prompts');
 
+function mapToDeepSeekApiModelId(modelName) {
+  const normalized = String(modelName || '').trim().toLowerCase();
+  if (!normalized || normalized === 'deepseek-v4' || normalized === 'deepseek-v3') {
+    // DeepSeek's official API endpoint uses 'deepseek-chat' for the flagship V3/V4 model
+    return 'deepseek-chat';
+  }
+  return String(modelName).trim();
+}
+
 class DeepSeekService {
   constructor(apiKey, options = {}) {
     this.apiKey = String(apiKey || '').trim();
@@ -152,7 +161,8 @@ class DeepSeekService {
 
       return await this._chat(prompt);
     } catch (error) {
-      console.error(`DeepSeek request error (attempt ${retryCount + 1}):`, error.message);
+      const causeMsg = error?.cause?.message ? ` (${error.cause.message})` : '';
+      console.error(`DeepSeek request error (attempt ${retryCount + 1}): ${error.message}${causeMsg}`);
 
       if (this.isQuotaExhaustedError(error) || this.isAuthenticationError(error)) {
         throw error;
@@ -169,6 +179,9 @@ class DeepSeekService {
         return this._executeRequest(request, retryCount + 1);
       }
 
+      if (causeMsg && !error.message.includes(error.cause.message)) {
+        throw new Error(`${error.message}${causeMsg}`);
+      }
       throw error;
     }
   }
@@ -205,8 +218,9 @@ class DeepSeekService {
   async _chat(prompt) {
     const url = this._getChatCompletionsUrl();
     const messages = this._buildMessages(prompt);
+    const apiModel = mapToDeepSeekApiModelId(this.modelName);
 
-    console.log(`[DeepSeek API] Non-streaming request started (model: ${this.modelName})`);
+    console.log(`[DeepSeek API] Non-streaming request started (model: ${apiModel})`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -215,7 +229,7 @@ class DeepSeekService {
         Authorization: `Bearer ${this.apiKey}`
       },
       body: JSON.stringify({
-        model: this.modelName,
+        model: apiModel,
         messages,
         stream: false
       })
@@ -236,8 +250,9 @@ class DeepSeekService {
   async _streamChat(prompt, request) {
     const url = this._getChatCompletionsUrl();
     const messages = this._buildMessages(prompt);
+    const apiModel = mapToDeepSeekApiModelId(this.modelName);
 
-    console.log(`[DeepSeek API] Streaming request started (model: ${this.modelName})`);
+    console.log(`[DeepSeek API] Streaming request started (model: ${apiModel})`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -246,7 +261,7 @@ class DeepSeekService {
         Authorization: `Bearer ${this.apiKey}`
       },
       body: JSON.stringify({
-        model: this.modelName,
+        model: apiModel,
         messages,
         stream: true
       })
@@ -494,4 +509,3 @@ class DeepSeekService {
 }
 
 module.exports = DeepSeekService;
-

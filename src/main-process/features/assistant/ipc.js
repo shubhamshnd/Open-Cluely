@@ -10,6 +10,15 @@ function registerAssistantIpc({
 }) {
   let chatContext = [];
 
+  async function safeExtractOcrText(entries) {
+    try {
+      return await ocrService.extractTextFromEntries(entries);
+    } catch (error) {
+      console.warn('OCR text extraction failed, proceeding without OCR text:', error.message);
+      return '';
+    }
+  }
+
   function getAllKeysUnavailableMessage() {
     return 'All configured Gemini API keys are currently unavailable (quota exhausted or invalid). Please wait and try again later.';
   }
@@ -23,7 +32,8 @@ function registerAssistantIpc({
   }
 
   function mapGeminiErrorMessage(error, fallbackPrefix = 'Request failed') {
-    const message = String(error?.message || '');
+    const causeMessage = error?.cause?.message ? ` (${error.cause.message})` : '';
+    const message = `${String(error?.message || '')}${causeMessage}`;
     const normalizedMessage = message.toLowerCase();
 
     if (geminiRuntime.isAllKeysUnavailableError?.(error)) {
@@ -63,18 +73,31 @@ function registerAssistantIpc({
       normalizedMessage.includes('insufficient balance') ||
       normalizedMessage.includes('insufficient_quota') ||
       normalizedMessage.includes('402') ||
+      normalizedMessage.includes('429') ||
       normalizedMessage.includes('daily request limit') ||
       normalizedMessage.includes('exceeded your current quota')
     ) {
-      return 'API quota or balance exceeded. Please check your account or try again later.';
+      return `API quota/balance limit reached (${message}).`;
     }
 
-    if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
-      return 'Network error. Please check your internet connection.';
+    if (
+      normalizedMessage.includes('404') ||
+      normalizedMessage.includes('not found') ||
+      normalizedMessage.includes('model not exist') ||
+      normalizedMessage.includes('is not found for api version')
+    ) {
+      return `Selected AI model is unavailable (${message}). Try selecting a different model in Settings.`;
     }
 
-    if (normalizedMessage.includes('model')) {
-      return 'AI model error. Please try a different model.';
+    if (
+      normalizedMessage.includes('fetch failed') ||
+      normalizedMessage.includes('enotfound') ||
+      normalizedMessage.includes('econnreset') ||
+      normalizedMessage.includes('etimedout') ||
+      normalizedMessage.includes('socket hang up') ||
+      normalizedMessage.includes('network error')
+    ) {
+      return `Network connection error: ${message}`;
     }
 
     return message ? `${fallbackPrefix}: ${message}` : fallbackPrefix;
@@ -131,7 +154,7 @@ function registerAssistantIpc({
 
       const activeProvider = geminiRuntime.getActiveAiProvider();
       const ocrText = (activeProvider === 'gemini' || activeProvider === 'deepseek')
-        ? await ocrService.extractTextFromEntries(entries)
+        ? await safeExtractOcrText(entries)
         : '';
       const text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
@@ -257,7 +280,7 @@ function registerAssistantIpc({
           usedScreenshotCount = imageParts.length;
           const activeProvider = geminiRuntime.getActiveAiProvider();
           const ocrText = (activeProvider === 'gemini' || activeProvider === 'deepseek')
-            ? await ocrService.extractTextFromEntries(entries)
+            ? await safeExtractOcrText(entries)
             : '';
           text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
             if (!geminiService || !geminiService.model) {
