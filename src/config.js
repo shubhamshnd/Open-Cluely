@@ -1,10 +1,19 @@
 // AI provider configuration.
-// Supported providers: 'gemini' and 'ollama'.
-const AI_PROVIDERS = ['gemini', 'ollama'];
+// Supported providers: 'gemini', 'deepseek', and 'ollama'.
+const AI_PROVIDERS = ['gemini', 'deepseek', 'ollama'];
 const DEFAULT_AI_PROVIDER = 'gemini';
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 const DEFAULT_OLLAMA_MODEL = 'llama3.2';
+
+// DeepSeek model configuration.
+// The first model in this list is treated as the default model everywhere.
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+const DEEPSEEK_MODELS = [
+  'deepseek-chat',
+  'deepseek-reasoner',
+  'deepseek-v4'
+];
 
 // Gemini model configuration.
 // The first model in this list is treated as the default model everywhere.
@@ -174,6 +183,35 @@ function getDefaultOllamaModel() {
   return DEFAULT_OLLAMA_MODEL;
 }
 
+// DeepSeek model configuration functions
+function getDefaultDeepSeekBaseUrl() {
+  return DEFAULT_DEEPSEEK_BASE_URL;
+}
+
+function getDeepSeekModels() {
+  if (!Array.isArray(DEEPSEEK_MODELS) || DEEPSEEK_MODELS.length === 0) {
+    throw new Error('DeepSeek models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return [...DEEPSEEK_MODELS];
+}
+
+function getDefaultDeepSeekModel() {
+  return getDeepSeekModels()[0];
+}
+
+function isConfiguredDeepSeekModel(modelName) {
+  return getDeepSeekModels().includes(modelName);
+}
+
+function resolveDeepSeekModel(modelName) {
+  const trimmed = String(modelName || '').trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  return getDefaultDeepSeekModel();
+}
+
 // Gemini model configuration functions
 function getGeminiModels() {
   if (!Array.isArray(GEMINI_MODELS) || GEMINI_MODELS.length === 0) {
@@ -284,6 +322,11 @@ module.exports = {
   getDefaultAiProvider,
   getDefaultOllamaBaseUrl,
   getDefaultOllamaModel,
+  getDefaultDeepSeekBaseUrl,
+  getDeepSeekModels,
+  getDefaultDeepSeekModel,
+  isConfiguredDeepSeekModel,
+  resolveDeepSeekModel,
   isConfiguredAiProvider,
   resolveAiProvider,
   getAssemblyAiSpeechModels,

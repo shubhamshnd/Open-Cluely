@@ -6,10 +6,14 @@ export function createSettingsPanelManager({
     settingsPanel,
     settingAiProvider,
     geminiSettingsGroup,
+    deepseekSettingsGroup,
     ollamaSettingsGroup,
     settingGeminiKey,
     toggleGeminiKeyVisibilityBtn,
     settingGeminiModel,
+    settingDeepSeekKey,
+    toggleDeepSeekKeyVisibilityBtn,
+    settingDeepSeekModel,
     settingProgrammingLanguage,
     settingOllamaBaseUrl,
     settingOllamaModel,
@@ -71,13 +75,18 @@ export function createSettingsPanelManager({
     }
 
     function updateProviderVisibility(provider) {
-        const isGemini = provider !== 'ollama';
+        const isGemini = provider !== 'ollama' && provider !== 'deepseek';
+        const isDeepSeek = provider === 'deepseek';
+        const isOllama = provider === 'ollama';
 
         if (geminiSettingsGroup) {
             geminiSettingsGroup.classList.toggle('hidden', !isGemini);
         }
+        if (deepseekSettingsGroup) {
+            deepseekSettingsGroup.classList.toggle('hidden', !isDeepSeek);
+        }
         if (ollamaSettingsGroup) {
-            ollamaSettingsGroup.classList.toggle('hidden', isGemini);
+            ollamaSettingsGroup.classList.toggle('hidden', !isOllama);
         }
     }
 
@@ -187,6 +196,29 @@ export function createSettingsPanelManager({
             : configuredModels[0];
     }
 
+    function populateDeepSeekModelOptions(models, selectedModel) {
+        if (!settingDeepSeekModel) {
+            return;
+        }
+
+        settingDeepSeekModel.innerHTML = '';
+
+        const configuredModels = Array.isArray(models) && models.length > 0
+            ? models
+            : ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4'];
+
+        configuredModels.forEach((modelName) => {
+            const option = document.createElement('option');
+            option.value = modelName;
+            option.textContent = modelName;
+            settingDeepSeekModel.appendChild(option);
+        });
+
+        settingDeepSeekModel.value = configuredModels.includes(selectedModel)
+            ? selectedModel
+            : configuredModels[0];
+    }
+
     function populateProgrammingLanguageOptions(languages, selectedLanguage) {
         if (!settingProgrammingLanguage) {
             return;
@@ -256,6 +288,10 @@ export function createSettingsPanelManager({
                 if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
                 populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
 
+                // DeepSeek settings
+                if (settingDeepSeekKey) settingDeepSeekKey.value = settings.deepseekApiKey || '';
+                populateDeepSeekModelOptions(settings.deepseekModels, settings.deepseekModel || settings.defaultDeepSeekModel);
+
                 // Ollama settings
                 if (settingOllamaBaseUrl) settingOllamaBaseUrl.value = settings.ollamaBaseUrl || 'http://localhost:11434';
                 if (settingOllamaModel) settingOllamaModel.value = settings.ollamaModel || 'llama3.2';
@@ -280,6 +316,7 @@ export function createSettingsPanelManager({
         }
 
         setApiKeyFieldVisibility(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini', false);
+        setApiKeyFieldVisibility(settingDeepSeekKey, toggleDeepSeekKeyVisibilityBtn, 'DeepSeek', false);
         setApiKeyFieldVisibility(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI', false);
 
         settingsPanel.classList.remove('hidden');
@@ -291,6 +328,7 @@ export function createSettingsPanelManager({
         }
 
         setApiKeyFieldVisibility(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini', false);
+        setApiKeyFieldVisibility(settingDeepSeekKey, toggleDeepSeekKeyVisibilityBtn, 'DeepSeek', false);
         setApiKeyFieldVisibility(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI', false);
     }
 
@@ -315,8 +353,10 @@ export function createSettingsPanelManager({
             const settings = {
                 aiProvider,
                 geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
+                deepseekApiKey: settingDeepSeekKey ? settingDeepSeekKey.value.trim() : '',
                 assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
                 geminiModel: settingGeminiModel ? settingGeminiModel.value : '',
+                deepseekModel: settingDeepSeekModel ? settingDeepSeekModel.value : '',
                 ollamaBaseUrl: settingOllamaBaseUrl ? settingOllamaBaseUrl.value.trim() : '',
                 ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : '',
                 programmingLanguage: settingProgrammingLanguage.value,
@@ -343,6 +383,7 @@ export function createSettingsPanelManager({
     }
 
     bindApiKeyVisibilityToggle(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini');
+    bindApiKeyVisibilityToggle(settingDeepSeekKey, toggleDeepSeekKeyVisibilityBtn, 'DeepSeek');
     bindApiKeyVisibilityToggle(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI');
     bindProviderToggle();
     bindFetchOllamaModels();

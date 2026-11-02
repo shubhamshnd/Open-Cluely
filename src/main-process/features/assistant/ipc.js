@@ -1,4 +1,4 @@
-﻿function registerAssistantIpc({
+function registerAssistantIpc({
   ipcMain,
   screenshotManager,
   ocrService,
@@ -10,12 +10,30 @@
 }) {
   let chatContext = [];
 
+  async function safeExtractOcrText(entries) {
+    try {
+      return await ocrService.extractTextFromEntries(entries);
+    } catch (error) {
+      console.warn('OCR text extraction failed, proceeding without OCR text:', error.message);
+      return '';
+    }
+  }
+
   function getAllKeysUnavailableMessage() {
     return 'All configured Gemini API keys are currently unavailable (quota exhausted or invalid). Please wait and try again later.';
   }
 
+  function getMissingApiKeyMessage() {
+    const provider = geminiRuntime.getActiveAiProvider?.() || 'gemini';
+    if (provider === 'deepseek') {
+      return 'No DeepSeek API key configured. Add it in Settings.';
+    }
+    return 'No Gemini API key configured. Add it in Settings.';
+  }
+
   function mapGeminiErrorMessage(error, fallbackPrefix = 'Request failed') {
-    const message = String(error?.message || '');
+    const causeMessage = error?.cause?.message ? ` (${error.cause.message})` : '';
+    const message = `${String(error?.message || '')}${causeMessage}`;
     const normalizedMessage = message.toLowerCase();
 
     if (geminiRuntime.isAllKeysUnavailableError?.(error)) {
@@ -26,14 +44,19 @@
       return 'Cannot connect to Ollama. Make sure Ollama is running locally.';
     }
 
+    if (normalizedMessage.includes('no deepseek api key')) {
+      return 'No DeepSeek API key configured. Add it in Settings.';
+    }
+
     if (normalizedMessage.includes('no api key configured') || normalizedMessage.includes('no gemini api key')) {
-      return 'No Gemini API key configured. Add it in Settings.';
+      return getMissingApiKeyMessage();
     }
 
     if (
       normalizedMessage.includes('api key not valid') ||
       normalizedMessage.includes('invalid api key') ||
       normalizedMessage.includes('api_key_invalid') ||
+      normalizedMessage.includes('authentication fails') ||
       normalizedMessage.includes('permission denied') ||
       normalizedMessage.includes('permission_denied') ||
       normalizedMessage.includes('unauthorized') ||
@@ -41,23 +64,40 @@
       normalizedMessage.includes('401') ||
       normalizedMessage.includes('403')
     ) {
-      return 'Invalid Gemini API key. Please check the key values in Settings.';
+      const provider = geminiRuntime.getActiveAiProvider?.() === 'deepseek' ? 'DeepSeek' : 'Gemini';
+      return `Invalid ${provider} API key. Please check the key values in Settings.`;
     }
 
     if (
       normalizedMessage.includes('quota') ||
+      normalizedMessage.includes('insufficient balance') ||
+      normalizedMessage.includes('insufficient_quota') ||
+      normalizedMessage.includes('402') ||
+      normalizedMessage.includes('429') ||
       normalizedMessage.includes('daily request limit') ||
       normalizedMessage.includes('exceeded your current quota')
     ) {
-      return 'API quota exceeded. Please try again later.';
+      return `API quota/balance limit reached (${message}).`;
     }
 
-    if (normalizedMessage.includes('network') || normalizedMessage.includes('fetch')) {
-      return 'Network error. Please check your internet connection.';
+    if (
+      normalizedMessage.includes('404') ||
+      normalizedMessage.includes('not found') ||
+      normalizedMessage.includes('model not exist') ||
+      normalizedMessage.includes('is not found for api version')
+    ) {
+      return `Selected AI model is unavailable (${message}). Try selecting a different model in Settings.`;
     }
 
-    if (normalizedMessage.includes('model')) {
-      return 'AI model error. Please try a different model.';
+    if (
+      normalizedMessage.includes('fetch failed') ||
+      normalizedMessage.includes('enotfound') ||
+      normalizedMessage.includes('econnreset') ||
+      normalizedMessage.includes('etimedout') ||
+      normalizedMessage.includes('socket hang up') ||
+      normalizedMessage.includes('network error')
+    ) {
+      return `Network connection error: ${message}`;
     }
 
     return message ? `${fallbackPrefix}: ${message}` : fallbackPrefix;
@@ -73,14 +113,14 @@
 
     console.log('Starting context-aware analysis...');
     console.log('Context length:', contextString.length);
-    console.log('API Keys configured:', geminiRuntime.getApiKeys().length);
+    console.log('Active AI provider:', geminiRuntime.getActiveAiProvider());
     console.log('Model initialized:', !!(geminiRuntime.getService() && geminiRuntime.getService().model));
     console.log('Programming language preference:', geminiRuntime.getActiveProgrammingLanguage());
     console.log('Screenshots count:', screenshotManager.getScreenshotsCount());
 
     if (!geminiRuntime.hasApiKeys()) {
       sendToRenderer('analysis-result', {
-        error: 'No Gemini API key configured. Add it in Settings.'
+        error: getMissingApiKeyMessage()
       });
       return;
     }
@@ -112,8 +152,9 @@
       };
       sendToRenderer('ai-stream-start', { actionId: 'screenAi' });
 
-      const ocrText = geminiRuntime.getActiveAiProvider() === 'gemini'
-        ? await ocrService.extractTextFromEntries(entries)
+      const activeProvider = geminiRuntime.getActiveAiProvider();
+      const ocrText = (activeProvider === 'gemini' || activeProvider === 'deepseek')
+        ? await safeExtractOcrText(entries)
         : '';
       const text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
@@ -194,7 +235,7 @@
       assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai');
 
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+        throw new Error(getMissingApiKeyMessage());
       }
 
       const transcriptContext = typeof payload?.transcriptContext === 'string'
@@ -237,8 +278,9 @@
         if (imageParts.length > 0) {
           usedScreenshots = true;
           usedScreenshotCount = imageParts.length;
-          const ocrText = geminiRuntime.getActiveAiProvider() === 'gemini'
-            ? await ocrService.extractTextFromEntries(entries)
+          const activeProvider = geminiRuntime.getActiveAiProvider();
+          const ocrText = (activeProvider === 'gemini' || activeProvider === 'deepseek')
+            ? await safeExtractOcrText(entries)
             : '';
           text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
             if (!geminiService || !geminiService.model) {
@@ -321,7 +363,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-suggest');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+        throw new Error(getMissingApiKeyMessage());
       }
 
       const payload = typeof context === 'object' && context !== null
@@ -341,7 +383,7 @@
 
       const suggestions = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
-          throw new Error('Gemini service not initialized');
+          throw new Error('AI service not initialized');
         }
 
         return geminiService.suggestResponse(contextPrompt, {
@@ -363,7 +405,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-notes');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+        throw new Error(getMissingApiKeyMessage());
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
@@ -377,7 +419,7 @@
 
       const notes = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
-          throw new Error('Gemini service not initialized');
+          throw new Error('AI service not initialized');
         }
 
         return geminiService.generateMeetingNotes({
@@ -399,12 +441,12 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-followup');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+        throw new Error(getMissingApiKeyMessage());
       }
 
       const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
-          throw new Error('Gemini service not initialized');
+          throw new Error('AI service not initialized');
         }
 
         return geminiService.generateFollowUpEmail();
@@ -421,12 +463,12 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-answer');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+        throw new Error(getMissingApiKeyMessage());
       }
 
       const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
-          throw new Error('Gemini service not initialized');
+          throw new Error('AI service not initialized');
         }
 
         return geminiService.answerQuestion(question);
@@ -443,7 +485,7 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-insights');
       if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+        throw new Error(getMissingApiKeyMessage());
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
@@ -457,7 +499,7 @@
 
       const insights = await geminiRuntime.executeWithKeyFailover((geminiService) => {
         if (!geminiService || !geminiService.model) {
-          throw new Error('Gemini service not initialized');
+          throw new Error('AI service not initialized');
         }
 
         return geminiService.getConversationInsights({

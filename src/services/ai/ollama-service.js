@@ -26,6 +26,7 @@ class OllamaService {
   constructor(options = {}) {
     this.baseUrl = String(options.baseUrl || DEFAULT_OLLAMA_BASE_URL).replace(/\/+$/, '');
     this.modelName = String(options.modelName || DEFAULT_OLLAMA_MODEL).trim();
+    this.model = this.modelName;
     this.programmingLanguage = resolveProgrammingLanguage(options.programmingLanguage);
 
     this.requestQueue = [];
@@ -60,6 +61,7 @@ class OllamaService {
 
     this.baseUrl = nextBaseUrl;
     this.modelName = nextModelName;
+    this.model = nextModelName;
     this.programmingLanguage = nextProgrammingLanguage;
 
     return {
