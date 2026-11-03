@@ -171,6 +171,62 @@ test('ipc: a stale token stop cannot release ownership of the live capture', asy
   assert.deepEqual(stops, [{ token: 'stale' }, { token: 'tok-1' }], 'ownership survived the stale stop');
 });
 
+test('ipc: a renderer-owned attempt id becomes the capture token and correlates the death error', async () => {
+  const seen = [];
+  let ended;
+  const { handlers, sent, stops } = createIpcHarness({
+    captureOverrides: {
+      start: async (options) => {
+        seen.push(options);
+        ended = options.onEnded;
+        return { success: true, token: options.token };
+      }
+    }
+  });
+  const sender = createSender();
+
+  const start = await invoke(handlers, 'start-linux-monitor-capture', sender, { attemptId: 'att-1' });
+  assert.equal(start.token, 'att-1', 'the capture adopts the renderer-owned attempt id as its token');
+  assert.equal(seen[0].token, 'att-1');
+
+  ended({ code: 1 });
+  assert.deepEqual(sent, [
+    [
+      'vosk-error',
+      {
+        source: 'system',
+        error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)',
+        captureToken: 'att-1',
+        attemptId: 'att-1'
+      }
+    ]
+  ]);
+
+  // Ownership was released with the death: no later stop from owner cleanup.
+  sender.emit('destroyed');
+  assert.equal(stops.length, 0);
+});
+
+test('ipc: a pending start with a renderer attempt id is canceled by that token, not token-less', async () => {
+  let releaseStart;
+  const pending = new Promise((resolve) => {
+    releaseStart = resolve;
+  });
+  const { handlers, stops } = createIpcHarness({
+    captureOverrides: {
+      start: async () => pending
+    }
+  });
+  const sender = createSender();
+
+  const starting = invoke(handlers, 'start-linux-monitor-capture', sender, { attemptId: 'att-1' });
+  sender.emit('did-start-navigation', {}, 'https://app.local/', false, true);
+  assert.deepEqual(stops, [{ token: 'att-1' }], 'an attempt-scoped owner cancels by its own token');
+
+  releaseStart({ success: false, error: 'Host audio capture was canceled' });
+  await starting;
+});
+
 test('ipc: an unexpected end of the owned capture reports a token-correlated vosk-error and releases ownership', async () => {
   let ended;
   const { handlers, sent, stops } = createIpcHarness({

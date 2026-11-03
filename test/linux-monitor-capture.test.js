@@ -88,6 +88,19 @@ test('start: spawns pw-record, frames stdout into 3200-byte chunks, resolves on 
   await harness.capture.stop({ token: result.token });
 });
 
+test('start: a caller-provided token becomes the capture identity (renderer attempt correlation)', async () => {
+  const harness = createHarness();
+  const promise = harness.capture.start({ token: 'att-1', onChunk: () => {} });
+  await tick();
+  harness.made[0].stdout.emit('data', Buffer.alloc(3200, 1));
+  const result = await promise;
+
+  assert.equal(result.success, true);
+  assert.equal(result.token, 'att-1', 'the renderer-owned attempt id is the capture token');
+  assert.deepEqual(await harness.capture.stop({ token: 'other' }), { stopped: false });
+  assert.deepEqual(await harness.capture.stop({ token: 'att-1' }), { stopped: true });
+});
+
 test('start: non-Linux refuses without spawning', async () => {
   const harness = createHarness({ platform: 'win32' });
   const result = await harness.capture.start({ onChunk: () => {} });

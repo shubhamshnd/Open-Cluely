@@ -72,14 +72,14 @@ function createInvokeActions(ipcRenderer) {
     startVoiceRecognition: invokeWithFallback(ipcRenderer, {
       channel: 'start-voice-recognition',
       label: 'startVoiceRecognition',
-      transformArgs: (args) => [{ source: args[0] }],
+      transformArgs: (args) => [{ source: args[0], attemptId: args[1]?.attemptId }],
       fallback: (error) => ({ error: error.message })
     }),
 
     stopVoiceRecognition: invokeWithFallback(ipcRenderer, {
       channel: 'stop-voice-recognition',
       label: 'stopVoiceRecognition',
-      transformArgs: (args) => [{ source: args[0] }],
+      transformArgs: (args) => [{ source: args[0], attemptId: args[1]?.attemptId }],
       fallback: (error) => ({ error: error.message })
     }),
 
@@ -90,6 +90,7 @@ function createInvokeActions(ipcRenderer) {
     startLinuxMonitorCapture: invokeWithFallback(ipcRenderer, {
       channel: 'start-linux-monitor-capture',
       label: 'startLinuxMonitorCapture',
+      transformArgs: (args) => [{ attemptId: args[0]?.attemptId }],
       fallback: (error) => ({ success: false, error: error.message })
     }),
 

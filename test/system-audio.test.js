@@ -392,6 +392,10 @@ function buildHostHarness({ managerModule, platform = 'linux', gates = {}, nativ
   const events = [];
   let nativeCounter = 0;
   let backendSessionCounter = 0;
+  // Renderer-owned correlation ids, captured as the manager hands them to the
+  // two start RPCs (backend socket start and native capture start).
+  const backendAttemptIds = [];
+  const nativeAttemptIds = [];
 
   globalThis.document = { createElement: () => ({ className: '', textContent: '', style: {} }) };
   globalThis.AudioContext = class {
@@ -414,11 +418,12 @@ function buildHostHarness({ managerModule, platform = 'linux', gates = {}, nativ
         if (gates.desktopSources) await gates.desktopSources.promise;
         return [{ id: 'screen:0', name: 'Entire Screen' }];
       },
-      startVoiceRecognition: async (source) => {
+      startVoiceRecognition: async (source, opts) => {
         events.push(`startVoiceRecognition:${source}`);
+        if (opts?.attemptId) backendAttemptIds.push(opts.attemptId);
         if (gates.startVoice) await gates.startVoice.promise;
         backendSessionCounter += 1;
-        return { sessionId: backendSessionCounter };
+        return { sessionId: backendSessionCounter, attemptId: opts?.attemptId };
       },
       stopVoiceRecognition: async (source) => {
         events.push(`stopVoiceRecognition:${source}`);
@@ -445,11 +450,12 @@ function buildHostHarness({ managerModule, platform = 'linux', gates = {}, nativ
         if (gates.desktopStream) await gates.desktopStream.promise;
         return lateStream;
       },
-      startNativeMonitorCapture: async () => {
+      startNativeMonitorCapture: async (opts) => {
         nativeCounter += 1;
         const id = nativeCounter;
         events.push(`nativeStart:${id}`);
-        if (gates.nativeStart && id === 1) await gates.nativeStart.promise;
+        if (opts?.attemptId) nativeAttemptIds.push(opts.attemptId);
+        if (gates.nativeStart && id === (gates.nativeStartId || 1)) await gates.nativeStart.promise;
         if (nativeFailure) throw nativeFailure;
         let stopped = false;
         return {
@@ -494,7 +500,7 @@ function buildHostHarness({ managerModule, platform = 'linux', gates = {}, nativ
     showFeedback: (message, type) => recorded.feedback.push([message, type])
   });
 
-  return { transcriptionManager, recorded, sourceStatuses, events };
+  return { transcriptionManager, recorded, sourceStatuses, events, backendAttemptIds, nativeAttemptIds };
 }
 
 function afterHostTest(t) {
@@ -730,71 +736,77 @@ test('REGRESSION: backend stopped acknowledgement while the native acquisition i
   assert.equal(sourceStatuses.system, 'off');
 });
 
-test('REGRESSION: a stopped event carrying a superseded session id must not tear down the new session', async (t) => {
+test('REGRESSION: a stopped event carrying a superseded attempt id must not tear down the new session', async (t) => {
   const { manager: managerModule } = await loadModules();
   afterHostTest(t);
-  const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({ managerModule });
+  const { transcriptionManager, recorded, sourceStatuses, events, backendAttemptIds } = buildHostHarness({ managerModule });
 
-  await transcriptionManager.toggleMasterTranscription(); // backend session 1 active
+  await transcriptionManager.toggleMasterTranscription(); // attempt A active
   await transcriptionManager.toggleMasterTranscription(); // explicit Stop
   assert.ok(events.includes('nativeStop:1'));
 
-  await transcriptionManager.toggleMasterTranscription(); // backend session 2 active
+  await transcriptionManager.toggleMasterTranscription(); // attempt B active
   assert.ok(events.includes('nativeStart:2'));
+  const [attemptA, attemptB] = backendAttemptIds;
+  assert.ok(attemptA && attemptB && attemptA !== attemptB, 'each start owns a distinct renderer attempt id');
 
-  transcriptionManager.handleVoskStopped({ source: 'system', sessionId: 1 }); // late ack for session 1
+  transcriptionManager.handleVoskStopped({ source: 'system', attemptId: attemptA }); // late ack for attempt A
   await flush();
 
   assert.ok(!events.includes('nativeStop:2'), 'stale ack must not stop the live capture');
   assert.equal(sourceStatuses.system, 'connecting', 'stale ack must not change the live session status');
   const systemActivations = recorded.active.filter(([source]) => source === 'system');
-  assert.deepEqual(systemActivations[systemActivations.length - 1], ['system', true], 'session 2 stays active');
+  assert.deepEqual(systemActivations[systemActivations.length - 1], ['system', true], 'attempt B stays active');
   assert.ok(!recorded.feedback.some(([message]) => /Stopped/.test(message)), 'stale ack must not surface to the user');
 
-  // The live session's own stopped event still tears it down.
-  transcriptionManager.handleVoskStopped({ source: 'system', sessionId: 2 });
+  // The live attempt's own stopped event still tears it down.
+  transcriptionManager.handleVoskStopped({ source: 'system', attemptId: attemptB });
   await flush();
-  assert.ok(events.includes('nativeStop:2'), 'the live session stop event releases the capture');
+  assert.ok(events.includes('nativeStop:2'), 'the live attempt stop event releases the capture');
   assert.equal(sourceStatuses.system, 'off');
 });
 
-test('REGRESSION: an error carrying a superseded session id must not tear down the new session', async (t) => {
+test('REGRESSION: an error carrying a superseded attempt id must not tear down the new session', async (t) => {
   const { manager: managerModule } = await loadModules();
   afterHostTest(t);
-  const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({ managerModule });
+  const { transcriptionManager, recorded, sourceStatuses, events, backendAttemptIds } = buildHostHarness({ managerModule });
 
-  await transcriptionManager.toggleMasterTranscription(); // backend session 1 active
+  await transcriptionManager.toggleMasterTranscription(); // attempt A active
   await transcriptionManager.toggleMasterTranscription(); // explicit Stop
 
-  await transcriptionManager.toggleMasterTranscription(); // backend session 2 active
-  transcriptionManager.handleVoskError({ source: 'system', sessionId: 1, error: 'Old session socket error' });
+  await transcriptionManager.toggleMasterTranscription(); // attempt B active
+  const [attemptA, attemptB] = backendAttemptIds;
+  transcriptionManager.handleVoskError({ source: 'system', attemptId: attemptA, error: 'Old session socket error' });
   await flush();
 
   assert.ok(!events.includes('nativeStop:2'), 'stale error must not stop the live capture');
   assert.equal(sourceStatuses.system, 'connecting');
   assert.ok(!recorded.feedback.some(([message]) => /Old session socket error/.test(message)));
 
-  // The live session's own error still tears it down.
-  transcriptionManager.handleVoskError({ source: 'system', sessionId: 2, error: 'Live connection lost' });
+  // The live attempt's own error still tears it down.
+  transcriptionManager.handleVoskError({ source: 'system', attemptId: attemptB, error: 'Live connection lost' });
   await flush();
-  assert.ok(events.includes('nativeStop:2'), 'the live session error releases the capture');
+  assert.ok(events.includes('nativeStop:2'), 'the live attempt error releases the capture');
   assert.equal(sourceStatuses.system, 'error');
 });
 
-test('REGRESSION: a native capture error is correlated to the owning capture by token', async (t) => {
+test('REGRESSION: a native capture error is correlated to the owning attempt', async (t) => {
   const { manager: managerModule } = await loadModules();
   afterHostTest(t);
-  const { transcriptionManager, sourceStatuses, events } = buildHostHarness({ managerModule });
+  const { transcriptionManager, sourceStatuses, events, nativeAttemptIds } = buildHostHarness({ managerModule });
 
-  await transcriptionManager.toggleMasterTranscription(); // capture tok-1
+  await transcriptionManager.toggleMasterTranscription(); // capture of attempt A
   await transcriptionManager.toggleMasterTranscription(); // explicit Stop
-  await transcriptionManager.toggleMasterTranscription(); // capture tok-2
+  await transcriptionManager.toggleMasterTranscription(); // capture of attempt B
+  const [attemptA, attemptB] = nativeAttemptIds;
+  assert.ok(attemptA && attemptB && attemptA !== attemptB);
 
   // A late error from the dead first capture must not touch the live one.
   transcriptionManager.handleVoskError({
     source: 'system',
     error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)',
-    captureToken: 'tok-1'
+    captureToken: attemptA,
+    attemptId: attemptA
   });
   await flush();
   assert.ok(!events.includes('nativeStop:2'), 'a stale capture error must not stop the live capture');
@@ -804,11 +816,123 @@ test('REGRESSION: a native capture error is correlated to the owning capture by 
   transcriptionManager.handleVoskError({
     source: 'system',
     error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)',
-    captureToken: 'tok-2'
+    captureToken: attemptB,
+    attemptId: attemptB
   });
   await flush();
   assert.ok(events.includes('nativeStop:2'), 'the live capture error releases the session');
   assert.equal(sourceStatuses.system, 'error');
+});
+
+// ---------------------------------------------------------------------------
+// Renderer-owned attempt ids: correlation identity exists BEFORE any await, so
+// a live terminal event arriving while its own start RPC is still pending is
+// recognised as live and cancels the acquisition, and a stale event arriving
+// during a replacement's pending start is ignored. These mirror the reviewer's
+// REVIEW_EARLY scratch reproductions.
+// ---------------------------------------------------------------------------
+
+for (const terminal of ['error', 'termination']) {
+  test(`REGRESSION correlation: a live ${terminal} before the start RPC response cancels acquisition`, async (t) => {
+    const { manager: managerModule } = await loadModules();
+    afterHostTest(t);
+    const h = buildServiceBackedHostHarness({ managerModule });
+    const m = h.transcriptionManager;
+    const gate = deferred();
+
+    // The RPC result is held back while the live socket is already able to
+    // emit its terminal event (the reviewer's exact ordering).
+    window.electronAPI.startVoiceRecognition = async (source, opts) => {
+      h.events.push(`startVoiceRecognition:${source}`);
+      const result = h.service.startAssemblyAiStream(source, opts);
+      h.sockets[h.sockets.length - 1].emit('open');
+      await gate.promise;
+      return result;
+    };
+
+    const starting = m.toggleMasterTranscription();
+    await flush();
+    if (terminal === 'error') {
+      h.sockets[0].emit('error', new Error('connection failed before IPC response'));
+    } else {
+      h.sockets[0].emit('message', terminationFrame());
+    }
+    gate.resolve();
+    await starting;
+    await flush();
+
+    assert.ok(!everActivated(h.recorded), `a live ${terminal} before the RPC response must prevent activation`);
+    assert.ok(!h.events.includes('nativeStart:1'), 'a terminated backend attempt must never acquire a capture');
+    assert.equal(h.sourceStatuses.system, terminal === 'error' ? 'error' : 'off');
+  });
+}
+
+test('REGRESSION correlation: a live native-capture death before the capture RPC response cancels activation', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const gate = deferred();
+  const h = buildHostHarness({ managerModule, gates: { nativeStart: gate } });
+  const m = h.transcriptionManager;
+
+  const starting = m.toggleMasterTranscription();
+  await flush();
+  const attemptId = h.nativeAttemptIds[0];
+  assert.ok(attemptId, 'the renderer handed its attempt id to the pending capture start');
+
+  // The current capture dies before its start RPC has resolved.
+  m.handleVoskError({
+    source: 'system',
+    error: 'pw-record died before IPC response',
+    captureToken: attemptId,
+    attemptId
+  });
+  gate.resolve(); // the handle arrives after the death was handled
+  await starting;
+  await flush();
+
+  assert.ok(!everActivated(h.recorded), 'a dead capture must not activate');
+  assert.ok(h.events.includes('nativeStop:1'), 'the late handle must be released immediately');
+  assert.equal(h.sourceStatuses.system, 'error');
+});
+
+test('REGRESSION correlation: a stale session event during a pending replacement start is ignored', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const gate = deferred();
+  const h = buildHostHarness({ managerModule, gates: { nativeStart: gate, nativeStartId: 2 } });
+  const m = h.transcriptionManager;
+
+  await m.toggleMasterTranscription(); // attempt A active (native capture 1)
+  await m.toggleMasterTranscription(); // Stop A
+  assert.ok(h.events.includes('nativeStop:1'));
+
+  const startingB = m.toggleMasterTranscription(); // attempt B pending on its gated capture start
+  await flush();
+  const [attemptA, attemptB] = h.backendAttemptIds;
+  assert.ok(h.events.includes('nativeStart:2'));
+
+  // Stale events of the replaced attempt arrive while B is still starting.
+  const activeEntriesBeforeStale = h.recorded.active.length;
+  m.handleVoskError({ source: 'system', attemptId: attemptA, error: 'Old session socket error' });
+  m.handleVoskStopped({ source: 'system', attemptId: attemptA });
+  m.handleVoskError({ source: 'system', attemptId: attemptA, captureToken: attemptA, error: 'old capture died late' });
+  await flush();
+
+  assert.equal(h.sourceStatuses.system, 'connecting', 'stale events must not change the pending attempt status');
+  assert.ok(!h.recorded.feedback.some(([message]) => /Old session socket error|old capture died/.test(message)));
+  assert.equal(h.recorded.active.length, activeEntriesBeforeStale, 'stale events must not activate or deactivate anything');
+
+  gate.resolve();
+  await startingB;
+  await flush();
+  assert.ok(everActivated(h.recorded), 'the replacement attempt activates after its start resolves');
+  assert.ok(!h.events.includes('nativeStop:2'), 'stale events never touched the replacement capture');
+
+  // The replacement's own terminal event still applies.
+  m.handleVoskStopped({ source: 'system', attemptId: attemptB });
+  await flush();
+  assert.ok(h.events.includes('nativeStop:2'));
+  assert.equal(h.sourceStatuses.system, 'off');
 });
 
 // ---------------------------------------------------------------------------
@@ -867,18 +991,18 @@ function buildServiceBackedHostHarness({ managerModule, platform = 'linux', apiK
     }
   });
 
-  window.electronAPI.startVoiceRecognition = async (source) => {
+  window.electronAPI.startVoiceRecognition = async (source, opts) => {
     h.events.push(`startVoiceRecognition:${source}`);
     const socketCount = sockets.length;
-    const result = service.startAssemblyAiStream(source);
+    const result = service.startAssemblyAiStream(source, opts);
     if (result && result.success && sockets.length > socketCount) {
       sockets[sockets.length - 1].emit('open'); // the connection completes
     }
     return result;
   };
-  window.electronAPI.stopVoiceRecognition = async (source) => {
+  window.electronAPI.stopVoiceRecognition = async (source, opts) => {
     h.events.push(`stopVoiceRecognition:${source}`);
-    return service.stopVoiceRecognition({ source });
+    return service.stopVoiceRecognition({ source, attemptId: opts?.attemptId });
   };
 
   return {
@@ -994,9 +1118,9 @@ test('REGRESSION cross-layer: a stop acknowledgement arriving before the stop RP
   assert.ok(h.events.includes('nativeStart:1'));
 
   // The backend answers the Terminate frame before the stop RPC resolves.
-  window.electronAPI.stopVoiceRecognition = async (source) => {
+  window.electronAPI.stopVoiceRecognition = async (source, opts) => {
     h.events.push(`stopVoiceRecognition:${source}`);
-    const result = h.service.stopVoiceRecognition({ source });
+    const result = h.service.stopVoiceRecognition({ source, attemptId: opts?.attemptId });
     h.sockets[0].emit('message', terminationFrame());
     return result;
   };

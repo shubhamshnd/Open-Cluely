@@ -22,6 +22,11 @@
 // really exited, so quit can wait for it instead of exiting under a child
 // that ignored SIGTERM. Output is raw s16le 16 kHz mono PCM, re-framed into
 // 100 ms chunks, which is what the AssemblyAI service already expects.
+//
+// Identity: the caller may pass its own `token` (the renderer passes its
+// Host-start attempt id, so every event for this capture is correlatable from
+// the first moment, before any RPC resolves); without one a random UUID is
+// generated. Either way stop({token}) authorizes against the same value.
 
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -186,7 +191,7 @@ function createLinuxMonitorCapture({
     });
   }
 
-  function start({ onChunk, onEnded } = {}) {
+  function start({ onChunk, onEnded, token: callerToken } = {}) {
     if (platform !== 'linux') {
       return Promise.resolve({ success: false, error: 'Native monitor capture is only available on Linux' });
     }
@@ -198,7 +203,7 @@ function createLinuxMonitorCapture({
     const generation = startGeneration;
 
     const entry = {
-      token: crypto.randomUUID(),
+      token: typeof callerToken === 'string' && callerToken ? callerToken : crypto.randomUUID(),
       child: null,
       buffer: Buffer.alloc(0),
       stderr: '',

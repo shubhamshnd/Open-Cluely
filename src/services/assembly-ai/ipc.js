@@ -39,32 +39,41 @@
     }
   }
 
-  ipcMain.handle('start-linux-monitor-capture', async (event) => {
+  ipcMain.handle('start-linux-monitor-capture', async (event, { attemptId } = {}) => {
     if (!linuxMonitorCapture) {
       return { success: false, error: 'Native monitor capture is not available' };
     }
     const sender = event?.sender;
     bindSender(sender);
-    const owner = { sender, token: null };
+    // The renderer-owned attempt id (when given) doubles as the capture
+    // token: ownership, stop authorization and the death error all correlate
+    // to the attempt the renderer created before any await.
+    const ownerAttemptId = typeof attemptId === 'string' && attemptId ? attemptId : null;
+    const owner = { sender, token: ownerAttemptId, attemptId: ownerAttemptId };
     monitorOwner = owner;
 
     const result = await linuxMonitorCapture.start({
+      token: ownerAttemptId ?? undefined,
       onChunk: (data) => assemblyAiService.handleAudioChunk({ source: 'system', data }),
       onEnded: ({ code }) => {
         // Only the owning (current) capture's unexpected end is the live
         // session's error; a superseded capture's end must not tear down the
-        // replacement. The captureToken lets the renderer correlate this error
-        // to the capture it came from.
+        // replacement. The attemptId/captureToken lets the renderer correlate
+        // this error to the attempt it came from.
         if (monitorOwner !== owner) {
           return;
         }
         monitorOwner = null;
         if (typeof sendToRenderer === 'function') {
-          sendToRenderer('vosk-error', {
+          const payload = {
             source: 'system',
             error: `Host audio capture stopped unexpectedly (pw-record exit code ${code})`,
             captureToken: owner.token
-          });
+          };
+          if (owner.attemptId) {
+            payload.attemptId = owner.attemptId;
+          }
+          sendToRenderer('vosk-error', payload);
         }
       }
     });
@@ -85,7 +94,7 @@
     return result;
   });
 
-  ipcMain.handle('start-voice-recognition', (_event, { source } = {}) => {
+  ipcMain.handle('start-voice-recognition', (_event, { source, attemptId } = {}) => {
     const resolvedSource = source === 'system' ? 'system' : 'mic';
     console.log(`IPC: start-voice-recognition [${resolvedSource}]`);
     assemblyAiService.emitSttDebug({
@@ -94,16 +103,16 @@
       message: 'Renderer requested source start'
     });
 
-    return assemblyAiService.startAssemblyAiStream(resolvedSource);
+    return assemblyAiService.startAssemblyAiStream(resolvedSource, { attemptId });
   });
 
   ipcMain.on('audio-chunk', (_event, payload = {}) => {
     assemblyAiService.handleAudioChunk(payload);
   });
 
-  ipcMain.handle('stop-voice-recognition', (_event, { source } = {}) => {
+  ipcMain.handle('stop-voice-recognition', (_event, { source, attemptId } = {}) => {
     console.log(`IPC: stop-voice-recognition [${source}]`);
-    return assemblyAiService.stopVoiceRecognition({ source });
+    return assemblyAiService.stopVoiceRecognition({ source, attemptId });
   });
 
   ipcMain.handle('get-desktop-sources', async () => {

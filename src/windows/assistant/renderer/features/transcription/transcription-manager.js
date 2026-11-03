@@ -34,19 +34,25 @@ export function createTranscriptionManager({
     let isSystemActive = false;
     let systemNativeCapture = null;
     let systemStartGeneration = 0;
-    // Session correlation. The backend stamps every socket-originated event
-    // with the session id returned by that session's start RPC, and the main
-    // process stamps a native capture error with the capture's token. An event
-    // whose session id or token does not match the live session belongs to a
-    // superseded session and is ignored; events without correlation data can
-    // only come from paths that are inherently about the live session (a
-    // synchronous start failure such as a missing API key, or the main process
-    // reporting that the current capture died), so they always apply. No
-    // speculative counting: a stop that produces no terminal event (a backend
-    // no-op, or an obsolete event the backend suppressed) cannot swallow the
-    // next session's events.
-    let systemBackendSessionId = null;
-    let systemNativeCaptureToken = null;
+    // Session correlation: the renderer owns the identity. Each Host start
+    // attempt allocates an attempt id SYNCHRONOUSLY, before the first await,
+    // and hands it to both start RPCs (backend socket start and native capture
+    // start). The main process stamps every event for that attempt with the
+    // same id, so an event is live iff event.attemptId ===
+    // currentSystemAttemptId — from the very first moment, including events
+    // that arrive while their own start RPC response is still in flight.
+    // Events without correlation data can only come from paths that are
+    // inherently about the live attempt (legacy/untagged callers), so they
+    // apply as before. No speculative counting and no post-await id
+    // publication: the identity can never be unknown when an event arrives.
+    let currentSystemAttemptId = null;
+    let systemAttemptCounter = 0;
+
+    function allocateSystemAttemptId() {
+        systemAttemptCounter += 1;
+        const uuid = globalThis.crypto?.randomUUID?.();
+        return uuid ? `system-${uuid}` : `system-${Date.now().toString(36)}-${systemAttemptCounter}`;
+    }
 
     let micPartialText = '';
     let micPartialDiv = null;
@@ -387,36 +393,34 @@ export function createTranscriptionManager({
         showFeedback('Mic off', 'info');
     }
 
-    // Is this backend/native event obsolete — emitted by a session or capture
-    // that is not the live one? Correlation data that is present is checked;
-    // absent data means the event is inherently about the live session.
+    // Is this backend/native event obsolete — emitted by an attempt that is
+    // not the live one? Correlation data that is present is checked against
+    // the renderer-owned attempt id; absent data means the event is inherently
+    // about the live attempt.
     function isStaleSystemEvent(data) {
         if (!data || typeof data !== 'object') return false;
-        if (Number.isInteger(data.sessionId) && data.sessionId > 0) {
-            return data.sessionId !== systemBackendSessionId;
-        }
-        if (typeof data.captureToken === 'string' && data.captureToken) {
-            return data.captureToken !== systemNativeCaptureToken;
-        }
-        return false;
+        const eventAttemptId = typeof data.attemptId === 'string' && data.attemptId ? data.attemptId : null;
+        if (!eventAttemptId) return false;
+        return eventAttemptId !== currentSystemAttemptId;
     }
 
     // Releases everything the Host source owns: renderer stream/context (non-Linux)
     // and the main-process pw-record capture (Linux). Safe to call repeatedly.
-    function releaseSystemResources({ cancelPendingStart = false } = {}) {
+    // attemptId scopes the pending-start cancel so it can never kill a newer
+    // attempt's capture (a token-less cancel is only the legacy fallback).
+    function releaseSystemResources({ cancelPendingStart = false, attemptId = null } = {}) {
         stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
         systemAudioContext = null;
         systemMediaStream = null;
         systemScriptProcessor = null;
         const nativeCapture = systemNativeCapture;
         systemNativeCapture = null;
-        systemNativeCaptureToken = null;
         // No handle yet means a Linux start may still be pending in the main
-        // process; a token-less stop cancels it there (the attempt's own
+        // process; an attempt-scoped stop cancels it there (the attempt's own
         // generation check then drops any handle that arrives late).
         const cancelPending =
             cancelPendingStart && !nativeCapture && window.electronAPI?.platform === 'linux'
-                ? () => window.electronAPI.stopLinuxMonitorCapture?.()
+                ? () => window.electronAPI.stopLinuxMonitorCapture?.(attemptId ?? undefined)
                 : null;
         const stopNative = nativeCapture ? () => nativeCapture.stop() : cancelPending;
         return stopNative
@@ -437,6 +441,12 @@ export function createTranscriptionManager({
         systemStartGeneration += 1;
         const generation = systemStartGeneration;
         const isCurrent = () => generation === systemStartGeneration;
+        // The correlation identity is allocated and published BEFORE the first
+        // await: every event the main process emits for this attempt carries
+        // this id, so a live terminal event is recognised as live even while
+        // its own start RPC response is still in flight.
+        const attemptId = allocateSystemAttemptId();
+        currentSystemAttemptId = attemptId;
         let nativeCapture = null;
         let stream = null;
         let context = null;
@@ -477,16 +487,12 @@ export function createTranscriptionManager({
                 addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
             }
 
-            const result = await window.electronAPI.startVoiceRecognition('system');
+            const result = await window.electronAPI.startVoiceRecognition('system', { attemptId });
             if (!isCurrent()) return;
             if (result && result.error) throw new Error(result.error);
-            // The backend session this attempt owns. Its terminal events are
-            // correlated to this id, so obsolete events of older sessions are
-            // ignored and this session's own events always apply.
-            systemBackendSessionId = Number.isInteger(result?.sessionId) ? result.sessionId : null;
 
             if (isLinuxHost) {
-                nativeCapture = await audioPipeline.startNativeMonitorCapture();
+                nativeCapture = await audioPipeline.startNativeMonitorCapture({ attemptId });
                 if (!isCurrent()) {
                     await releaseAttemptResources();
                     return;
@@ -522,7 +528,6 @@ export function createTranscriptionManager({
             }
 
             systemNativeCapture = nativeCapture;
-            systemNativeCaptureToken = nativeCapture?.token ?? null;
             systemMediaStream = stream;
             systemAudioContext = context;
             systemScriptProcessor = processor;
@@ -556,8 +561,13 @@ export function createTranscriptionManager({
             setSystemActive(false);
             resetSourceSampleQueue('system');
             setSourceStatus('system', 'error', unsupportedMessage || `Host error: ${error.message}`);
+            // The failed attempt is over: clear its identity BEFORE the
+            // cleanup stop RPC so every later event carrying its id is stale
+            // by construction. The scoped stop kills only this attempt's
+            // backend session, never a newer attempt's.
+            currentSystemAttemptId = null;
             try {
-                await window.electronAPI.stopVoiceRecognition('system');
+                await window.electronAPI.stopVoiceRecognition('system', { attemptId });
             } catch (_) {}
         }
 
@@ -568,24 +578,26 @@ export function createTranscriptionManager({
         // Invalidate any start still awaiting a step, even if nothing is active yet.
         systemStartGeneration += 1;
         if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
+        // Clear the attempt identity synchronously, BEFORE awaiting anything:
+        // every event the stopped attempt still emits afterwards is stale by
+        // construction and cannot cancel or tear down a newer attempt. The
+        // stop RPC and the pending-start cancel are scoped to this attempt id,
+        // so they kill only this attempt's resources.
+        const stoppedAttemptId = currentSystemAttemptId;
+        currentSystemAttemptId = null;
         drainSourceSampleQueue('system', { flushPartial: true });
         flushFinalTranscript('system', 'stop-request');
-        const releasing = releaseSystemResources({ cancelPendingStart: true });
+        const releasing = releaseSystemResources({ cancelPendingStart: true, attemptId: stoppedAttemptId });
         if (systemPartialDiv) {
             systemPartialDiv.remove();
             systemPartialDiv = null;
         }
         systemPartialText = '';
         try {
-            await window.electronAPI.stopVoiceRecognition('system');
+            await window.electronAPI.stopVoiceRecognition('system', { attemptId: stoppedAttemptId ?? undefined });
         } catch (error) {
             addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
         }
-        // The stopped session is over: its terminal event (if the backend ever
-        // sends one) is now obsolete and must not be applied to a newer
-        // session. An ack that already arrived while the stop was in flight
-        // matched the live session and was handled then.
-        systemBackendSessionId = null;
         await releasing;
         setSystemActive(false);
         resetSourceSampleQueue('system');
@@ -710,12 +722,15 @@ export function createTranscriptionManager({
         flushFinalTranscript(source, 'status-error');
 
         if (source === 'system') {
-            // The live session ended: invalidate any start still awaiting a
+            // The live attempt ended: invalidate any start still awaiting a
             // step so a late capture is released at once and can never
-            // reactivate the session, and cancel a pending main-process start.
+            // reactivate the session, clear the attempt identity so any
+            // further event carrying its id is stale, and cancel a pending
+            // main-process start scoped to this attempt.
             systemStartGeneration += 1;
-            systemBackendSessionId = null;
-            releaseSystemResources({ cancelPendingStart: true });
+            const endedAttemptId = currentSystemAttemptId;
+            currentSystemAttemptId = null;
+            releaseSystemResources({ cancelPendingStart: true, attemptId: endedAttemptId });
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;
@@ -755,10 +770,11 @@ export function createTranscriptionManager({
         flushFinalTranscript(source, 'stopped-event');
         if (source === 'system') {
             // Same contract as handleVoskError: cancel a pending start and
-            // release anything that arrives late.
+            // release anything that arrives late, all scoped to this attempt.
             systemStartGeneration += 1;
-            systemBackendSessionId = null;
-            releaseSystemResources({ cancelPendingStart: true });
+            const endedAttemptId = currentSystemAttemptId;
+            currentSystemAttemptId = null;
+            releaseSystemResources({ cancelPendingStart: true, attemptId: endedAttemptId });
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;

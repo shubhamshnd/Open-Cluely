@@ -146,16 +146,18 @@ export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedi
   // the PCM straight into the 'system' STT socket. Nothing is captured in the
   // renderer: no MediaStream, no AudioContext, no screencast session. This
   // returns a handle whose stop() releases the main-process capture by token
-  // (a stale handle can never stop a newer capture).
+  // (a stale handle can never stop a newer capture). The renderer-owned
+  // attemptId (when given) becomes the capture token, so the capture's death
+  // error correlates to this attempt from the first moment.
   const nativeMonitorBridge =
     nativeMonitor ||
     {
-      start: () => window.electronAPI.startLinuxMonitorCapture(),
+      start: (options) => window.electronAPI.startLinuxMonitorCapture(options),
       stop: (token) => window.electronAPI.stopLinuxMonitorCapture(token)
     };
 
-  async function startNativeMonitorCapture() {
-    const result = await nativeMonitorBridge.start();
+  async function startNativeMonitorCapture({ attemptId } = {}) {
+    const result = await nativeMonitorBridge.start({ attemptId });
     if (!result || !result.success || !result.token) {
       throw createSystemAudioUnsupportedError(result?.error || 'native monitor capture did not start');
     }

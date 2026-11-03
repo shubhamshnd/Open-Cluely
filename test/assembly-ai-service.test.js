@@ -137,6 +137,69 @@ test('service: the stopped status carries the id of the session being stopped', 
   assert.equal(stopped[1].sessionId, 1);
 });
 
+test('service: events carry the renderer-owned attempt id when one is provided', () => {
+  const { service, events, sockets } = createHarness();
+
+  const first = service.startAssemblyAiStream('system', { attemptId: 'att-1' });
+  assert.equal(first.attemptId, 'att-1', 'the start RPC echoes the renderer-owned attempt id');
+  sockets[0].emit('open');
+  sockets[0].emit('message', JSON.stringify({ type: 'Begin', id: 's1' }));
+  const listening = voskEvents(events, 'vosk-status').find(([, payload]) => payload.status === 'listening');
+  assert.equal(listening[1].attemptId, 'att-1');
+
+  sockets[0].emit('message', terminationFrame());
+  assert.equal(voskEvents(events, 'vosk-stopped')[0][1].attemptId, 'att-1');
+
+  service.startAssemblyAiStream('system', { attemptId: 'att-2' });
+  sockets[1].emit('open');
+  sockets[1].emit('error', new Error('boom'));
+  assert.equal(voskEvents(events, 'vosk-error')[0][1].attemptId, 'att-2');
+
+  service.startAssemblyAiStream('system', { attemptId: 'att-3' });
+  service.stopVoiceRecognition({ source: 'system', attemptId: 'att-3' });
+  const stopped = voskEvents(events, 'vosk-status').filter(([, payload]) => payload.status === 'stopped');
+  assert.equal(stopped[stopped.length - 1][1].attemptId, 'att-3', 'the stopped status carries the attempt being stopped');
+});
+
+test('service: a missing-key error carries the renderer-owned attempt id', () => {
+  const events = [];
+  const service = createAssemblyAiService({
+    WebSocket: class {},
+    desktopCapturer: {},
+    getAssemblyApiKey: () => null,
+    getSpeechModel: () => 'test-model',
+    getGeminiService: () => null,
+    sendToRenderer: (channel, payload) => events.push([channel, payload])
+  });
+
+  service.startAssemblyAiStream('system', { attemptId: 'att-1' });
+  assert.equal(voskEvents(events, 'vosk-error')[0][1].attemptId, 'att-1');
+});
+
+test('service: a stop scoped to a superseded attempt id never kills the live session', () => {
+  const { service, events, sockets } = createHarness();
+
+  service.startAssemblyAiStream('system', { attemptId: 'att-a' });
+  sockets[0].emit('open');
+  service.stopVoiceRecognition({ source: 'system', attemptId: 'att-a' });
+  service.startAssemblyAiStream('system', { attemptId: 'att-b' });
+  sockets[1].emit('open');
+
+  const stoppedCount = () => voskEvents(events, 'vosk-status').filter(([, payload]) => payload.status === 'stopped').length;
+  const before = stoppedCount();
+  service.stopVoiceRecognition({ source: 'system', attemptId: 'att-a' }); // stale-scoped stop lands late
+  assert.equal(sockets[1].readyState, 1, 'the live socket must survive a stale-scoped stop');
+  assert.equal(stoppedCount(), before, 'no stopped status is emitted for a mismatched scope');
+  service.handleAudioChunk({ source: 'system', data: Buffer.alloc(4) });
+  assert.ok(sockets[1].sent.some((frame) => Buffer.isBuffer(frame)), 'the live session still streams');
+
+  service.stopVoiceRecognition({ source: 'system', attemptId: 'att-b' }); // matching scope stops
+  assert.ok(
+    sockets[1].sent.some((frame) => String(frame).includes('Terminate')),
+    'a stop for the live attempt sends the Terminate frame to its socket'
+  );
+});
+
 test('service: a superseded socket open cannot mark the replacement streaming or block the next start', () => {
   const { service, sockets } = createHarness();
 

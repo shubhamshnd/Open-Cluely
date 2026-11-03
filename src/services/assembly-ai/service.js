@@ -19,16 +19,17 @@ function createAssemblyAiService({
   let isStreamingMic = false;
   let isStreamingSystem = false;
 
-  // Session correlation: every start of a source gets a monotonically
-  // increasing session id, returned by the start RPC and stamped on every
-  // renderer event emitted for that session's socket. The renderer correlates
-  // terminal events to the session they belong to by id instead of guessing
-  // from ordering, so an obsolete event can never be mistaken for the live
-  // session's and vice versa. Events emitted synchronously inside an RPC (the
-  // pre-socket 'loading' status, the missing-key error) carry no id: they are
-  // definitionally about the in-flight call.
+  // Session correlation: the renderer owns the correlation identity. Every
+  // Host/system start passes a renderer-generated attemptId in the start RPC;
+  // the service stores it and stamps EVERY event emitted for that session
+  // (status, transcripts, error, Termination, close, stop ack) with it, so an
+  // event is correlatable from the first moment — including events that
+  // arrive while the start RPC response is still in flight. Starts without an
+  // attemptId (mic, legacy callers) fall back to the internal monotonic
+  // session id for bookkeeping; their events carry no attemptId.
   const sessionCounters = { mic: 0, system: 0 };
   const currentSessionIds = { mic: 0, system: 0 };
+  const currentAttemptIds = { mic: null, system: null };
   // Sockets an explicit stop was issued for. A stopped socket that finishes
   // connecting late must not mark the source streaming or resurrect its
   // session.
@@ -126,9 +127,14 @@ function createAssemblyAiService({
     }
   }
 
-  function startAssemblyAiStream(source) {
+  function startAssemblyAiStream(source, { attemptId } = {}) {
     const resolvedSource = normalizeSttSource(source);
     const apiKey = getAssemblyApiKey();
+    // The renderer-owned correlation identity for this start (null when the
+    // caller did not provide one). Echoed back in the result and stamped on
+    // every event this session emits.
+    const correlationId = typeof attemptId === 'string' && attemptId ? attemptId : null;
+    const withAttempt = (payload) => (correlationId ? { ...payload, attemptId: correlationId } : payload);
 
     if (!apiKey) {
       console.error('AssemblyAI API key not configured in app settings');
@@ -138,11 +144,11 @@ function createAssemblyAiService({
         event: 'missing-api-key',
         message: 'AssemblyAI API key not configured in Settings'
       });
-      sendToRenderer('vosk-error', {
+      sendToRenderer('vosk-error', withAttempt({
         source: resolvedSource,
         error: 'AssemblyAI API key not configured. Add it in Settings.'
-      });
-      return { success: false, error: 'AssemblyAI API key not configured. Add it in Settings.' };
+      }));
+      return { success: false, error: 'AssemblyAI API key not configured. Add it in Settings.', attemptId: correlationId ?? undefined };
     }
 
     if (isSourceStreaming(resolvedSource)) {
@@ -154,7 +160,8 @@ function createAssemblyAiService({
       return {
         success: true,
         message: resolvedSource === 'system' ? 'System audio already streaming' : 'Mic already streaming',
-        sessionId: currentSessionIds[resolvedSource]
+        sessionId: currentSessionIds[resolvedSource],
+        attemptId: currentAttemptIds[resolvedSource] ?? undefined
       };
     }
 
@@ -179,11 +186,11 @@ function createAssemblyAiService({
       sttDroppedChunkCounters[resolvedSource] = 0;
       sttHistoryManager.resetSttHistoryBuffer(resolvedSource);
 
-      sendToRenderer('vosk-status', {
+      sendToRenderer('vosk-status', withAttempt({
         source: resolvedSource,
         status: 'loading',
         message: `Connecting (${resolvedSource})...`
-      });
+      }));
 
       const ws = new WebSocket(wsUrl, {
         headers: { Authorization: apiKey }
@@ -201,6 +208,7 @@ function createAssemblyAiService({
       sessionCounters[resolvedSource] += 1;
       const sessionId = sessionCounters[resolvedSource];
       currentSessionIds[resolvedSource] = sessionId;
+      currentAttemptIds[resolvedSource] = correlationId;
 
       // Socket identity: events arriving later on a superseded socket (its
       // delayed open/Termination/close, an error, buffered turns) must not
@@ -251,12 +259,12 @@ function createAssemblyAiService({
                 message: 'AssemblyAI session started',
                 meta: { id: msg.id }
               });
-              sendToRenderer('vosk-status', {
+              sendToRenderer('vosk-status', withAttempt({
                 source: resolvedSource,
                 status: 'listening',
                 message: `Listening (${resolvedSource === 'system' ? 'Host' : 'You'})...`,
                 sessionId
-              });
+              }));
               break;
 
             case 'Turn':
@@ -269,18 +277,18 @@ function createAssemblyAiService({
                     message: 'Final transcript received',
                     meta: { chars: msg.transcript.length }
                   });
-                  sendToRenderer('vosk-final', {
+                  sendToRenderer('vosk-final', withAttempt({
                     source: resolvedSource,
                     text: msg.transcript,
                     sessionId
-                  });
+                  }));
                   sttHistoryManager.queueSttHistorySegment(resolvedSource, msg.transcript);
                 } else {
-                  sendToRenderer('vosk-partial', {
+                  sendToRenderer('vosk-partial', withAttempt({
                     source: resolvedSource,
                     text: msg.transcript,
                     sessionId
-                  });
+                  }));
                 }
               }
               break;
@@ -299,7 +307,7 @@ function createAssemblyAiService({
               });
               sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'termination');
               resetSourceState(resolvedSource);
-              sendToRenderer('vosk-stopped', { source: resolvedSource, sessionId });
+              sendToRenderer('vosk-stopped', withAttempt({ source: resolvedSource, sessionId }));
               break;
 
             default:
@@ -331,11 +339,11 @@ function createAssemblyAiService({
           message: error.message
         });
         sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'ws-error');
-        sendToRenderer('vosk-error', {
+        sendToRenderer('vosk-error', withAttempt({
           source: resolvedSource,
           error: `Connection error (${resolvedSource}): ${error.message}`,
           sessionId
-        });
+        }));
         resetSourceState(resolvedSource);
       });
 
@@ -355,11 +363,11 @@ function createAssemblyAiService({
         if (isSourceStreaming(resolvedSource)) {
           sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'ws-close');
           resetSourceState(resolvedSource);
-          sendToRenderer('vosk-stopped', { source: resolvedSource, sessionId });
+          sendToRenderer('vosk-stopped', withAttempt({ source: resolvedSource, sessionId }));
         }
       });
 
-      return { success: true, sessionId };
+      return { success: true, sessionId, attemptId: correlationId ?? undefined };
     } catch (error) {
       console.error(`Error starting AssemblyAI stream [${resolvedSource}]:`, error.message);
       emitSttDebug({
@@ -410,16 +418,30 @@ function createAssemblyAiService({
     }
   }
 
-  function stopVoiceRecognition({ source } = {}) {
+  function stopVoiceRecognition({ source, attemptId } = {}) {
     emitSttDebug({
       source: source === 'system' || source === 'mic' ? source : null,
       event: 'ipc-stop',
       message: `Stop requested for ${source || 'default'}`
     });
 
+    // A stop scoped to a renderer-owned attempt id must only kill THAT
+    // attempt's resources: if the live session belongs to a newer attempt, the
+    // stop is stale (its target is already gone) and must not touch it.
+    const requestedAttemptId = typeof attemptId === 'string' && attemptId ? attemptId : null;
+
     const stopSource = (src) => {
       const resolvedSource = normalizeSttSource(src);
       const ws = getSourceSocket(resolvedSource);
+
+      if (requestedAttemptId && currentAttemptIds[resolvedSource] !== requestedAttemptId) {
+        emitSttDebug({
+          source: resolvedSource,
+          event: 'stop-stale-scope',
+          message: 'Stop for a superseded attempt ignored; the live session is untouched'
+        });
+        return;
+      }
 
       if (!ws) {
         sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'stop-noop');
@@ -452,12 +474,16 @@ function createAssemblyAiService({
       }
 
       sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'stop-request');
-      sendToRenderer('vosk-status', {
+      const stoppedPayload = {
         source: resolvedSource,
         status: 'stopped',
         message: 'Stopped',
         sessionId: currentSessionIds[resolvedSource]
-      });
+      };
+      if (currentAttemptIds[resolvedSource]) {
+        stoppedPayload.attemptId = currentAttemptIds[resolvedSource];
+      }
+      sendToRenderer('vosk-status', stoppedPayload);
 
       setSourceStreaming(resolvedSource, false);
       sttChunkCounters[resolvedSource] = 0;
