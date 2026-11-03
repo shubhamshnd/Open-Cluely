@@ -177,6 +177,9 @@ async function copyMobileUrlToClipboard() {
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
+const transcriptionMonitor = document.getElementById('transcription-monitor');
+const monitorHeader = document.getElementById('monitor-header');
+const monitorChevron = document.getElementById('monitor-chevron');
 const monitorMasterState = document.getElementById('monitor-master-state');
 const monitorStatusSystem = document.getElementById('monitor-status-system');
 const monitorStatusMic = document.getElementById('monitor-status-mic');
@@ -322,6 +325,9 @@ const transcriptionManager = createTranscriptionManager({
     transcriptionToggle,
     sourceSystemToggle,
     sourceMicToggle,
+    transcriptionMonitor,
+    monitorHeader,
+    monitorChevron,
     monitorMasterState,
     monitorStatusSystem,
     monitorStatusMic,
@@ -352,6 +358,16 @@ async function init() {
     if (chatAutoScrollToggle) {
         chatAutoScrollToggle.addEventListener('click', () => setAutoScrollEnabled(!autoScrollEnabledState));
         paintAutoScrollToggle();
+    }
+    if (monitorHeader) {
+        const onMonitorHeaderToggle = () => transcriptionManager.toggleMonitorExpanded();
+        monitorHeader.addEventListener('click', onMonitorHeaderToggle);
+        monitorHeader.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onMonitorHeaderToggle();
+            }
+        });
     }
     if (window.electronAPI?.onClearFromMobile) {
         window.electronAPI.onClearFromMobile(() => {
@@ -564,6 +580,15 @@ function createStreamHandler(actionId) {
         }
     }
 
+    // On failure the placeholder message is junk, not an answer: drop it so
+    // it is never fed back into later AI context as an "AI:" line.
+    function discard() {
+        if (messageRecord) {
+            chatUiManager.removeChatMessage(messageRecord.id);
+            messageRecord = null;
+        }
+    }
+
     function cleanup() {
         if (removeChunkListener) {
             removeChunkListener();
@@ -571,7 +596,7 @@ function createStreamHandler(actionId) {
         }
     }
 
-    return { start, finalize, cleanup };
+    return { start, finalize, discard, cleanup };
 }
 
 function hasConfiguredGeminiApiKeys(value) {
@@ -782,15 +807,12 @@ async function askAiWithSessionContext() {
         try {
             setAnalyzing(true);
             showLoadingOverlay('Analyzing full session context...');
-            stream.start('**Best Next Answer:**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.askAiWithSessionContext(payload);
 
             if (result?.success && result?.text) {
-                const heading = result.usedScreenshots
-                    ? '**Best Next Answer (Transcript + Screen):**'
-                    : '**Best Next Answer (Transcript):**';
-                stream.finalize(`${heading}\n\n${result.text}`);
+                stream.finalize(result.text);
                 showFeedback('Ask AI ready', 'success');
             } else {
                 throw new Error(result?.error || 'Ask AI failed');
@@ -798,6 +820,7 @@ async function askAiWithSessionContext() {
         } catch (error) {
             console.error('Ask AI error:', error);
             showFeedback('Ask AI failed', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -834,6 +857,7 @@ async function analyzeScreenshotsOnly() {
         } catch (error) {
             console.error('Analysis error:', error);
             showFeedback('Analysis failed', 'error');
+            stream.discard();
             setAnalyzing(false);
             hideLoadingOverlay();
             // Clean up on error since onAnalysisResult may not fire
@@ -927,7 +951,7 @@ async function getResponseSuggestions() {
                 return;
             }
 
-            stream.start('\u{1F4A1} **What should I say?**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.suggestResponse({
                 context: bundle.sessionSummary || 'Current meeting conversation',
@@ -935,7 +959,7 @@ async function getResponseSuggestions() {
             });
 
             if (result.success && result.suggestions) {
-                stream.finalize(`\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
+                stream.finalize(result.suggestions);
                 showFeedback('Suggestions generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to generate suggestions');
@@ -943,6 +967,7 @@ async function getResponseSuggestions() {
         } catch (error) {
             console.error('Error getting suggestions:', error);
             showFeedback('Failed to generate suggestions', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -972,21 +997,22 @@ async function generateMeetingNotes() {
                 return;
             }
 
-            stream.start('\u{1F4DD} **Meeting Notes**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.generateMeetingNotes({
                 contextString: bundle.contextString
             });
 
             if (result.success && result.notes) {
-                stream.finalize(`\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
+                stream.finalize(result.notes);
                 showFeedback('Meeting notes generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to generate notes');
             }
         } catch (error) {
-            console.error('Error generating notes:', error);
+            console.error('Error generating meeting notes:', error);
             showFeedback('Failed to generate notes', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -1017,14 +1043,14 @@ async function getConversationInsights() {
                 return;
             }
 
-            stream.start('\u{1F4CA} **Conversation Insights**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.getConversationInsights({
                 contextString: bundle.contextString
             });
 
             if (result.success && result.insights) {
-                stream.finalize(`\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
+                stream.finalize(result.insights);
                 showFeedback('Insights generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to get insights');
@@ -1032,6 +1058,7 @@ async function getConversationInsights() {
         } catch (error) {
             console.error('Error getting insights:', error);
             showFeedback('Failed to get insights', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();

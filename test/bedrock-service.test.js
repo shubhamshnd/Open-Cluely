@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { ConverseCommand, ConverseStreamCommand } = require('@aws-sdk/client-bedrock-runtime');
-const { ListFoundationModelsCommand } = require('@aws-sdk/client-bedrock');
+const { ListFoundationModelsCommand, ListInferenceProfilesCommand } = require('@aws-sdk/client-bedrock');
 const BedrockService = require('../src/services/ai/bedrock-service');
 const { assertProvider } = require('../src/services/ai/provider-contract');
 
@@ -31,12 +31,15 @@ function createStubClients({ sendImpl } = {}) {
       if (command instanceof ListFoundationModelsCommand) {
         return {
           modelSummaries: [
-            { modelId: 'us.anthropic.claude-sonnet-5-5', outputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } },
+            { modelId: 'us.anthropic.claude-sonnet-5-5', outputModalities: ['TEXT'], inputModalities: ['TEXT', 'IMAGE'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } },
             { modelId: 'amazon.titan-embed-text-v2:0', outputModalities: ['EMBEDDING'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } },
-            { modelId: 'us.moonshotai.kimi-k3', outputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } },
+            { modelId: 'us.moonshotai.kimi-k3', outputModalities: ['TEXT'], inputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } },
             { modelId: 'old.legacy-model-v1:0', outputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'LEGACY' } }
           ]
         };
+      }
+      if (command instanceof ListInferenceProfilesCommand) {
+        return { inferenceProfileSummaries: [], nextToken: null };
       }
       return {
         output: {
@@ -158,8 +161,163 @@ test('classifies Bedrock auth, throttling and timeout errors', () => {
 
 test('listModels filters to active on-demand text models', async () => {
   const { service } = createService();
-  const models = await service.listModels();
-  assert.deepEqual(models, ['us.anthropic.claude-sonnet-5-5', 'us.moonshotai.kimi-k3']);
+  const { models, note } = await service.listModels();
+  assert.deepEqual(models, [
+    { id: 'us.anthropic.claude-sonnet-5-5', supportsImages: true },
+    { id: 'us.moonshotai.kimi-k3', supportsImages: false }
+  ]);
+  assert.equal(note, null);
+});
+
+function createListService({ foundationSummaries, profilePages, profilesError } = {}) {
+  const sent = [];
+  const bedrockClient = {
+    send: async (command) => {
+      sent.push(command);
+      if (command instanceof ListFoundationModelsCommand) {
+        return { modelSummaries: foundationSummaries || [] };
+      }
+      if (command instanceof ListInferenceProfilesCommand) {
+        if (profilesError) {
+          throw profilesError;
+        }
+        const requestedToken = command.input.nextToken || null;
+        const pages = profilePages || [];
+        const index = requestedToken
+          ? pages.findIndex((page) => page.token === requestedToken)
+          : 0;
+        const page = pages[index] || { summaries: [], nextToken: null };
+        return {
+          inferenceProfileSummaries: page.summaries || [],
+          nextToken: page.nextToken || null
+        };
+      }
+      throw new Error(`Unexpected command ${command?.constructor?.name}`);
+    }
+  };
+  const service = new BedrockService({
+    region: 'us-east-1',
+    modelId: 'us.anthropic.claude-sonnet-5-5',
+    minRequestInterval: 0,
+    runtimeClient: { send: async () => ({ output: { message: { content: [{ text: 'x' }] } } }) },
+    bedrockClient
+  });
+  return { service, sent };
+}
+
+const CLAUDE_45_SUMMARY = {
+  modelId: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
+  outputModalities: ['TEXT'],
+  inputModalities: ['TEXT', 'IMAGE'],
+  inferenceTypesSupported: ['INFERENCE_PROFILE'],
+  modelLifecycle: { status: 'ACTIVE' }
+};
+
+test('listModels merges system-defined inference profiles (Claude first) and de-duplicates by underlying model', async () => {
+  const { service } = createListService({
+    foundationSummaries: [
+      CLAUDE_45_SUMMARY,
+      { modelId: 'amazon.nova-lite-v1:0', outputModalities: ['TEXT'], inputModalities: ['TEXT', 'IMAGE'], inferenceTypesSupported: ['ON_DEMAND', 'INFERENCE_PROFILE'], modelLifecycle: { status: 'ACTIVE' } },
+      { modelId: 'us.moonshotai.kimi-k3', outputModalities: ['TEXT'], inputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } }
+    ],
+    profilePages: [{
+      summaries: [
+        {
+          inferenceProfileId: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+          models: [{ modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0' }]
+        },
+        {
+          inferenceProfileId: 'us.amazon.nova-lite-v1:0',
+          models: [{ modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0' }]
+        }
+      ]
+    }]
+  });
+
+  const { models, note } = await service.listModels();
+  // Claude first, then alphabetical; the bare nova id is dropped in favour of
+  // its us.* profile id; kimi stays on its bare ON_DEMAND id.
+  assert.deepEqual(models, [
+    { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', supportsImages: true },
+    { id: 'us.amazon.nova-lite-v1:0', supportsImages: true },
+    { id: 'us.moonshotai.kimi-k3', supportsImages: false }
+  ]);
+  assert.equal(note, null);
+});
+
+test('listModels paginates inference profiles with nextToken', async () => {
+  const { service, sent } = createListService({
+    foundationSummaries: [CLAUDE_45_SUMMARY],
+    profilePages: [
+      {
+        token: null,
+        summaries: [{
+          inferenceProfileId: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+          models: [{ modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0' }]
+        }],
+        nextToken: 'page-2'
+      },
+      {
+        token: 'page-2',
+        summaries: [{
+          inferenceProfileId: 'global.anthropic.claude-sonnet-4-5-20250929-v1:0',
+          models: [{ modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0' }]
+        }],
+        nextToken: null
+      }
+    ]
+  });
+
+  const { models } = await service.listModels();
+  const profileCalls = sent.filter((command) => command instanceof ListInferenceProfilesCommand);
+  assert.equal(profileCalls.length, 2);
+  assert.equal(profileCalls[0].input.typeEquals, 'SYSTEM_DEFINED');
+  assert.equal(profileCalls[1].input.nextToken, 'page-2');
+  // Same underlying model: the first profile id wins the de-dup.
+  assert.deepEqual(models, [
+    { id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', supportsImages: true }
+  ]);
+});
+
+test('listModels falls back to foundation models with a readable note when profiles are denied', async () => {
+  const denial = new Error('User is not authorized to perform bedrock:ListInferenceProfiles');
+  denial.name = 'AccessDeniedException';
+  const { service } = createListService({
+    foundationSummaries: [
+      { modelId: 'us.moonshotai.kimi-k3', outputModalities: ['TEXT'], inputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } }
+    ],
+    profilesError: denial
+  });
+
+  const { models, note } = await service.listModels();
+  assert.deepEqual(models, [{ id: 'us.moonshotai.kimi-k3', supportsImages: false }]);
+  assert.match(note, /inference profiles/i);
+  assert.match(note, /AccessDeniedException/);
+  assert.doesNotMatch(note, /AKIA/);
+});
+
+test('listModels skips profiles whose underlying model does not output text', async () => {
+  const { service } = createListService({
+    foundationSummaries: [
+      { modelId: 'stability.sdxl-v1:0', outputModalities: ['IMAGE'], inputModalities: ['TEXT'], inferenceTypesSupported: ['INFERENCE_PROFILE'], modelLifecycle: { status: 'ACTIVE' } },
+      { modelId: 'us.moonshotai.kimi-k3', outputModalities: ['TEXT'], inputModalities: ['TEXT'], inferenceTypesSupported: ['ON_DEMAND'], modelLifecycle: { status: 'ACTIVE' } }
+    ],
+    profilePages: [{
+      summaries: [
+        {
+          inferenceProfileId: 'us.stability.sdxl-v1:0',
+          models: [{ modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/stability.sdxl-v1:0' }]
+        },
+        {
+          inferenceProfileId: 'us.unknown.model-without-summary',
+          models: [{ modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/unknown.model-x:0' }]
+        }
+      ]
+    }]
+  });
+
+  const { models } = await service.listModels();
+  assert.deepEqual(models, [{ id: 'us.moonshotai.kimi-k3', supportsImages: false }]);
 });
 
 test('uses static credentials only when both key parts are set', async () => {

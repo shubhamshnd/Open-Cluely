@@ -1,3 +1,5 @@
+import { formatMarkdownResponse } from './markdown-formatter.js';
+
 export function createChatUiManager({
     chatContainer,
     chatMessagesElement,
@@ -13,12 +15,11 @@ export function createChatUiManager({
     addMonitorLog,
     isAutoScrollEnabled = () => true
 }) {
+    // AI responses arrive as markdown and are rendered (headings, lists,
+    // bold/italic, code) with the source fully escaped first — raw model text
+    // never becomes HTML.
     function formatResponse(text) {
-        return String(text || '')
-            .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/\n/g, '<br>');
+        return formatMarkdownResponse(text);
     }
 
     function isChatNearBottom(threshold = 28) {
@@ -126,6 +127,27 @@ export function createChatUiManager({
         return record;
     }
 
+    // Removes a message from the store and the DOM. Used to drop the
+    // streaming placeholder of a failed AI action so it never pollutes the
+    // next context bundle as an "AI:" line.
+    function removeChatMessage(messageId) {
+        const removed = messageStore.remove(messageId);
+        if (!removed) {
+            return null;
+        }
+
+        if (chatMessagesElement) {
+            const messageEl = chatMessagesElement.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageEl) {
+                messageEl.remove();
+            }
+        }
+
+        onMessagesChanged?.(messageStore.getMessages());
+        updateUi?.();
+        return removed;
+    }
+
     function updateChatComposerHeight() {
         if (!chatContainer || !chatComposer) {
             return;
@@ -208,6 +230,7 @@ export function createChatUiManager({
 
     return {
         addChatMessage,
+        removeChatMessage,
         updateChatMessageContent,
         autoResizeManualInput,
         submitManualContextMessage,

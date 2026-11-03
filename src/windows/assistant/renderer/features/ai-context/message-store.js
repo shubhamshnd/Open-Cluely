@@ -40,6 +40,17 @@ export function createMessageStore() {
     sequence = 0;
   }
 
+  // Removes one message (e.g. the placeholder of a failed AI action, which
+  // must not be fed back into later context as an "AI:" line).
+  function remove(messageId) {
+    const index = messages.findIndex((message) => message.id === messageId);
+    if (index === -1) {
+      return null;
+    }
+    const [removed] = messages.splice(index, 1);
+    return removed;
+  }
+
   function findById(messageId) {
     return messages.find((message) => message.id === messageId);
   }
@@ -76,6 +87,7 @@ export function createMessageStore() {
     findById,
     getMessages,
     isIncludedForAi,
+    remove,
     toggleInclusion
   };
 }

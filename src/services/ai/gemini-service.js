@@ -7,6 +7,7 @@
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { redactSecretsInText } = require('../state/secret-masking');
+const { stripRoutingLabels } = require('./response-cleanup');
 const {
   getDefaultGeminiModel,
   resolveGeminiModel,
@@ -183,7 +184,9 @@ class GeminiService {
       try {
         await this.waitForRateLimit();
         const result = await this._executeRequest(request);
-        request.resolve(result);
+        // Defensive: a leaked routing label ("Domain: conceptual") never
+        // reaches the user, even when the model ignores the prompt rule.
+        request.resolve(stripRoutingLabels(result));
       } catch (error) {
         request.reject(error);
       }

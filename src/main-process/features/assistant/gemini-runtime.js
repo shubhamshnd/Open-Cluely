@@ -49,6 +49,9 @@ function createGeminiRuntime() {
   };
   let providerFallbackOrder = [];
   let activeAiProvider = getDefaultAiProvider();
+  // Conversation history waiting to move to the next active provider's
+  // service (see setActiveAiProvider).
+  let pendingHistoryCarryover = null;
   let activeGeminiModel = getDefaultGeminiModel();
   let activeProgrammingLanguage = getDefaultProgrammingLanguage();
   let activeOllamaBaseUrl = getDefaultOllamaBaseUrl();
@@ -179,7 +182,7 @@ function createGeminiRuntime() {
       }
 
       console.log('Gemini AI Service initialized successfully');
-      return geminiService;
+      return applyHistoryCarryover(geminiService);
     } catch (error) {
       geminiService = null;
       console.error('Failed to initialize Gemini AI Service:', error);
@@ -411,7 +414,7 @@ function createGeminiRuntime() {
     activeProgrammingLanguage = resolveProgrammingLanguage(programmingLanguage);
 
     try {
-      return providerRegistry.getService('ollama', buildRegistrySettings());
+      return applyHistoryCarryover(providerRegistry.getService('ollama', buildRegistrySettings()));
     } catch (error) {
       providerRegistry.reset('ollama');
       console.error('Failed to initialize Ollama AI Service:', error);
@@ -424,7 +427,7 @@ function createGeminiRuntime() {
       return initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
     }
     try {
-      return providerRegistry.getService(activeAiProvider, buildRegistrySettings());
+      return applyHistoryCarryover(providerRegistry.getService(activeAiProvider, buildRegistrySettings()));
     } catch (error) {
       providerRegistry.reset(activeAiProvider);
       console.error(`Failed to initialize ${activeAiProvider} AI Service:`, error);
@@ -432,7 +435,37 @@ function createGeminiRuntime() {
     }
   }
 
+  // The STT history manager writes transcript lines into the ACTIVE service's
+  // conversationHistory. That history belongs to the conversation, not to the
+  // provider: on a provider switch it is carried over, or the consumers that
+  // read service history (answer-question, follow-up email, getContextString)
+  // would lose the transcript the moment Settings is saved with a different
+  // provider. A target service that already has history keeps its own.
+  function applyHistoryCarryover(service) {
+    const pending = pendingHistoryCarryover;
+    pendingHistoryCarryover = null;
+    if (
+      service &&
+      pending &&
+      Array.isArray(service.conversationHistory) &&
+      service.conversationHistory.length === 0
+    ) {
+      const cap = Number.isFinite(service.maxHistoryLength) ? service.maxHistoryLength : 20;
+      service.conversationHistory = pending.slice(-cap);
+      console.log(`Carried ${service.conversationHistory.length} conversation history entries across the AI provider switch`);
+    }
+    return service;
+  }
+
   function setActiveAiProvider(providerName) {
+    const previousService = getService();
+    if (
+      previousService &&
+      Array.isArray(previousService.conversationHistory) &&
+      previousService.conversationHistory.length > 0
+    ) {
+      pendingHistoryCarryover = [...previousService.conversationHistory];
+    }
     activeAiProvider = resolveAiProvider(providerName);
     return activeAiProvider;
   }

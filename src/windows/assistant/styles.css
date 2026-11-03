@@ -659,6 +659,41 @@ body {
   gap: 6px;
 }
 
+/* Compact monitor: a single status line when idle; the full panel shows
+   while a source is active or after a click on the header (defect: at
+   900x400 the always-expanded monitor crowded the answer area). */
+.monitor-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.monitor-header:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.monitor-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.transcription-monitor.compact .monitor-details {
+  display: none;
+}
+
+.monitor-chevron {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  flex: 0 0 auto;
+}
+
+body:not(.theme-dark) .monitor-chevron {
+  color: #334155;
+}
+
 .monitor-title {
   font-size: 10px;
   font-weight: 800;
@@ -1326,6 +1361,37 @@ body.chat-resizing * {
   padding: 4px 8px;
   border-radius: 4px;
   border-left: 3px solid rgba(59, 130, 246, 0.8);
+}
+
+/* Sizes: the UA default (up to 2em) overwhelms a 12px chat. */
+.result-text h1, .message-content h1 { font-size: 15px; }
+.result-text h2, .message-content h2 { font-size: 14px; }
+.result-text h3, .message-content h3 { font-size: 13px; }
+
+.message-content blockquote {
+  margin: 6px 0;
+  padding: 4px 8px;
+  border-left: 3px solid rgba(148, 163, 184, 0.7);
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 0 4px 4px 0;
+  color: inherit;
+}
+
+.message-content hr {
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.5);
+  margin: 8px 0;
+}
+
+.message-content p {
+  margin: 6px 0;
+}
+
+.message-content p:first-child,
+.message-content h1:first-child,
+.message-content h2:first-child,
+.message-content h3:first-child {
+  margin-top: 0;
 }
 
 .result-text ul, .message-content ul,

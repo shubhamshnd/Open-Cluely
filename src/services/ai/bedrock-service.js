@@ -21,7 +21,11 @@ const {
   ConverseCommand,
   ConverseStreamCommand
 } = require('@aws-sdk/client-bedrock-runtime');
-const { BedrockClient, ListFoundationModelsCommand } = require('@aws-sdk/client-bedrock');
+const {
+  BedrockClient,
+  ListFoundationModelsCommand,
+  ListInferenceProfilesCommand
+} = require('@aws-sdk/client-bedrock');
 const BaseProviderService = require('./base-provider-service');
 const { resolveAwsAuth, isAwsAuthReady, normalizeAwsAuthMode } = require('../aws/credentials');
 const {
@@ -50,6 +54,14 @@ function resolveAuthMode(options) {
   const hasKey = String(options.accessKeyId || '').trim().length > 0;
   const hasSecret = String(options.secretAccessKey || '').trim().length > 0;
   return hasKey || hasSecret ? 'keys' : 'default';
+}
+
+// "arn:aws:bedrock:REGION::foundation-model/PROVIDER.MODEL-VERSION" → the
+// foundation model id; anything else passes through unchanged.
+function foundationModelIdFromArn(arn) {
+  const value = String(arn || '').trim();
+  const slashIndex = value.lastIndexOf('/');
+  return slashIndex >= 0 ? value.slice(slashIndex + 1) : value;
 }
 
 function buildClientConfig({ region, auth }) {
@@ -247,10 +259,24 @@ class BedrockService extends BaseProviderService {
     return responseText;
   }
 
-  // List foundation models available in the configured region (settings panel
-  // "Fetch" button, Task D3). Returns plain model id strings. Bedrock API
-  // keys are bearer credentials for the runtime API; the control-plane list
-  // call needs SigV4, so apiKey mode gets a clear message instead of a call.
+  // List models invokable in the configured region (settings panel "Fetch"
+  // button, Task D3). Returns { models: [{ id, supportsImages }], note }.
+  //
+  // Two control-plane lists are merged:
+  //  - ListFoundationModels: bare ids, kept when they are ACTIVE, output TEXT
+  //    and can be invoked on demand (existing behavior).
+  //  - ListInferenceProfiles (SYSTEM_DEFINED, paginated): the ONLY way to
+  //    invoke Claude and other newer models — they have no ON_DEMAND bare id,
+  //    so the foundation list alone never shows them. A profile id is kept
+  //    when its underlying foundation model outputs TEXT; the vision flag
+  //    comes from the underlying model's input modalities. For the same
+  //    underlying model the us.*/global.* profile id wins over the bare id.
+  //
+  // When the profiles call is denied (or fails otherwise) the result falls
+  // back to the foundation-model list and `note` carries a readable reason.
+  // Bedrock API keys are bearer credentials for the runtime API; the
+  // control-plane list calls need SigV4, so apiKey mode gets a clear message
+  // instead of a call.
   async listModels() {
     if (this.authMode === 'apiKey') {
       throw new Error(
@@ -259,19 +285,107 @@ class BedrockService extends BaseProviderService {
     }
     const response = await this.bedrockClient.send(new ListFoundationModelsCommand({}));
     const summaries = Array.isArray(response.modelSummaries) ? response.modelSummaries : [];
-    return summaries
+
+    const outputsText = (summary) => (summary.outputModalities || []).includes('TEXT');
+    const acceptsImages = (summary) => (summary.inputModalities || []).includes('IMAGE');
+    const byModelId = new Map();
+    for (const summary of summaries) {
+      if (summary?.modelId) {
+        byModelId.set(summary.modelId, summary);
+      }
+    }
+
+    const bareEntries = summaries
       .filter((summary) => {
-        const outputs = summary.outputModalities || [];
         const inference = summary.inferenceTypesSupported || [];
         const lifecycle = String(summary.modelLifecycle?.status || 'ACTIVE');
         return (
           lifecycle === 'ACTIVE' &&
-          outputs.includes('TEXT') &&
+          outputsText(summary) &&
           (inference.length === 0 || inference.includes('ON_DEMAND'))
         );
       })
-      .map((summary) => summary.modelId)
-      .filter(Boolean);
+      .map((summary) => ({
+        id: summary.modelId,
+        supportsImages: acceptsImages(summary),
+        underlying: summary.modelId
+      }))
+      .filter((entry) => Boolean(entry.id));
+
+    const profileEntries = [];
+    let note = null;
+    try {
+      let nextToken;
+      do {
+        const page = await this.bedrockClient.send(
+          new ListInferenceProfilesCommand({
+            typeEquals: 'SYSTEM_DEFINED',
+            maxResults: 100,
+            nextToken
+          })
+        );
+        const pageSummaries = Array.isArray(page.inferenceProfileSummaries)
+          ? page.inferenceProfileSummaries
+          : [];
+        for (const profile of pageSummaries) {
+          const profileId = String(profile?.inferenceProfileId || '').trim();
+          if (!profileId) {
+            continue;
+          }
+          const underlying = (Array.isArray(profile.models) ? profile.models : [])
+            .map((model) => byModelId.get(foundationModelIdFromArn(model?.modelArn)))
+            .find(Boolean);
+          // Unknown or non-text underlying model: nothing verifiable to offer.
+          if (!underlying || !outputsText(underlying)) {
+            continue;
+          }
+          profileEntries.push({
+            id: profileId,
+            supportsImages: acceptsImages(underlying),
+            underlying: underlying.modelId
+          });
+        }
+        nextToken = typeof page.nextToken === 'string' && page.nextToken ? page.nextToken : null;
+      } while (nextToken);
+    } catch (error) {
+      const reason = String(error?.name || 'request failed');
+      note = `Inference profiles could not be listed (${reason}), so only directly invokable models are shown. Claude models need an inference profile (a us. or global. id) and may be missing.`;
+      console.warn(`ListInferenceProfiles failed (${reason}); falling back to foundation models only`);
+    }
+
+    // De-duplicate by underlying model: a profile id wins over a bare id, and
+    // between profiles the regional us.* id beats the global.* one.
+    const profileRank = (id) => (id.startsWith('us.') ? 0 : id.startsWith('global.') ? 1 : 2);
+    const rankedProfileEntries = [...profileEntries].sort(
+      (a, b) => profileRank(a.id) - profileRank(b.id)
+    );
+    const profiledUnderlying = new Set(profileEntries.map((entry) => entry.underlying));
+    const seenUnderlying = new Set();
+    const seen = new Set();
+    const models = [];
+    for (const entry of [
+      ...rankedProfileEntries,
+      ...bareEntries.filter((entry) => !profiledUnderlying.has(entry.underlying))
+    ]) {
+      if (seen.has(entry.id) || seenUnderlying.has(entry.underlying)) {
+        continue;
+      }
+      seen.add(entry.id);
+      seenUnderlying.add(entry.underlying);
+      models.push({ id: entry.id, supportsImages: entry.supportsImages });
+    }
+
+    // Claude first (the most common choice), then alphabetical.
+    models.sort((a, b) => {
+      const aClaude = a.id.includes('anthropic.claude') ? 0 : 1;
+      const bClaude = b.id.includes('anthropic.claude') ? 0 : 1;
+      if (aClaude !== bClaude) {
+        return aClaude - bClaude;
+      }
+      return a.id.localeCompare(b.id);
+    });
+
+    return { models, note };
   }
 }
 
