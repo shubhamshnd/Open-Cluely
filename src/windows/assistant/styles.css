@@ -1328,6 +1328,37 @@ body.chat-resizing * {
   border-left: 3px solid rgba(59, 130, 246, 0.8);
 }
 
+/* Sizes: the UA default (up to 2em) overwhelms a 12px chat. */
+.result-text h1, .message-content h1 { font-size: 15px; }
+.result-text h2, .message-content h2 { font-size: 14px; }
+.result-text h3, .message-content h3 { font-size: 13px; }
+
+.message-content blockquote {
+  margin: 6px 0;
+  padding: 4px 8px;
+  border-left: 3px solid rgba(148, 163, 184, 0.7);
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 0 4px 4px 0;
+  color: inherit;
+}
+
+.message-content hr {
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.5);
+  margin: 8px 0;
+}
+
+.message-content p {
+  margin: 6px 0;
+}
+
+.message-content p:first-child,
+.message-content h1:first-child,
+.message-content h2:first-child,
+.message-content h3:first-child {
+  margin-top: 0;
+}
+
 .result-text ul, .message-content ul,
 .result-text ol, .message-content ol {
   margin: 6px 0;

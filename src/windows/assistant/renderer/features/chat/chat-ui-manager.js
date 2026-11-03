@@ -1,3 +1,5 @@
+import { formatMarkdownResponse } from './markdown-formatter.js';
+
 export function createChatUiManager({
     chatContainer,
     chatMessagesElement,
@@ -13,12 +15,11 @@ export function createChatUiManager({
     addMonitorLog,
     isAutoScrollEnabled = () => true
 }) {
+    // AI responses arrive as markdown and are rendered (headings, lists,
+    // bold/italic, code) with the source fully escaped first — raw model text
+    // never becomes HTML.
     function formatResponse(text) {
-        return String(text || '')
-            .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/\n/g, '<br>');
+        return formatMarkdownResponse(text);
     }
 
     function isChatNearBottom(threshold = 28) {
