@@ -207,3 +207,195 @@ test('model label truncates with an ellipsis instead of clipping', () => {
   assert.equal(decls['min-width'], '0');
   assert.equal(decls.overflow, 'hidden');
 });
+
+/* --------------------------------------------------------------------------
+ * Round 2: real contrast ratios, font floors, disabled state, placeholder,
+ * tooltips, edge margins.
+ * ------------------------------------------------------------------------ */
+
+function parseColorParts(color) {
+  if (!color) return null;
+  let m = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (m) {
+    let h = m[1];
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+      a: 1,
+    };
+  }
+  m = color.match(/rgba?\(([^)]+)\)/);
+  if (m) {
+    const parts = m[1].split(',').map((s) => parseFloat(s));
+    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+  }
+  return null;
+}
+
+function compositeOver(fg, bg) {
+  const a = fg.a + bg.a * (1 - fg.a);
+  if (a === 0) return { r: 0, g: 0, b: 0, a: 0 };
+  return {
+    r: (fg.r * fg.a + bg.r * bg.a * (1 - fg.a)) / a,
+    g: (fg.g * fg.a + bg.g * bg.a * (1 - fg.a)) / a,
+    b: (fg.b * fg.a + bg.b * bg.a * (1 - fg.a)) / a,
+    a,
+  };
+}
+
+function relLum(c) {
+  const f = (v) => {
+    v /= 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+
+function contrastRatio(c1, c2) {
+  const l1 = relLum(c1);
+  const l2 = relLum(c2);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+function colorOf(theme, selector, prop, vars) {
+  const raw = effective(theme, selector, [prop]);
+  return parseColorParts(resolveColor(raw, vars));
+}
+
+// Text/background pairs that must hold WCAG AA (>= 4.5:1) in BOTH themes.
+// bgLayers are composited inside-out: the element's own surface first, then
+// the surface it sits on. An empty bgLayers entry means "no own background":
+// the text sits directly on the next layer.
+const CONTRAST_PAIRS = [
+  { name: 'Ask AI button', fg: ['.action-btn.analyze-btn', 'color'], bg: ['.action-btn.analyze-btn'] },
+  { name: 'Screen AI button', fg: ['.action-btn.screen-ai-btn', 'color'], bg: ['.action-btn.screen-ai-btn'] },
+  { name: 'Suggest button', fg: ['.action-btn.suggest-btn', 'color'], bg: ['.action-btn.suggest-btn'] },
+  { name: 'Notes button', fg: ['.action-btn.notes-btn', 'color'], bg: ['.action-btn.notes-btn'] },
+  { name: 'Insights button', fg: ['.action-btn.insights-btn', 'color'], bg: ['.action-btn.insights-btn'] },
+  { name: 'Add button', fg: ['.chat-manual-send', 'color'], bg: ['.chat-manual-send'] },
+  { name: 'composer placeholder', fg: ['.chat-manual-input::placeholder', 'color'], bg: ['.chat-manual-input'] },
+  { name: 'composer text', fg: ['.chat-manual-input', 'color'], bg: ['.chat-manual-input'] },
+  { name: 'model label', fg: ['.chat-provider-model', 'color'], bg: ['.chat-header', '.chat-container'] },
+  { name: 'monitor live text', fg: ['.monitor-live-text', 'color'], bg: ['.monitor-source-row', '.transcription-monitor'] },
+  { name: 'Off status pill', fg: ['.monitor-status-badge', 'color'], bg: ['.monitor-status-badge', '.monitor-source-row', '.transcription-monitor'] },
+  { name: 'Idle master pill', fg: ['.monitor-master-state', 'color'], bg: ['.monitor-master-state', '.transcription-monitor'] },
+  { name: 'monitor log line', fg: ['.monitor-log-entry', 'color'], bg: ['.monitor-log-entry', '.transcription-monitor'] },
+  { name: 'message timestamp', fg: ['.message-time', 'color'], bg: ['.chat-message', '.chat-container'] },
+  { name: 'message label', fg: ['.message-label', 'color'], bg: ['.message-label', '.chat-message', '.chat-container'] },
+  { name: 'settings helper', fg: ['.settings-helper-text', 'color'], bg: ['.settings-panel'] },
+  { name: 'mobile pill', fg: ['.mobile-server-pill', 'color'], bg: ['.mobile-server-pill', '.status-section'] },
+  { name: 'screenshot count', fg: ['.screenshot-count', 'color'], bg: ['.screenshot-count', '.status-section'] },
+  { name: 'close button glyph', fg: ['.close-app-btn', 'color'], bg: ['.close-app-btn', '.glass-container'] },
+  { name: 'toolbar icon', fg: ['.action-btn.settings-btn', 'color'], bg: ['.action-btn.settings-btn', '.glass-container'] },
+];
+
+for (const theme of ['light', 'dark']) {
+  test(`${theme} theme: key text/background pairs reach WCAG AA 4.5:1`, () => {
+    const vars = themeVars(theme);
+    const failures = [];
+    for (const pair of CONTRAST_PAIRS) {
+      const fg = colorOf(theme, pair.fg[0], pair.fg[1], vars);
+      if (!fg) {
+        failures.push(`${pair.name}: no ${pair.fg[1]} for ${pair.fg[0]}`);
+        continue;
+      }
+      let bg = { r: theme === 'dark' ? 10 : 255, g: theme === 'dark' ? 15 : 255, b: theme === 'dark' ? 26 : 255, a: 1 };
+      for (const layerSel of [...pair.bg].reverse()) {
+        const layer = colorOf(theme, layerSel, 'background', vars) || colorOf(theme, layerSel, 'background-color', vars);
+        if (layer) bg = compositeOver(layer, bg);
+      }
+      if (bg.a < 1) bg = compositeOver(bg, { r: 255, g: 255, b: 255, a: 1 });
+      const text = fg.a < 1 ? compositeOver(fg, bg) : fg;
+      const ratio = contrastRatio(text, bg);
+      if (ratio < 4.5) failures.push(`${pair.name}: ${ratio.toFixed(2)}:1`);
+    }
+    assert.deepEqual(failures, [], `low-contrast pairs in ${theme} theme`);
+  });
+}
+
+// Secondary/status text must be at least 11px (these were 9-10px).
+const FONT_FLOOR_SELECTORS = [
+  '.monitor-title',
+  '.monitor-source-label',
+  '.monitor-master-state',
+  '.monitor-status-badge',
+  '.monitor-live-text',
+  '.monitor-log-entry',
+  '.message-time',
+  '.message-label',
+  '.settings-helper-text',
+  '.action-btn.analyze-btn',
+  '.action-btn.screen-ai-btn',
+  '.action-btn.suggest-btn',
+  '.action-btn.notes-btn',
+  '.action-btn.insights-btn',
+  '.chat-provider-model',
+];
+
+test('secondary and status text is at least 11px', () => {
+  const failures = [];
+  for (const selector of FONT_FLOOR_SELECTORS) {
+    const raw = effective('dark', selector, ['font-size']);
+    const px = raw ? parseFloat(raw) : null;
+    if (px === null || px < 11) failures.push(`${selector}: ${raw || 'undeclared'}`);
+  }
+  assert.deepEqual(failures, [], 'text below the 11px floor');
+});
+
+test('disabled buttons stay readable (no opacity washout)', () => {
+  for (const selector of ['.action-btn:disabled', '.source-toggle:disabled', '.chat-manual-send:disabled']) {
+    const opacity = parseFloat(effective('dark', selector, ['opacity']) || '1');
+    assert.ok(opacity >= 0.95, `${selector} opacity ${opacity} washes the label out over the backdrop`);
+    const filter = effective('dark', selector, ['filter']) || '';
+    assert.match(filter, /saturate/, `${selector} must mute by desaturating, not fading`);
+  }
+});
+
+const htmlPath = path.join(__dirname, '../src/windows/assistant/renderer.html');
+const html = fs.readFileSync(htmlPath, 'utf8');
+
+test('composer placeholder is short enough to never clip', () => {
+  const m = html.match(/id="chat-manual-input"[\s\S]*?placeholder="([^"]*)"/);
+  assert.ok(m, 'chat-manual-input placeholder missing');
+  assert.ok(m[1].length <= 20, `placeholder "${m[1]}" is ${m[1].length} chars; keep it <= 20 so it fits narrow windows`);
+});
+
+test('small toolbar and window controls expose tooltips', () => {
+  const ids = [
+    'close-app-btn',
+    'transcription-toggle',
+    'source-system-toggle',
+    'source-mic-toggle',
+    'screenshot-btn',
+    'theme-toggle-btn',
+    'settings-btn',
+    'hide-btn',
+    'clear-btn',
+  ];
+  const missing = [];
+  for (const id of ids) {
+    const m = html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`));
+    if (!m || !/title="[^"]+"/.test(m[0])) missing.push(id);
+  }
+  assert.deepEqual(missing, [], 'buttons without a title tooltip');
+});
+
+test('theme toggle keeps its title in sync with the dynamic label', () => {
+  const rendererJs = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/renderer.js'), 'utf8');
+  const fn = rendererJs.match(/function updateThemeToggleUi\(\) \{[\s\S]*?\n\}/);
+  assert.ok(fn, 'updateThemeToggleUi not found');
+  assert.ok(/setAttribute\('title', ariaLabel\)/.test(fn[0]), 'title must mirror the dynamic aria-label, not be removed');
+});
+
+test('frame controls keep margin from the window edges', () => {
+  const handle = rules.find((r) => r.selectors.includes('.drag-handle') && r.decls.padding && r.decls.padding.includes('14px'));
+  assert.ok(handle, 'drag-handle must pad the close button off the top-right corner');
+  const corner = [...rules].reverse().find((r) => r.selectors.includes('.resize-handle-ne') && r.decls.top);
+  assert.ok(corner, 'resize-handle-ne inset rule missing');
+  assert.ok(parseFloat(corner.decls.top) >= 3 && parseFloat(corner.decls.right) >= 3, 'corner accent must be inset from the frame');
+  const composer = rules.find((r) => r.selectors.includes('.chat-composer') && r.decls['padding-bottom']);
+  assert.ok(composer, 'chat-composer bottom padding missing');
+  assert.ok(parseFloat(composer.decls['padding-bottom']) >= 8, 'Add button needs >= 8px composer bottom padding');
+});
