@@ -227,3 +227,78 @@ test('dispose while start is pending cancels it', async () => {
   assert.equal(result.success, false);
   assert.deepEqual(harness.made[0].killCalls, ['SIGTERM']);
 });
+
+test('REGRESSION ownership: a restart cannot spawn while the stopping predecessor is still alive', async () => {
+  const stubborn = createFakeChild({ closeOnSigterm: false });
+  const harness = createHarness({ children: [stubborn], killGraceMs: 1000 });
+  const first = await startRunning(harness);
+
+  const stopping = harness.capture.stop({ token: first.result.token });
+  const restarting = harness.capture.start({ onChunk: () => {} });
+  await tick();
+
+  assert.equal(harness.spawnCalls.length, 1, 'the replacement must wait for the terminating child to exit');
+  assert.deepEqual(stubborn.killCalls, ['SIGTERM']);
+
+  stubborn.emit('close', 0, null);
+  await stopping;
+  await tick();
+
+  assert.equal(harness.spawnCalls.length, 2, 'the replacement spawns once the predecessor exited');
+  const secondChild = harness.made[harness.made.length - 1];
+  assert.notEqual(secondChild, stubborn);
+  secondChild.stdout.emit('data', Buffer.alloc(3200, 1));
+  const second = await restarting;
+  assert.equal(second.success, true);
+  await harness.capture.stop({ token: second.token });
+});
+
+test('REGRESSION ownership: Stop while a restart is queued behind the terminating predecessor cancels the spawn', async () => {
+  const stubborn = createFakeChild({ closeOnSigterm: false });
+  const harness = createHarness({ children: [stubborn], killGraceMs: 1000 });
+  await startRunning(harness);
+
+  const restarting = harness.capture.start({ onChunk: () => {} });
+  assert.equal(harness.spawnCalls.length, 1);
+
+  const stopping = harness.capture.stop({});
+  stubborn.emit('close', 0, null);
+  assert.deepEqual(await stopping, { stopped: true }, 'Stop owns and cancels the pending start');
+
+  const result = await restarting;
+  assert.equal(result.success, false);
+  assert.match(result.error, /cancel/i);
+  await tick();
+  assert.equal(harness.spawnCalls.length, 1, 'no replacement may spawn after Stop');
+});
+
+test('REGRESSION ownership: dispose awaits the SIGKILL escalation of a child ignoring SIGTERM', async () => {
+  const stubborn = createFakeChild({ closeOnSigterm: false }); // closes only on SIGKILL
+  const harness = createHarness({ children: [stubborn], killGraceMs: 30 });
+  await startRunning(harness);
+
+  let disposed = false;
+  const disposing = Promise.resolve(harness.capture.dispose()).then(() => {
+    disposed = true;
+  });
+  await tick();
+  assert.deepEqual(stubborn.killCalls, ['SIGTERM']);
+  assert.equal(disposed, false, 'dispose must wait until the child actually exited');
+
+  await new Promise((resolve) => setTimeout(resolve, 80)); // killGraceMs elapses → SIGKILL → close
+  await disposing;
+  assert.deepEqual(stubborn.killCalls, ['SIGTERM', 'SIGKILL']);
+  assert.equal(disposed, true);
+});
+
+test('dispose also covers a child whose stop is already in flight', async () => {
+  const stubborn = createFakeChild({ closeOnSigterm: false });
+  const harness = createHarness({ children: [stubborn], killGraceMs: 30 });
+  const first = await startRunning(harness);
+
+  const stopping = harness.capture.stop({ token: first.result.token });
+  const disposing = Promise.resolve(harness.capture.dispose());
+  stubborn.emit('close', 0, null);
+  await stopping;
+  await disposing; // must resolve, not hang on an already-terminating child
+});

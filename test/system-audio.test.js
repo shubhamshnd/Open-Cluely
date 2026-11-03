@@ -679,3 +679,93 @@ test('transcription manager: backend error/stop events release the native captur
   await flush();
   assert.ok(events.includes('nativeStop:2'));
 });
+
+test('REGRESSION: backend error while the native acquisition is still pending cancels the start', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const gate = deferred();
+  const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({
+    managerModule,
+    gates: { nativeStart: gate }
+  });
+
+  const starting = transcriptionManager.toggleMasterTranscription();
+  await flush();
+  assert.equal(sourceStatuses.system, 'connecting');
+
+  transcriptionManager.handleVoskError({ source: 'system', error: 'Connection lost while starting' });
+  gate.resolve(); // the capture arrives after the session was terminated
+  await starting;
+  await flush();
+
+  assert.ok(!everActivated(recorded), 'backend error must prevent late activation');
+  assert.ok(events.includes('nativeStop:1'), 'the late capture must be released immediately');
+  assert.equal(sourceStatuses.system, 'error');
+  assert.ok(!recorded.chat.some(([, content]) => /Listening to host audio/i.test(content)));
+});
+
+test('REGRESSION: backend stopped acknowledgement while the native acquisition is still pending cancels the start', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const gate = deferred();
+  const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({
+    managerModule,
+    gates: { nativeStart: gate }
+  });
+
+  const starting = transcriptionManager.toggleMasterTranscription();
+  await flush();
+  transcriptionManager.handleVoskStopped({ source: 'system' });
+  gate.resolve();
+  await starting;
+  await flush();
+
+  assert.ok(!everActivated(recorded));
+  assert.ok(events.includes('nativeStop:1'));
+  assert.equal(sourceStatuses.system, 'off');
+});
+
+test('REGRESSION: a stale stopped acknowledgement from an explicitly stopped session must not tear down the new session', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({ managerModule });
+
+  await transcriptionManager.toggleMasterTranscription(); // session 1 active
+  await transcriptionManager.toggleMasterTranscription(); // explicit Stop (backend ack is pending)
+  assert.ok(events.includes('nativeStop:1'));
+
+  await transcriptionManager.toggleMasterTranscription(); // session 2 active
+  assert.ok(events.includes('nativeStart:2'));
+
+  transcriptionManager.handleVoskStopped({ source: 'system' }); // late ack for session 1
+  await flush();
+
+  assert.ok(!events.includes('nativeStop:2'), 'stale ack must not stop the live capture');
+  assert.equal(sourceStatuses.system, 'connecting', 'stale ack must not change the live session status');
+  const systemActivations = recorded.active.filter(([source]) => source === 'system');
+  assert.deepEqual(systemActivations[systemActivations.length - 1], ['system', true], 'session 2 stays active');
+  assert.ok(!recorded.feedback.some(([message]) => /Stopped/.test(message)), 'stale ack must not surface to the user');
+
+  await transcriptionManager.toggleMasterTranscription(); // real Stop still works
+  assert.ok(events.includes('nativeStop:2'));
+});
+
+test('REGRESSION: a stale error from an explicitly stopped session must not tear down the new session', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({ managerModule });
+
+  await transcriptionManager.toggleMasterTranscription(); // session 1 active
+  await transcriptionManager.toggleMasterTranscription(); // explicit Stop
+
+  await transcriptionManager.toggleMasterTranscription(); // session 2 active
+  transcriptionManager.handleVoskError({ source: 'system', error: 'Old session socket error' });
+  await flush();
+
+  assert.ok(!events.includes('nativeStop:2'), 'stale error must not stop the live capture');
+  assert.equal(sourceStatuses.system, 'connecting');
+  assert.ok(!recorded.feedback.some(([message]) => /Old session socket error/.test(message)));
+
+  await transcriptionManager.toggleMasterTranscription();
+  assert.ok(events.includes('nativeStop:2'));
+});

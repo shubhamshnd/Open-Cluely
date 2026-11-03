@@ -34,6 +34,15 @@ export function createTranscriptionManager({
     let isSystemActive = false;
     let systemNativeCapture = null;
     let systemStartGeneration = 0;
+    // Backend terminal events (vosk-error/vosk-stopped) carry no session id, so
+    // they are correlated by count: every stop we request is answered by exactly
+    // one terminal event for the session it ended (the renderer's stop request
+    // reaches the backend before any session started afterwards, and events
+    // arrive in emission order, so an outstanding acknowledgment always belongs
+    // to an older session than any terminal event of a newer session). If a
+    // backend ever drops its acknowledgment (socket lost without close), one
+    // later event could be misclassified; accepted as best-effort correlation.
+    let pendingSystemStopAcks = 0;
 
     let micPartialText = '';
     let micPartialDiv = null;
@@ -525,6 +534,9 @@ export function createTranscriptionManager({
             setSourceStatus('system', 'error', unsupportedMessage || `Host error: ${error.message}`);
             try {
                 await window.electronAPI.stopVoiceRecognition('system');
+                // The backend answers this stop with one terminal event for the
+                // session just ended; it must not tear down a newer session.
+                pendingSystemStopAcks += 1;
             } catch (_) {}
         }
 
@@ -545,6 +557,9 @@ export function createTranscriptionManager({
         systemPartialText = '';
         try {
             await window.electronAPI.stopVoiceRecognition('system');
+            // The backend answers this stop with one terminal event for the
+            // session just ended; it must not tear down a newer session.
+            pendingSystemStopAcks += 1;
         } catch (error) {
             addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
         }
@@ -655,6 +670,13 @@ export function createTranscriptionManager({
     function handleVoskError(data) {
         const source = normalizeSource(data?.source);
         const error = data?.error || 'Unknown transcription error';
+        if (source === 'system' && pendingSystemStopAcks > 0) {
+            // A terminal event was still expected for a session we explicitly
+            // stopped: this is its stale acknowledgment, not the live session.
+            pendingSystemStopAcks -= 1;
+            addMonitorLog('info', 'stale-event-ignored', `Ignored a stale backend error from a previous session: ${error}`, source);
+            return;
+        }
         console.error(`STT error [${source}]:`, error);
         showFeedback(`Error (${sourceLabel(source)}): ${error}`, 'error');
         addChatMessage('system', `Transcription error (${sourceLabel(source)}): ${error}`);
@@ -662,7 +684,11 @@ export function createTranscriptionManager({
         flushFinalTranscript(source, 'status-error');
 
         if (source === 'system') {
-            releaseSystemResources();
+            // The live session ended: invalidate any start still awaiting a
+            // step so a late capture is released at once and can never
+            // reactivate the session, and cancel a pending main-process start.
+            systemStartGeneration += 1;
+            releaseSystemResources({ cancelPendingStart: true });
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;
@@ -692,10 +718,20 @@ export function createTranscriptionManager({
 
     function handleVoskStopped(data) {
         const source = normalizeSource(data?.source);
+        if (source === 'system' && pendingSystemStopAcks > 0) {
+            // The acknowledgment of a stop we requested for a previous session;
+            // it must not tear down the session that is live now.
+            pendingSystemStopAcks -= 1;
+            addMonitorLog('info', 'stale-event-ignored', 'Ignored a stale stop acknowledgment from a previous session', source);
+            return;
+        }
         console.log(`STT stopped [${source}]`);
         flushFinalTranscript(source, 'stopped-event');
         if (source === 'system') {
-            releaseSystemResources();
+            // Same contract as handleVoskError: cancel a pending start and
+            // release anything that arrives late.
+            systemStartGeneration += 1;
+            releaseSystemResources({ cancelPendingStart: true });
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;

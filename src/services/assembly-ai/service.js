@@ -175,6 +175,19 @@ function createAssemblyAiService({
 
       setSourceSocket(resolvedSource, ws);
 
+      // Session correlation: a new start for the same source replaces this
+      // socket. Events arriving later on the superseded socket (its delayed
+      // Termination/close, an error, buffered turns) must not emit renderer
+      // events or reset state that now belongs to the live session.
+      const isCurrentSocket = () => getSourceSocket(resolvedSource) === ws;
+      const logStaleSocketEvent = (kind) => {
+        emitSttDebug({
+          source: resolvedSource,
+          event: 'stale-socket-event',
+          message: `Ignored ${kind} from a superseded socket`
+        });
+      };
+
       ws.on('open', () => {
         console.log(`AssemblyAI WebSocket connected [${resolvedSource}]`);
         setSourceStreaming(resolvedSource, true);
@@ -186,6 +199,10 @@ function createAssemblyAiService({
       });
 
       ws.on('message', (rawMessage) => {
+        if (!isCurrentSocket()) {
+          logStaleSocketEvent('a message');
+          return;
+        }
         try {
           const msg = JSON.parse(rawMessage.toString());
 
@@ -261,6 +278,12 @@ function createAssemblyAiService({
       });
 
       ws.on('error', (error) => {
+        if (!isCurrentSocket()) {
+          console.error(`AssemblyAI superseded socket error [${resolvedSource}]:`, error.message);
+          logStaleSocketEvent('an error');
+          cleanupAssemblyWs(ws);
+          return;
+        }
         console.error(`AssemblyAI WebSocket error [${resolvedSource}]:`, error.message);
         emitSttDebug({
           source: resolvedSource,
@@ -278,6 +301,10 @@ function createAssemblyAiService({
 
       ws.on('close', (code, reason) => {
         console.log(`AssemblyAI WebSocket closed [${resolvedSource}]:`, code, reason?.toString());
+        if (!isCurrentSocket()) {
+          logStaleSocketEvent('a close');
+          return;
+        }
         emitSttDebug({
           source: resolvedSource,
           event: 'ws-close',
