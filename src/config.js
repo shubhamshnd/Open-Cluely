@@ -269,9 +269,13 @@ function openAIModelSupportsImages(modelName) {
     return configured.supportsImages === true;
   }
 
-  return /^(chatgpt-4o|gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-4-vision|gpt-5|o1|o3|o4)/i.test(
-    String(modelName || '')
-  );
+  const normalized = String(modelName || '');
+  // Text-only members of otherwise vision-capable families.
+  if (/^(o1-mini|o1-preview|o3-mini|gpt-4-turbo-preview|gpt-4-\d{4}-preview)/i.test(normalized)) {
+    return false;
+  }
+
+  return /^(chatgpt-4o|gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-4-vision|gpt-5|o1|o3|o4)/i.test(normalized);
 }
 
 // Anthropic model configuration functions
@@ -348,6 +352,10 @@ function bedrockModelSupportsImages(modelId) {
   }
 
   const normalized = String(modelId || '').toLowerCase();
+  // Text-only members of otherwise vision-capable families.
+  if (/(claude-v2|claude-instant|claude-3-5-haiku|nova-micro)/.test(normalized)) {
+    return false;
+  }
   return (
     normalized.includes('claude') ||
     normalized.includes('nova') ||
