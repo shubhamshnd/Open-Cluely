@@ -51,7 +51,9 @@ test('system-audio error helpers mark and explain the typed error', async () => 
   const linuxMessage = errors.getSystemAudioUnsupportedMessage(LINUX_UA);
   assert.match(linuxMessage, /No 'Monitor of/);
   assert.match(linuxMessage, /pipewire-pulse/);
-  assert.match(linuxMessage, /pick the monitor device as your microphone/);
+  assert.match(linuxMessage, /Electron may not expose/);
+  assert.match(linuxMessage, /Use the Mic source/);
+  assert.doesNotMatch(linuxMessage, /pick the monitor device as your microphone/);
 
   const windowsMessage = errors.getSystemAudioUnsupportedMessage(WINDOWS_UA);
   assert.doesNotMatch(windowsMessage, /Linux/);
