@@ -53,6 +53,14 @@ function createScreenshotCapture({
   }
 
   return async function captureScreenshot(screenshotPath) {
+    // Windows/macOS keep the original screenshot-desktop path unchanged: no
+    // timeout (a macOS permission prompt can legitimately take a while) and
+    // no fallback. The race and no-file check below exist for Linux only.
+    if (platform !== 'linux') {
+      await capturePrimary(screenshotPath);
+      return;
+    }
+
     let primaryError = null;
     let timeoutHandle = null;
 
@@ -83,10 +91,6 @@ function createScreenshotCapture({
 
     if (!primaryError) {
       return;
-    }
-
-    if (platform !== 'linux') {
-      throw primaryError;
     }
 
     log(

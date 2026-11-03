@@ -133,3 +133,21 @@ test('reports a clear install-hint message when both captures fail on Linux', as
     return true;
   });
 });
+
+test('non-Linux keeps the original CLI path: no timeout applied', async () => {
+  const calls = [];
+  const capture = createScreenshotCapture({
+    platform: 'darwin',
+    cliTimeoutMs: 10,
+    capturePrimary: () => new Promise((resolve) => setTimeout(() => {
+      calls.push('primary-done');
+      resolve();
+    }, 40)),
+    captureFallback: async () => {
+      calls.push('fallback');
+    }
+  });
+
+  await capture('unused.png');
+  assert.deepEqual(calls, ['primary-done']);
+});
