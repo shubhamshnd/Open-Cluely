@@ -42,6 +42,7 @@ function registerSettingsIpc({
         geminiRuntime.getAiProviders().map((name) => [name, getAiProviderLabel(name)])
       ),
       activeModelName: geminiRuntime.getActiveModelName(),
+      aiReady: geminiRuntime.isReady(),
       openaiApiKey: geminiRuntime.getProviderSettings('openai').apiKey,
       openaiModel: geminiRuntime.getProviderSettings('openai').modelName,
       openaiModels: getOpenAIModels(),

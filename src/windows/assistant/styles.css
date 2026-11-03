@@ -2233,3 +2233,13 @@ body.theme-dark .monitor-log-list::-webkit-scrollbar-thumb:hover,
 body.theme-dark .settings-body::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.58);
 }
+
+.chat-provider-model {
+  margin-left: 8px;
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}

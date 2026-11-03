@@ -162,6 +162,7 @@
     <div id="chat-container" class="chat-container">
       <div class="chat-header">
         <span class="chat-title">&#x1F916; AI Assistant</span>
+        <span id="chat-provider-model" class="chat-provider-model" title="Active AI provider and model"></span>
       </div>
       <div id="chat-messages" class="chat-messages">
         <!-- Messages will be added here dynamically -->
@@ -224,6 +225,9 @@
           <label class="settings-label">AI Provider</label>
           <select id="setting-ai-provider" class="settings-input">
             <option value="gemini">Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="bedrock">Amazon Bedrock</option>
             <option value="ollama">Ollama (Local)</option>
           </select>
         </div>
@@ -247,6 +251,61 @@
           <div class="settings-group">
             <label class="settings-label">Gemini Model</label>
             <select id="setting-gemini-model" class="settings-input"></select>
+          </div>
+        </div>
+        <div id="openai-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">OpenAI API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-openai-key" class="settings-input" placeholder="sk-..." autocomplete="off" />
+              <button type="button" id="toggle-openai-key-visibility" class="settings-input-toggle" aria-label="Show OpenAI API key" aria-pressed="false">Show</button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">OpenAI Model</label>
+            <div class="settings-input-row">
+              <select id="setting-openai-model" class="settings-input"></select>
+              <button type="button" id="fetch-openai-models" class="settings-input-toggle" aria-label="Fetch available OpenAI models">Fetch</button>
+            </div>
+          </div>
+        </div>
+        <div id="anthropic-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">Anthropic API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-anthropic-key" class="settings-input" placeholder="sk-ant-..." autocomplete="off" />
+              <button type="button" id="toggle-anthropic-key-visibility" class="settings-input-toggle" aria-label="Show Anthropic API key" aria-pressed="false">Show</button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Anthropic Model</label>
+            <select id="setting-anthropic-model" class="settings-input"></select>
+          </div>
+        </div>
+        <div id="bedrock-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">AWS Region</label>
+            <input type="text" id="setting-bedrock-region" class="settings-input" placeholder="us-east-1" />
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Bedrock Model ID</label>
+            <div class="settings-input-row">
+              <input type="text" id="setting-bedrock-model" class="settings-input" list="bedrock-model-options" placeholder="us.anthropic.claude-sonnet-5-5" />
+              <button type="button" id="fetch-bedrock-models" class="settings-input-toggle" aria-label="Fetch available Bedrock models">Fetch</button>
+            </div>
+            <datalist id="bedrock-model-options"></datalist>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">AWS Access Key ID (optional)</label>
+            <input type="text" id="setting-bedrock-access-key" class="settings-input" autocomplete="off" />
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">AWS Secret Access Key (optional)</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-bedrock-secret" class="settings-input" autocomplete="off" />
+              <button type="button" id="toggle-bedrock-secret-visibility" class="settings-input-toggle" aria-label="Show AWS secret access key" aria-pressed="false">Show</button>
+            </div>
+            <div class="settings-helper-text">Leave both blank to use the AWS credential chain (AWS_PROFILE, environment, or ~/.aws).</div>
           </div>
         </div>
         <div id="ollama-settings-group" class="hidden">
