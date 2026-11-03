@@ -239,6 +239,16 @@ One **AWS Auth Method** block in Settings is shared by Amazon Bedrock (AI provid
 - **Access key + secret (+ optional session token)** — static keys; the session token is only for temporary (STS) credentials.
 - **Bedrock API key** — bearer key, sent as `Authorization: Bearer …`. **Bedrock only: Amazon Transcribe cannot use it.** Bedrock *model listing* (Fetch) needs SigV4 credentials and is unavailable in this mode.
 
+#### Separate credentials for Amazon Transcribe (optional)
+
+Bedrock and Transcribe often need *different* IAM identities — e.g. a profile that may call `bedrock:InvokeModel` but not Transcribe, and another with Transcribe access but no Bedrock. Settings → Amazon Transcribe → **Transcribe AWS Credentials** picks what Transcribe signs with, without touching Bedrock:
+
+- **Same as Bedrock (default)** — the shared block above, exactly the historical behavior.
+- **Different AWS profile** — another named profile from `~/.aws` (names only, with Refresh), e.g. one whose IAM identity has `transcribe:StartStreamTranscription` (plus the vocabulary actions if you use Custom words).
+- **Access key + secret (+ optional session token)** — static keys stored only for Transcribe, masked in Settings like every other key.
+
+Each identity needs only its own permissions: the Bedrock one needs `bedrock:InvokeModel` (and `bedrock:ListFoundationModels` for model Fetch), the Transcribe one needs `transcribe:StartStreamTranscription` (plus `transcribe:CreateVocabulary`/`UpdateVocabulary`/`GetVocabulary` for Custom words). If a call is denied, the error names which credentials failed (e.g. `Amazon Transcribe credentials (profile transcribe-profile): User … is not authorized …`) — never the key material.
+
 ### Persisted Files
 
 - In development, state is written to `cache/app-state.json` at the repo root. Packaged builds (including the Windows portable one, whose EXE self-extracts to a fresh temp dir every launch) keep it in the per-user data directory instead: `~/.config/open-cluely/cache/app-state.json` on Linux, `%APPDATA%\open-cluely\cache\app-state.json` on Windows, `~/Library/Application Support/open-cluely/cache/app-state.json` on macOS.
