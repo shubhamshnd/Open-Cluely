@@ -322,13 +322,14 @@ function registerSettingsIpc({
         transcribeLanguage: resolveTranscribeLanguage(settings.transcribeLanguage),
         transcribeVocabularyName: String(settings.transcribeVocabularyName || '').trim() || null,
         // Transcribe-only AWS credential split: 'inherit' keeps the shared
-        // block; secrets follow the same masked-echo rules as every other key
-        // (masked or omitted keeps the stored value, explicit blank clears).
+        // block. Optional split secrets retain their stored values on blank,
+        // masked or omitted saves; nonblank input replaces them. Shared/provider
+        // key fields above retain their existing explicit-blank clearing behavior.
         transcribeAuthMode: resolveTranscribeAuthMode(settings.transcribeAuthMode),
         transcribeAwsProfile: String(settings.transcribeAwsProfile || '').trim() || null,
-        transcribeAwsAccessKeyId: resolveSecretOnSave(settings.transcribeAwsAccessKeyId, storedState.transcribeAwsAccessKeyId) || null,
-        transcribeAwsSecretAccessKey: resolveSecretOnSave(settings.transcribeAwsSecretAccessKey, storedState.transcribeAwsSecretAccessKey) || null,
-        transcribeAwsSessionToken: resolveSecretOnSave(settings.transcribeAwsSessionToken, storedState.transcribeAwsSessionToken) || null,
+        transcribeAwsAccessKeyId: resolveSecretOnSave(String(settings.transcribeAwsAccessKeyId ?? '').trim() || undefined, storedState.transcribeAwsAccessKeyId) || null,
+        transcribeAwsSecretAccessKey: resolveSecretOnSave(String(settings.transcribeAwsSecretAccessKey ?? '').trim() || undefined, storedState.transcribeAwsSecretAccessKey) || null,
+        transcribeAwsSessionToken: resolveSecretOnSave(String(settings.transcribeAwsSessionToken ?? '').trim() || undefined, storedState.transcribeAwsSessionToken) || null,
         providerFallback: nextProviderFallback,
         ollamaBaseUrl: nextOllamaBaseUrl,
         ollamaModel: nextOllamaModel,

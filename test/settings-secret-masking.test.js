@@ -300,7 +300,7 @@ test('save-settings clears every stored secret when the form explicitly sends bl
   }
 });
 
-test('save-settings: transcribe split fields persist; masked echo keeps stored secrets, blank clears', async () => {
+test('save-settings: transcribe split fields persist; masked or blank echo keeps stored secrets', async () => {
   const { handlers, savedPartials } = createSettingsHarness({ appState: { ...FULL_STATE } });
 
   // 1. Masked echo (the no-touch round trip): stored split secrets survive.
@@ -326,7 +326,7 @@ test('save-settings: transcribe split fields persist; masked echo keeps stored s
   assert.equal(saved.transcribeAuthMode, 'inherit', 'an omitted mode saves as inherit');
   assert.equal(saved.transcribeAwsSecretAccessKey, FAKE_TR_SECRET, 'omitted secret field keeps the stored value');
 
-  // 3. Explicit blanks clear; a typed value replaces.
+  // 3. Explicit blanks preserve the optional split secrets (card contract).
   result = await handlers.get('save-settings')({}, baseSavePayload({
     transcribeAuthMode: 'profile',
     transcribeAwsProfile: 'transcribe-profile',
@@ -337,9 +337,22 @@ test('save-settings: transcribe split fields persist; masked echo keeps stored s
   assert.equal(result.success, true);
   saved = savedPartials[savedPartials.length - 1];
   assert.equal(saved.transcribeAuthMode, 'profile');
-  assert.equal(saved.transcribeAwsAccessKeyId, null, 'explicit blank clears the stored key');
-  assert.equal(saved.transcribeAwsSecretAccessKey, null);
-  assert.equal(saved.transcribeAwsSessionToken, null);
+  assert.equal(saved.transcribeAwsAccessKeyId, FAKE_TR_ACCESS_KEY, 'explicit blank preserves the stored split key');
+  assert.equal(saved.transcribeAwsSecretAccessKey, FAKE_TR_SECRET);
+  assert.equal(saved.transcribeAwsSessionToken, FAKE_TR_TOKEN);
+
+  // A nonblank replacement still updates each field, without touching shared keys.
+  result = await handlers.get('save-settings')({}, baseSavePayload({
+    transcribeAuthMode: 'keys',
+    transcribeAwsAccessKeyId: 'replacement-access-id',
+    transcribeAwsSecretAccessKey: 'replacement-secret',
+    transcribeAwsSessionToken: 'replacement-session'
+  }));
+  assert.equal(result.success, true);
+  saved = savedPartials[savedPartials.length - 1];
+  assert.equal(saved.transcribeAwsAccessKeyId, 'replacement-access-id');
+  assert.equal(saved.transcribeAwsSecretAccessKey, 'replacement-secret');
+  assert.equal(saved.transcribeAwsSessionToken, 'replacement-session');
 
   // 4. An unknown mode can never persist: it sanitizes to 'inherit'.
   result = await handlers.get('save-settings')({}, baseSavePayload({ transcribeAuthMode: 'bogus' }));
