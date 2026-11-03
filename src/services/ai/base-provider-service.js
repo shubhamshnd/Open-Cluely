@@ -32,6 +32,7 @@ const {
   buildSuggestResponsePrompt
 } = require('./prompts');
 const { classifyProviderError, splitImageParts } = require('./provider-contract');
+const { redactSecretsInText } = require('../state/secret-masking');
 
 // Appended to image-based prompts when the active model cannot see images and
 // only extracted screen text is available.
@@ -129,7 +130,7 @@ class BaseProviderService {
     try {
       return await this._performRequest(request);
     } catch (error) {
-      console.error(`${this.constructor.name} request error (attempt ${retryCount + 1}):`, error.message);
+      console.error(`${this.constructor.name} request error (attempt ${retryCount + 1}):`, redactSecretsInText(error?.message));
 
       if (this.isQuotaExhaustedError(error)) {
         throw error;

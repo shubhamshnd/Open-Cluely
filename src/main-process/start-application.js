@@ -414,10 +414,15 @@ async function startApplication() {
     geminiRuntime.initializeAiService();
 
     app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-    app.commandLine.appendSwitch('ignore-certificate-errors');
-    app.commandLine.appendSwitch('allow-running-insecure-content');
-    app.commandLine.appendSwitch('disable-web-security');
     app.commandLine.appendSwitch('enable-media-stream');
+    // NOTE: 'ignore-certificate-errors', 'allow-running-insecure-content' and
+    // 'disable-web-security' were removed. They were appended here — after
+    // app-ready — so they only reached child processes spawned later, and
+    // 'ignore-certificate-errors' disabled TLS certificate validation for the
+    // network service, exposing every provider API key to MITM forgery. The
+    // app needs none of them: API endpoints use public CAs, the page loads
+    // no insecure subresources, and per-window webPreferences carry the (still
+    // required) webSecurity setting — see windows/assistant/window.js.
 
     const launchHidden = startupOptions.startHidden || appEnvironment.startHidden;
     console.log('App is ready, creating window...');

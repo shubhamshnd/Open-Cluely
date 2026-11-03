@@ -29,6 +29,7 @@
 // generated. Either way stop({token}) authorizes against the same value.
 
 const { spawn } = require('node:child_process');
+const { scrubSecretEnvVars } = require('../../main-process/shared/child-process-env');
 const crypto = require('node:crypto');
 
 const PW_RECORD_ARGS = Object.freeze([
@@ -122,7 +123,11 @@ function createLinuxMonitorCapture({
 
       let child;
       try {
-        child = spawnFn('pw-record', PW_RECORD_ARGS.slice(), { stdio: ['ignore', 'pipe', 'pipe'] });
+        // pw-record must not inherit API keys through process.env.
+        child = spawnFn('pw-record', PW_RECORD_ARGS.slice(), {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: scrubSecretEnvVars(process.env)
+        });
       } catch (error) {
         fail(`Failed to start pw-record: ${error.message}`);
         return;
