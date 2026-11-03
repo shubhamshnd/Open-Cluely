@@ -6,10 +6,9 @@
 // that a key is configured and recognisable, without handing the renderer
 // (or anything that compromises it) the usable secret.
 //
-// On save, a field that comes back blank OR still holding the masked echo
-// means "untouched — keep the stored value". Only a freshly typed value
-// replaces the stored secret. The masked placeholder itself must never be
-// persisted as a literal key.
+// On save, a masked echo or omitted field keeps the stored secret. Explicit
+// empty input clears it, preserving Settings' original key-removal behavior.
+// A freshly typed value replaces it; masked placeholders are never persisted.
 // ============================================================================
 
 const MASK_BULLETS = '••••••••';
@@ -41,15 +40,15 @@ function containsMask(value) {
 }
 
 // Single-value secrets: resolve the value the Settings form sent against the
-// stored one. Blank or masked input keeps the stored secret.
+// stored one. Masked or omitted input keeps it; explicit blank clears it.
 function resolveSecretOnSave(incoming, stored) {
   const typed = String(incoming ?? '').trim();
   const saved = String(stored ?? '').trim();
-  if (!typed) {
+  if (incoming === undefined) {
     return saved;
   }
-  if (!saved) {
-    return typed;
+  if (!typed) {
+    return '';
   }
   if (typed === maskSecretValue(saved)) {
     return saved;
@@ -69,8 +68,11 @@ function resolveSecretOnSave(incoming, stored) {
 function resolveSecretListOnSave(incoming, stored) {
   const typed = String(incoming ?? '').trim();
   const savedRaw = String(stored ?? '').trim();
-  if (!typed) {
+  if (incoming === undefined) {
     return savedRaw;
+  }
+  if (!typed) {
+    return '';
   }
   const savedSegments = savedRaw
     .split(',')
@@ -82,11 +84,13 @@ function resolveSecretListOnSave(incoming, stored) {
     .filter(Boolean);
 
   const resolved = [];
+  const consumed = new Set();
   for (const segment of typedSegments) {
     const matchIndex = savedSegments.findIndex(
-      (savedSegment) => maskSecretValue(savedSegment) === segment
+      (savedSegment, index) => !consumed.has(index) && maskSecretValue(savedSegment) === segment
     );
     if (matchIndex >= 0) {
+      consumed.add(matchIndex);
       resolved.push(savedSegments[matchIndex]);
       continue;
     }

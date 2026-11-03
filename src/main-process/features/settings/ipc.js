@@ -235,7 +235,7 @@ function registerSettingsIpc({
     try {
       const appEnvironment = getAppEnvironment();
       // Secret fields arrive masked (get-settings never sends cleartext); a
-      // blank or still-masked field means "keep the stored value".
+      // masked echo keeps the stored value; an explicit blank clears it.
       const storedState = typeof getAppState === 'function' ? (getAppState() || {}) : {};
       const nextAiProvider = geminiRuntime.setActiveAiProvider(settings.aiProvider);
       const nextGeminiApiKey = resolveSecretListOnSave(settings.geminiApiKey, storedState.geminiApiKey);

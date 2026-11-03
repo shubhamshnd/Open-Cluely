@@ -3,7 +3,7 @@
 // Secret masking for the Settings IPC surface: get-settings must never send a
 // stored key to the renderer in cleartext (only a masked bullets+last4 form),
 // and save-settings / list-provider-models / transcribe-vocabulary-save must
-// treat a blank or still-masked field as "keep the stored value" so the
+// preserve masked echoes while explicit blanks clear keys, so the
 // no-touch Settings round trip behaves exactly as before.
 
 const test = require('node:test');
@@ -51,9 +51,10 @@ test('maskSecretList: every comma-separated key is masked individually', () => {
   assert.equal(maskSecretList(''), '');
 });
 
-test('resolveSecretOnSave: blank or masked-echo keeps the stored secret, typed replaces it', () => {
-  assert.equal(resolveSecretOnSave('', FAKE_OPENAI_KEY), FAKE_OPENAI_KEY, 'blank keeps old key');
-  assert.equal(resolveSecretOnSave('   ', FAKE_OPENAI_KEY), FAKE_OPENAI_KEY, 'whitespace keeps old key');
+test('resolveSecretOnSave: explicit blank clears; masked echo or omitted input keeps the stored secret', () => {
+  assert.equal(resolveSecretOnSave('', FAKE_OPENAI_KEY), '', 'blank clears old key');
+  assert.equal(resolveSecretOnSave('   ', FAKE_OPENAI_KEY), '', 'whitespace clears old key');
+  assert.equal(resolveSecretOnSave(undefined, FAKE_OPENAI_KEY), FAKE_OPENAI_KEY, 'omitted keeps old key');
   assert.equal(resolveSecretOnSave(maskSecretValue(FAKE_OPENAI_KEY), FAKE_OPENAI_KEY), FAKE_OPENAI_KEY, 'untouched masked echo keeps old key');
   assert.equal(resolveSecretOnSave('sk-brand-new-key-5555', FAKE_OPENAI_KEY), 'sk-brand-new-key-5555', 'typed value replaces');
   assert.equal(resolveSecretOnSave('', ''), '', 'blank with nothing stored stays blank');
@@ -61,9 +62,10 @@ test('resolveSecretOnSave: blank or masked-echo keeps the stored secret, typed r
   assert.equal(resolveSecretOnSave(`${MASK_BULLETS}9999-extra`, FAKE_OPENAI_KEY), FAKE_OPENAI_KEY);
 });
 
-test('resolveSecretListOnSave: blank keeps the list; masked segments map back; typed appends merge', () => {
+test('resolveSecretListOnSave: explicit blank clears the list; masked segments map back; typed appends merge', () => {
   const stored = `${FAKE_GEMINI_KEY_1},${FAKE_GEMINI_KEY_2}`;
-  assert.equal(resolveSecretListOnSave('', stored), stored, 'blank keeps the stored list');
+  assert.equal(resolveSecretListOnSave('', stored), '', 'blank clears the stored list');
+  assert.equal(resolveSecretListOnSave(undefined, stored), stored, 'omitted keeps the stored list');
   assert.equal(
     resolveSecretListOnSave(maskSecretList(stored), stored),
     stored,
@@ -74,6 +76,11 @@ test('resolveSecretListOnSave: blank keeps the list; masked segments map back; t
   assert.deepEqual(appended.split(','), [FAKE_GEMINI_KEY_1, FAKE_GEMINI_KEY_2, 'FAKE-GEMINI-KEY-0003ijkl']);
   // A full retype replaces the list.
   assert.equal(resolveSecretListOnSave('FAKE-ONLY-KEY-zzzz', stored), 'FAKE-ONLY-KEY-zzzz');
+});
+
+test('masked Gemini round trip preserves distinct keys sharing the same last four characters', () => {
+  const stored = 'fake-first-key-abcd,fake-second-key-abcd';
+  assert.equal(resolveSecretListOnSave(maskSecretList(stored), stored), stored);
 });
 
 // ---------------------------------------------------------------------------
@@ -236,19 +243,16 @@ function baseSavePayload(overrides = {}) {
   };
 }
 
-test('save-settings keeps every stored secret when the form sends blanks', async () => {
+test('save-settings clears every stored secret when the form explicitly sends blanks', async () => {
   const { handlers, savedPartials } = createSettingsHarness({ appState: { ...FULL_STATE } });
   const result = await handlers.get('save-settings')({}, baseSavePayload());
   assert.equal(result.success, true);
 
   const saved = savedPartials[savedPartials.length - 1];
-  assert.equal(saved.geminiApiKey, FULL_STATE.geminiApiKey, 'blank Gemini field keeps stored keys');
-  assert.equal(saved.assemblyAiApiKey, FAKE_ASSEMBLY_KEY);
-  assert.equal(saved.openaiApiKey, FAKE_OPENAI_KEY);
-  assert.equal(saved.awsAccessKeyId, FAKE_AWS_ACCESS_KEY);
-  assert.equal(saved.awsSecretAccessKey, FAKE_AWS_SECRET);
-  assert.equal(saved.awsSessionToken, FAKE_AWS_TOKEN);
-  assert.equal(saved.bedrockApiKey, FAKE_BEDROCK_KEY);
+  for (const field of ['geminiApiKey', 'assemblyAiApiKey', 'openaiApiKey', 'anthropicApiKey',
+    'awsAccessKeyId', 'awsSecretAccessKey', 'awsSessionToken', 'bedrockApiKey']) {
+    assert.equal(saved[field] || '', '', `${field}: explicit empty must clear`);
+  }
 });
 
 test('save-settings keeps stored secrets when the form echoes the masked values back', async () => {
@@ -283,5 +287,5 @@ test('save-settings stores a newly typed key in place of the old one', async () 
 
   const saved = savedPartials[savedPartials.length - 1];
   assert.equal(saved.openaiApiKey, 'sk-replacement-key-4242', 'typed key replaces the stored one');
-  assert.equal(saved.assemblyAiApiKey, FAKE_ASSEMBLY_KEY, 'untouched providers keep their keys');
+  assert.equal(saved.assemblyAiApiKey, '', 'explicitly empty provider keys are cleared');
 });
