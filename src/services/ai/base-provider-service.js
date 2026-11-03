@@ -32,6 +32,7 @@ const {
   buildSuggestResponsePrompt
 } = require('./prompts');
 const { classifyProviderError, splitImageParts } = require('./provider-contract');
+const { stripRoutingLabels } = require('./response-cleanup');
 const { redactSecretsInText } = require('../state/secret-masking');
 
 // Appended to image-based prompts when the active model cannot see images and
@@ -117,7 +118,9 @@ class BaseProviderService {
       try {
         await this.waitForRateLimit();
         const result = await this._executeRequest(request);
-        request.resolve(result);
+        // Defensive: a leaked routing label ("Domain: conceptual") never
+        // reaches the user, even when the model ignores the prompt rule.
+        request.resolve(stripRoutingLabels(result));
       } catch (error) {
         request.reject(error);
       }

@@ -18,6 +18,7 @@ const {
   buildScreenshotAnalysisPrompt,
   buildSuggestResponsePrompt
 } = require('./prompts');
+const { stripRoutingLabels } = require('./response-cleanup');
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 const DEFAULT_OLLAMA_MODEL = 'llama3.2';
@@ -124,7 +125,9 @@ class OllamaService {
       try {
         await this.waitForRateLimit();
         const result = await this._executeRequest(request);
-        request.resolve(result);
+        // Defensive: a leaked routing label ("Domain: conceptual") never
+        // reaches the user, even when the model ignores the prompt rule.
+        request.resolve(stripRoutingLabels(result));
       } catch (error) {
         request.reject(error);
       }

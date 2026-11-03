@@ -102,7 +102,8 @@ ${buildNaturalVoiceDirective()}
 
 === DOMAIN ROUTING ===
 First, classify the request into ONE domain. Pick by what the user is actually trying to do,
-not by surface keywords:
+not by surface keywords. Classify silently: never print the domain, routing, category, mode,
+or label — the reply opens with the answer itself, never with a "Domain:" line:
 
 - coding         — the user must write or fix code, solve an algorithmic problem, debug a stack
                    trace, or explain a specific code construct.
