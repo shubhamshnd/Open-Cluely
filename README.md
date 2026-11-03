@@ -165,6 +165,24 @@ dist/OpenCluely.exe
 
 You can then run the packaged app directly by double-clicking `dist/OpenCluely.exe`.
 
+### Installing the .deb on Linux (Debian/Ubuntu)
+
+`npm run build:linux` produces two artifacts: `dist/Open Cluely-<version>.AppImage` and `dist/open-cluely_<version>_amd64.deb`. Install the package with apt (resolves the dependencies for you):
+
+```bash
+sudo apt install ./dist/open-cluely_1.0.0_amd64.deb
+open-cluely            # via /usr/bin/open-cluely (update-alternatives symlink)
+# or from the app menu / activities: "Open Cluely"
+```
+
+The package installs the app to `/opt/Open Cluely/`, a `open-cluely.desktop` entry under `/usr/share/applications/`, and hicolor icons under `/usr/share/icons/hicolor/*/apps/open-cluely.png`. Runtime dependencies (`libgtk-3-0`, `libnss3`, `libxss1`, `libsecret-1-0`, …) are declared in the package and pulled in by apt. The installer's `postinst` marks `/opt/Open Cluely/chrome-sandbox` SUID root (`4755`), so the installed app runs with the Chromium sandbox enabled — no `--no-sandbox` needed (see the AppArmor note under *Known limitations on Linux*).
+
+Settings and other runtime data live in the user-data directory: `~/.config/open-cluely/` (state in `cache/app-state.json`, screenshots in `.stealth_screenshots/`). Uninstalling the package does not touch them:
+
+```bash
+sudo apt remove open-cluely
+```
+
 ### Native build tools
 
 None are required. `package-lock.json` contains no `gypfile` entries and no install scripts that compile native code (the only `postinstall` is the harmless `opencollective-postinstall` banner), so `npm ci` does not need Visual Studio Build Tools, Python, or a C++ compiler on any OS.
@@ -175,7 +193,8 @@ None are required. `package-lock.json` contains no `gypfile` entries and no inst
 - **Host audio on Linux uses PipeWire's `pw-record`.** The Host source runs `pw-record -P '{ stream.capture.sink=true }'` from the main process, which records the monitor of your *default playback output* (audio-only; no screen-share/portal session, no video). It needs a running PipeWire session and the `pw-record` tool (`pipewire-bin`/`pipewire-utils`). It does not change your default microphone/output or any other app's audio, the process is stopped when you stop transcription, close the window or quit. Verified on Ubuntu 26.04 / GNOME 50 / PipeWire; not tested on PulseAudio-only systems (the Host source reports an error there; use Mic). Windows/macOS are unchanged.
 - **Screenshots have a fallback.** If no external tool (`gnome-screenshot`, `scrot`, `import`, `grim`) is installed, the app uses Electron's `desktopCapturer`. On Wayland this goes through the XDG desktop portal and may show a permission prompt.
 - **Global shortcuts cannot fire while a native Wayland window has focus** (Electron 28 has no GlobalShortcuts-portal support). On GNOME, click **Add to GNOME shortcuts** under Settings → Keyboard Shortcuts to install them as real GNOME keyboard shortcuts that work in any window (single-instance `--action=<id>` launches; **Remove from GNOME shortcuts** reverts it, leaving your own custom shortcuts untouched). On other Wayland compositors, start with `--ozone-platform=x11` (see Setup) and keep an XWayland window focused.
-- Only the AppImage target is built on Linux; running it on newer distros may need `libfuse2`.
+- Both an AppImage and a `.deb` are built on Linux (see *Installing the .deb on Linux*); running the AppImage on newer distros may need `libfuse2`.
+- **Chromium sandbox on Ubuntu 23.10+ / 24.04+:** Ubuntu's AppArmor policy blocks unprivileged user namespaces, which the Chromium sandbox needs when no SUID helper is installed. The `.deb` is unaffected — its `postinst` sets `chrome-sandbox` to mode `4755` (SUID root), so the installed app runs with the normal sandbox and no flags. The **AppImage cannot ship a SUID helper**, so if it fails to start with a sandbox error (`The SUID sandbox helper binary was found, but is not configured correctly` / `FATAL:...zygote`), either launch it with `--no-sandbox` (the GNOME shortcut script adds that flag automatically when the app runs from source or an AppImage), or — cleaner — install an AppArmor profile for the AppImage path such as `/etc/apparmor.d/open-cluely` containing `abi <abi/4.0>,` + `profile open-cluely "/home/<you>/Apps/Open Cluely-*.AppImage" flags=(unconfined) { userns, }` and run `sudo apparmor_parser -r /etc/apparmor.d/open-cluely`. Do **not** disable the restriction system-wide (`kernel.apparmor_restrict_unprivileged_userns`); the package never touches sysctl.
 
 ## Configuration
 
@@ -190,7 +209,7 @@ None are required. `package-lock.json` contains no `gypfile` entries and no inst
 | `NODE_ENV` | No | Defaults to `production`. `development` opens DevTools automatically. |
 | `NODE_OPTIONS` | No | Defaults to `--max-old-space-size=4096`. |
 
-On packaged builds (Windows portable, Linux AppImage, macOS), the capture/startup toggles above are controlled from the in-app Settings panel and persisted in `cache/app-state.json` under the user-data directory — `.env` only applies when running from source (`npm start`), so edit it before launching and treat it as a dev-only file.
+On packaged builds (Windows portable, Linux AppImage/.deb, macOS), the capture/startup toggles above are controlled from the in-app Settings panel and persisted in `cache/app-state.json` under the user-data directory — `.env` only applies when running from source (`npm start`), so edit it before launching and treat it as a dev-only file.
 
 ### Source-Of-Truth Config
 
@@ -222,7 +241,7 @@ One **AWS Auth Method** block in Settings is shared by Amazon Bedrock (AI provid
 
 ### Persisted Files
 
-- In development, state is written to `cache/app-state.json` at the repo root. Portable builds create the same `cache/app-state.json` structure next to the executable.
+- In development, state is written to `cache/app-state.json` at the repo root. Packaged builds (including the Windows portable one, whose EXE self-extracts to a fresh temp dir every launch) keep it in the per-user data directory instead: `~/.config/open-cluely/cache/app-state.json` on Linux, `%APPDATA%\open-cluely\cache\app-state.json` on Windows, `~/Library/Application Support/open-cluely/cache/app-state.json` on macOS.
 - Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
 - Saving settings from the UI writes API-key values and selection state to `cache/app-state.json`.
 
@@ -346,7 +365,7 @@ All keyboard shortcuts are customizable. Configure them in `src/config.js` to ma
 - `npm run dev` enables Electron logging.
 - `npm test` runs every `test/*.test.js` file via `scripts/run-tests.js` (needs Node 20.19+ or 22.12+; older Node cannot import the renderer's ES modules; a bare `node --test test` fails on Node 24).
 - `npm run build:win` creates the portable Windows executable.
-- `npm run build:linux` creates the Linux AppImage.
+- `npm run build:linux` creates the Linux AppImage and the `.deb` package.
 - `npm run build:mac` creates the macOS build.
 - `npm run build` builds for the current OS.
 
@@ -364,7 +383,7 @@ Expected output:
 dist/OpenCluely.exe
 ```
 
-On Linux: `npm run build:linux` produces `dist/Open Cluely-1.0.0.AppImage`.
+On Linux: `npm run build:linux` produces `dist/Open Cluely-1.0.0.AppImage` and `dist/open-cluely_1.0.0_amd64.deb` (see *Installing the .deb on Linux*).
 
 Notes:
 
@@ -375,7 +394,7 @@ Notes:
   - Executable name: `OpenCluely.exe`
   - App ID: `com.opencluely.app`
 - If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
-- Original app icons for all three platforms live in [`assets/`](./assets/) (`icon.ico`, `icon.icns`, `icon.png`) and are wired into `package.json`.
+- Original app icons live in [`assets/`](./assets/) (`icon.ico`, `icon.icns`, `icon.png`). Windows and macOS use them directly; Linux uses the size-named PNG set in `build/icons/` (regenerate from `assets/icon.png` when the icon changes) so the `.deb` installs proper `hicolor/<size>/apps` entries.
 
 ### Running The Built App
 
