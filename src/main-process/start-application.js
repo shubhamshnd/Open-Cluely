@@ -31,6 +31,7 @@ const { registerAssistantIpc } = require('./features/assistant/ipc');
 const { createAssemblyAiService } = require('../services/assembly-ai/service');
 const { createOcrService } = require('../services/ocr/service');
 const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
+const { createLinuxMonitorCapture } = require('../services/assembly-ai/linux-monitor-capture');
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
@@ -90,6 +91,7 @@ async function startApplication() {
     mobileServer.broadcast(channel, data);
   };
 
+  const linuxMonitorCapture = createLinuxMonitorCapture();
   const assemblyAiService = createAssemblyAiService({
     WebSocket,
     desktopCapturer,
@@ -216,6 +218,10 @@ async function startApplication() {
   }
 
   function cleanupTransientResources() {
+    // dispose() resolves only once every owned pw-record child actually exited
+    // (SIGTERM escalated to SIGKILL after its grace period), so quit can wait
+    // for it instead of exiting under a child that ignored SIGTERM.
+    const captureDisposed = Promise.resolve(linuxMonitorCapture.dispose());
     assemblyAiService.dispose();
     screenshotManager.cleanupTransientResources();
     ocrService.dispose().catch((error) => {
@@ -223,6 +229,7 @@ async function startApplication() {
     });
     windowController.unregisterShortcuts();
     mobileServer.close();
+    return captureDisposed;
   }
 
   function quitApplication() {
@@ -232,12 +239,17 @@ async function startApplication() {
 
     isShuttingDown = true;
 
-    cleanupTransientResources();
+    const captureDisposed = cleanupTransientResources();
     windowController.destroyWindow();
 
-    setTimeout(() => {
+    // Exit only after the capture child is really gone (its SIGKILL escalation
+    // is ~1.5 s); the hard cap keeps a wedged child from hanging quit forever.
+    const forceExitTimer = setTimeout(() => app.exit(0), 5000);
+    forceExitTimer.unref?.();
+    Promise.resolve(captureDisposed).then(() => {
+      clearTimeout(forceExitTimer);
       app.exit(0);
-    }, 50);
+    });
   }
 
   ipcMain.handle('mobile-server-get-status', () => mobileServer.getStatus());
@@ -255,7 +267,9 @@ async function startApplication() {
 
   registerAssemblyAiIpc({
     ipcMain,
-    assemblyAiService
+    assemblyAiService,
+    linuxMonitorCapture,
+    sendToRenderer
   });
 
   registerSettingsIpc({
