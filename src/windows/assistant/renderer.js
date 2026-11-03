@@ -564,6 +564,15 @@ function createStreamHandler(actionId) {
         }
     }
 
+    // On failure the placeholder message is junk, not an answer: drop it so
+    // it is never fed back into later AI context as an "AI:" line.
+    function discard() {
+        if (messageRecord) {
+            chatUiManager.removeChatMessage(messageRecord.id);
+            messageRecord = null;
+        }
+    }
+
     function cleanup() {
         if (removeChunkListener) {
             removeChunkListener();
@@ -571,7 +580,7 @@ function createStreamHandler(actionId) {
         }
     }
 
-    return { start, finalize, cleanup };
+    return { start, finalize, discard, cleanup };
 }
 
 function hasConfiguredGeminiApiKeys(value) {
@@ -795,6 +804,7 @@ async function askAiWithSessionContext() {
         } catch (error) {
             console.error('Ask AI error:', error);
             showFeedback('Ask AI failed', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -831,6 +841,7 @@ async function analyzeScreenshotsOnly() {
         } catch (error) {
             console.error('Analysis error:', error);
             showFeedback('Analysis failed', 'error');
+            stream.discard();
             setAnalyzing(false);
             hideLoadingOverlay();
             // Clean up on error since onAnalysisResult may not fire
@@ -940,6 +951,7 @@ async function getResponseSuggestions() {
         } catch (error) {
             console.error('Error getting suggestions:', error);
             showFeedback('Failed to generate suggestions', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -982,8 +994,9 @@ async function generateMeetingNotes() {
                 throw new Error(result.error || 'Failed to generate notes');
             }
         } catch (error) {
-            console.error('Error generating notes:', error);
+            console.error('Error generating meeting notes:', error);
             showFeedback('Failed to generate notes', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -1029,6 +1042,7 @@ async function getConversationInsights() {
         } catch (error) {
             console.error('Error getting insights:', error);
             showFeedback('Failed to get insights', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();

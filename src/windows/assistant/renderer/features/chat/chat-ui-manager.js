@@ -127,6 +127,27 @@ export function createChatUiManager({
         return record;
     }
 
+    // Removes a message from the store and the DOM. Used to drop the
+    // streaming placeholder of a failed AI action so it never pollutes the
+    // next context bundle as an "AI:" line.
+    function removeChatMessage(messageId) {
+        const removed = messageStore.remove(messageId);
+        if (!removed) {
+            return null;
+        }
+
+        if (chatMessagesElement) {
+            const messageEl = chatMessagesElement.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageEl) {
+                messageEl.remove();
+            }
+        }
+
+        onMessagesChanged?.(messageStore.getMessages());
+        updateUi?.();
+        return removed;
+    }
+
     function updateChatComposerHeight() {
         if (!chatContainer || !chatComposer) {
             return;
@@ -209,6 +230,7 @@ export function createChatUiManager({
 
     return {
         addChatMessage,
+        removeChatMessage,
         updateChatMessageContent,
         autoResizeManualInput,
         submitManualContextMessage,
