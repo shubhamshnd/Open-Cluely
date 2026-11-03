@@ -188,7 +188,11 @@ function createAwsTranscribeService({
   }
 
   function handleTranscriptEvent(session, event) {
-    const results = event?.Transcript?.Results;
+    // TranscriptResultStream yields the event-stream UNION: each event is
+    // { TranscriptEvent: { Transcript: { Results: [...] } } }, never the
+    // flattened { Transcript: ... } shape. Verified against the real SDK
+    // response on the wire (exception members arrive as thrown errors).
+    const results = event?.TranscriptEvent?.Transcript?.Results;
     if (!Array.isArray(results)) {
       return;
     }

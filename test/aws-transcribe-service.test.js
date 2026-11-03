@@ -12,12 +12,15 @@ const { StartStreamTranscriptionCommand } = require('@aws-sdk/client-transcribe-
 
 const { createAwsTranscribeService } = require('../src/services/stt/aws-transcribe-service.js');
 
+// The real SDK yields the event-stream union shape
+// { TranscriptEvent: { Transcript: { Results } } } — verified against a live
+// Transcribe response on the wire. Fakes MUST keep this shape.
 function partial(text) {
-  return { Transcript: { Results: [{ IsPartial: true, Alternatives: [{ Transcript: text }] }] } };
+  return { TranscriptEvent: { Transcript: { Results: [{ IsPartial: true, Alternatives: [{ Transcript: text }] }] } } };
 }
 
 function final(text) {
-  return { Transcript: { Results: [{ IsPartial: false, Alternatives: [{ Transcript: text }] }] } };
+  return { TranscriptEvent: { Transcript: { Results: [{ IsPartial: false, Alternatives: [{ Transcript: text }] }] } } };
 }
 
 async function flushTicks(count = 8) {
