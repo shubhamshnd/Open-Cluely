@@ -22,6 +22,12 @@ const {
   resolveTranscribeLanguage
 } = require('../../../config');
 const { createGnomeShortcutInstaller } = require('../../shared/shortcut-actions');
+const {
+  maskSecretValue,
+  maskSecretList,
+  resolveSecretOnSave,
+  resolveSecretListOnSave
+} = require('../../../services/state/secret-masking');
 
 function registerSettingsIpc({
   ipcMain,
@@ -72,8 +78,8 @@ function registerSettingsIpc({
 
     return {
       aiProvider: geminiRuntime.getActiveAiProvider(),
-      geminiApiKey,
-      assemblyAiApiKey,
+      geminiApiKey: maskSecretList(geminiApiKey),
+      assemblyAiApiKey: maskSecretValue(assemblyAiApiKey),
       hasGeminiApiKeys: geminiApiKey.split(',').map((value) => value.trim()).filter(Boolean).length > 0,
       hasAssemblyAiApiKey: assemblyAiApiKey.length > 0,
       geminiModel: geminiRuntime.getActiveGeminiModel(),
@@ -85,10 +91,10 @@ function registerSettingsIpc({
       ),
       activeModelName: geminiRuntime.getActiveModelName(),
       aiReady: geminiRuntime.isReady(),
-      openaiApiKey: geminiRuntime.getProviderSettings('openai').apiKey,
+      openaiApiKey: maskSecretValue(geminiRuntime.getProviderSettings('openai').apiKey),
       openaiModel: geminiRuntime.getProviderSettings('openai').modelName,
       openaiModels: getOpenAIModels(),
-      anthropicApiKey: geminiRuntime.getProviderSettings('anthropic').apiKey,
+      anthropicApiKey: maskSecretValue(geminiRuntime.getProviderSettings('anthropic').apiKey),
       anthropicModel: geminiRuntime.getProviderSettings('anthropic').modelName,
       anthropicModels: getAnthropicModels(),
       bedrockRegion: geminiRuntime.getProviderSettings('bedrock').region,
@@ -102,10 +108,10 @@ function registerSettingsIpc({
       awsAuthModeLabels: getAwsAuthModeLabels(),
       awsProfile: typeof appState?.awsProfile === 'string' ? appState.awsProfile : '',
       awsProfiles: listAwsProfiles().profiles,
-      awsAccessKeyId: typeof appState?.awsAccessKeyId === 'string' ? appState.awsAccessKeyId : '',
-      awsSecretAccessKey: typeof appState?.awsSecretAccessKey === 'string' ? appState.awsSecretAccessKey : '',
-      awsSessionToken: typeof appState?.awsSessionToken === 'string' ? appState.awsSessionToken : '',
-      bedrockApiKey: typeof appState?.bedrockApiKey === 'string' ? appState.bedrockApiKey : '',
+      awsAccessKeyId: maskSecretValue(appState?.awsAccessKeyId),
+      awsSecretAccessKey: maskSecretValue(appState?.awsSecretAccessKey),
+      awsSessionToken: maskSecretValue(appState?.awsSessionToken),
+      bedrockApiKey: maskSecretValue(appState?.bedrockApiKey),
       // Speech-to-text provider + Amazon Transcribe settings.
       sttProvider: resolveSttProvider(appState?.sttProvider),
       sttProviders: getSttProviders(),
@@ -147,13 +153,13 @@ function registerSettingsIpc({
     const saved = geminiRuntime.getProviderSettings(provider) || {};
     const appState = typeof getAppState === 'function' ? getAppState() : null;
     return fetchProviderModels(provider, {
-      apiKey: payload?.apiKey || saved.apiKey,
+      apiKey: resolveSecretOnSave(payload?.apiKey, saved.apiKey),
       region: payload?.region || saved.region,
       authMode: payload?.authMode ?? appState?.awsAuthMode ?? saved.authMode,
       profile: payload?.profile ?? appState?.awsProfile ?? saved.profile,
-      accessKeyId: payload?.accessKeyId ?? appState?.awsAccessKeyId ?? saved.accessKeyId,
-      secretAccessKey: payload?.secretAccessKey ?? appState?.awsSecretAccessKey ?? saved.secretAccessKey,
-      sessionToken: payload?.sessionToken ?? appState?.awsSessionToken ?? saved.sessionToken
+      accessKeyId: resolveSecretOnSave(payload?.accessKeyId, appState?.awsAccessKeyId ?? saved.accessKeyId),
+      secretAccessKey: resolveSecretOnSave(payload?.secretAccessKey, appState?.awsSecretAccessKey ?? saved.secretAccessKey),
+      sessionToken: resolveSecretOnSave(payload?.sessionToken, appState?.awsSessionToken ?? saved.sessionToken)
     });
   });
 
@@ -169,9 +175,9 @@ function registerSettingsIpc({
       const auth = resolveAwsAuth({
         awsAuthMode: payload?.awsAuthMode ?? appState?.awsAuthMode,
         awsProfile: payload?.awsProfile ?? appState?.awsProfile,
-        awsAccessKeyId: payload?.awsAccessKeyId ?? appState?.awsAccessKeyId,
-        awsSecretAccessKey: payload?.awsSecretAccessKey ?? appState?.awsSecretAccessKey,
-        awsSessionToken: payload?.awsSessionToken ?? appState?.awsSessionToken,
+        awsAccessKeyId: resolveSecretOnSave(payload?.awsAccessKeyId, appState?.awsAccessKeyId),
+        awsSecretAccessKey: resolveSecretOnSave(payload?.awsSecretAccessKey, appState?.awsSecretAccessKey),
+        awsSessionToken: resolveSecretOnSave(payload?.awsSessionToken, appState?.awsSessionToken),
         bedrockApiKey: appState?.bedrockApiKey
       }, { purpose: 'transcribe' });
       if (auth.error) {
@@ -227,18 +233,21 @@ function registerSettingsIpc({
 
     try {
       const appEnvironment = getAppEnvironment();
+      // Secret fields arrive masked (get-settings never sends cleartext); a
+      // blank or still-masked field means "keep the stored value".
+      const storedState = typeof getAppState === 'function' ? (getAppState() || {}) : {};
       const nextAiProvider = geminiRuntime.setActiveAiProvider(settings.aiProvider);
-      const nextGeminiApiKey = String(settings.geminiApiKey || '').trim();
-      const nextAssemblyAiApiKey = String(settings.assemblyAiApiKey || '').trim();
+      const nextGeminiApiKey = resolveSecretListOnSave(settings.geminiApiKey, storedState.geminiApiKey);
+      const nextAssemblyAiApiKey = resolveSecretOnSave(settings.assemblyAiApiKey, storedState.assemblyAiApiKey);
       const nextGeminiModel = geminiRuntime.setActiveGeminiModel(settings.geminiModel);
       const nextOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(settings.ollamaBaseUrl);
       const nextOllamaModel = geminiRuntime.setActiveOllamaModel(settings.ollamaModel);
       const nextOpenai = geminiRuntime.setProviderSettings('openai', {
-        apiKey: settings.openaiApiKey,
+        apiKey: resolveSecretOnSave(settings.openaiApiKey, storedState.openaiApiKey),
         modelName: settings.openaiModel
       });
       const nextAnthropic = geminiRuntime.setProviderSettings('anthropic', {
-        apiKey: settings.anthropicApiKey,
+        apiKey: resolveSecretOnSave(settings.anthropicApiKey, storedState.anthropicApiKey),
         modelName: settings.anthropicModel
       });
       const nextAwsAuthMode = resolveAwsAuthMode(settings.awsAuthMode);
@@ -246,10 +255,10 @@ function registerSettingsIpc({
         region: settings.bedrockRegion,
         authMode: nextAwsAuthMode,
         profile: settings.awsProfile,
-        accessKeyId: settings.awsAccessKeyId,
-        secretAccessKey: settings.awsSecretAccessKey,
-        sessionToken: settings.awsSessionToken,
-        apiKey: settings.bedrockApiKey,
+        accessKeyId: resolveSecretOnSave(settings.awsAccessKeyId, storedState.awsAccessKeyId),
+        secretAccessKey: resolveSecretOnSave(settings.awsSecretAccessKey, storedState.awsSecretAccessKey),
+        sessionToken: resolveSecretOnSave(settings.awsSessionToken, storedState.awsSessionToken),
+        apiKey: resolveSecretOnSave(settings.bedrockApiKey, storedState.bedrockApiKey),
         modelId: settings.bedrockModelId
       });
       const nextProviderFallback = (Array.isArray(settings.providerFallback) ? settings.providerFallback : [])
