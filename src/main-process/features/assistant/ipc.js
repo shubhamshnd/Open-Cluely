@@ -1,4 +1,5 @@
 ﻿const { getAiProviderLabel } = require('../../../config');
+const { redactSecretsInText } = require('../../../services/state/secret-masking');
 
 function registerAssistantIpc({
   ipcMain,
@@ -201,7 +202,7 @@ function registerAssistantIpc({
       sendToRenderer('ai-stream-end', { actionId: 'screenAi' });
       sendToRenderer('analysis-result', { text });
     } catch (error) {
-      console.error('Analysis error details:', error);
+      console.error('Analysis error details:', redactSecretsInText(error?.message || String(error)));
 
       sendToRenderer('ai-stream-end', { actionId: 'screenAi' });
       sendToRenderer('analysis-result', {
@@ -367,7 +368,7 @@ function registerAssistantIpc({
       sendToRenderer('ai-stream-end', { actionId: 'askAi' });
       return { success: true, text, mode, usedScreenshots };
     } catch (error) {
-      console.error('Error in ask-ai-with-session-context:', error);
+      console.error('Error in ask-ai-with-session-context:', redactSecretsInText(error?.message || String(error)));
       sendToRenderer('ai-stream-end', { actionId: 'askAi' });
       return {
         success: false,
@@ -436,7 +437,7 @@ function registerAssistantIpc({
       sendToRenderer('ai-stream-end', { actionId: 'suggest' });
       return { success: true, suggestions };
     } catch (error) {
-      console.error('Error generating suggestions:', error);
+      console.error('Error generating suggestions:', redactSecretsInText(error?.message || String(error)));
       sendToRenderer('ai-stream-end', { actionId: 'suggest' });
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate suggestions') };
     }
@@ -472,7 +473,7 @@ function registerAssistantIpc({
       sendToRenderer('ai-stream-end', { actionId: 'notes' });
       return { success: true, notes };
     } catch (error) {
-      console.error('Error generating meeting notes:', error);
+      console.error('Error generating meeting notes:', redactSecretsInText(error?.message || String(error)));
       sendToRenderer('ai-stream-end', { actionId: 'notes' });
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate meeting notes') };
     }
@@ -495,7 +496,7 @@ function registerAssistantIpc({
 
       return { success: true, email };
     } catch (error) {
-      console.error('Error generating email:', error);
+      console.error('Error generating email:', redactSecretsInText(error?.message || String(error)));
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to generate follow-up email') };
     }
   });
@@ -517,7 +518,7 @@ function registerAssistantIpc({
 
       return { success: true, answer };
     } catch (error) {
-      console.error('Error answering question:', error);
+      console.error('Error answering question:', redactSecretsInText(error?.message || String(error)));
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to answer question') };
     }
   });
@@ -552,7 +553,7 @@ function registerAssistantIpc({
       sendToRenderer('ai-stream-end', { actionId: 'insights' });
       return { success: true, insights };
     } catch (error) {
-      console.error('Error getting insights:', error);
+      console.error('Error getting insights:', redactSecretsInText(error?.message || String(error)));
       sendToRenderer('ai-stream-end', { actionId: 'insights' });
       return { success: false, error: mapGeminiErrorMessage(error, 'Failed to get conversation insights') };
     }

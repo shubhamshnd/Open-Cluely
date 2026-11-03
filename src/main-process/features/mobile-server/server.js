@@ -5,6 +5,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const { redactSecretsInText } = require('../../../services/state/secret-masking');
 
 // Names that almost always belong to virtual adapters (Docker, WSL, VPN,
 // hypervisors). Phones cannot route to these IPs, so we want the real
@@ -221,9 +222,9 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
               broadcast('ai-stream-end', { actionId: 'askAi' });
             } catch (err) {
-              console.error('[MobileServer] ask-ai error:', err.message);
+              console.error('[MobileServer] ask-ai error:', redactSecretsInText(err?.message));
               broadcast('ai-stream-end', { actionId: 'askAi' });
-              broadcast('error', { message: err.message });
+              broadcast('error', { message: redactSecretsInText(err?.message) });
             }
           })();
           break;

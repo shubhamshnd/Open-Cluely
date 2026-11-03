@@ -99,10 +99,46 @@ function resolveSecretListOnSave(incoming, stored) {
   return resolved.length > 0 ? resolved.join(',') : savedRaw;
 }
 
+// SDK and server error text can echo key material (OpenAI's own error body
+// shows the first and last characters of the offending key). Console output
+// and error broadcasts pass through this redactor so a secret never lands in
+// a log or on a connected phone. Only the last 4 chars survive, matching the
+// masked display form.
+const SECRET_PATTERNS = [
+  // OpenAI / Anthropic style keys, including server-echoed sk-…***…last4
+  { re: /sk-[A-Za-z0-9_*-]{8,}/g, keep: 3 },
+  // AWS access key id
+  { re: /AKIA[0-9A-Z]{16}/g, keep: 4 },
+  // Google API keys
+  { re: /AIza[0-9A-Za-z_*-]{16,}/g, keep: 4 },
+  // Bearer tokens in Authorization headers
+  { re: /Bearer\s+[A-Za-z0-9._*~-]{8,}/g, keep: -1 }
+];
+
+function redactSecretsInText(text) {
+  let out = String(text ?? '');
+  if (!out) {
+    return '';
+  }
+  for (const { re, keep } of SECRET_PATTERNS) {
+    out = out.replace(re, (match) => {
+      if (keep === -1) {
+        // Bearer: keep the scheme word, mask the token.
+        const head = match.match(/^Bearer\s+/)[0];
+        const token = match.slice(head.length);
+        return `${head}${MASK_BULLETS}${token.slice(-4)}`;
+      }
+      return `${match.slice(0, keep)}${MASK_BULLETS}${match.slice(-4)}`;
+    });
+  }
+  return out;
+}
+
 module.exports = {
   MASK_BULLETS,
   maskSecretValue,
   maskSecretList,
   resolveSecretOnSave,
-  resolveSecretListOnSave
+  resolveSecretListOnSave,
+  redactSecretsInText
 };

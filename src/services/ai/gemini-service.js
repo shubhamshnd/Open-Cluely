@@ -6,6 +6,7 @@
 // ============================================================================
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { redactSecretsInText } = require('../state/secret-masking');
 const {
   getDefaultGeminiModel,
   resolveGeminiModel,
@@ -241,7 +242,7 @@ class GeminiService {
       console.log(`[Gemini API] Non-streaming ${request.type} request completed (${responseText.length} chars)`);
       return responseText;
     } catch (error) {
-      console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
+      console.error(`Request error (attempt ${retryCount + 1}):`, redactSecretsInText(error?.message));
 
       if (this.isQuotaExhaustedError(error)) {
         console.error('Quota-exhausted error detected. Skipping retries.');
