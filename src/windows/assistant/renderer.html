@@ -375,6 +375,14 @@
           <label class="settings-label">Keyboard Shortcuts</label>
           <div id="settings-shortcuts-list" class="settings-shortcuts-list"></div>
           <div class="settings-helper-text">Shortcuts are read-only here. Edit <code>src/config.js</code> to customize.</div>
+          <div id="gnome-shortcuts-group" class="hidden">
+            <div class="settings-helper-text">On GNOME Wayland, app shortcuts only work while the app is focused. Add them as GNOME keyboard shortcuts to use them anywhere.</div>
+            <div class="settings-input-row">
+              <button type="button" id="gnome-shortcuts-add" class="settings-input-toggle">Add to GNOME shortcuts</button>
+              <button type="button" id="gnome-shortcuts-remove" class="settings-input-toggle">Remove from GNOME shortcuts</button>
+            </div>
+            <div id="gnome-shortcuts-status" class="settings-helper-text"></div>
+          </div>
         </div>
         <button id="save-settings-btn" class="save-settings-btn">Save Settings</button>
       </div>

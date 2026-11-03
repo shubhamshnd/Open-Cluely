@@ -6,6 +6,7 @@ const {
   getBedrockModels,
   getDefaultBedrockRegion
 } = require('../../../config');
+const { createGnomeShortcutInstaller } = require('../../shared/shortcut-actions');
 
 function registerSettingsIpc({
   ipcMain,
@@ -23,7 +24,29 @@ function registerSettingsIpc({
   assemblyAiSpeechModels,
   defaultAssemblyAiSpeechModel
 }) {
-  ipcMain.handle('get-settings', () => {
+  // GNOME Wayland: global shortcuts cannot fire while a native Wayland window
+  // has focus, so the user can opt into real GNOME keybindings. Only
+  // handler-backed shortcuts are installable; entries are written only when
+  // the user clicks Add in Settings → Shortcuts.
+  const installableActionIds = new Set(windowController.getShortcutActionIds());
+  const gnomeShortcutInstaller = createGnomeShortcutInstaller({
+    platform: process.platform,
+    env: process.env,
+    execPath: process.execPath,
+    appPath: app.getAppPath(),
+    shortcuts: (Array.isArray(keyboardShortcuts) ? keyboardShortcuts : [])
+      .filter((shortcut) => installableActionIds.has(shortcut.id))
+      .map((shortcut) => ({
+        id: shortcut.id,
+        name: `Open Cluely: ${shortcut.buttonLabel || shortcut.id}`,
+        accelerator: shortcut.accelerator
+      }))
+  });
+
+  ipcMain.handle('gnome-shortcuts-install', () => gnomeShortcutInstaller.install());
+  ipcMain.handle('gnome-shortcuts-remove', () => gnomeShortcutInstaller.remove());
+
+  ipcMain.handle('get-settings', async () => {
     const appEnvironment = getAppEnvironment();
     const appState = getAppState();
     const geminiApiKey = typeof appState?.geminiApiKey === 'string' ? appState.geminiApiKey : '';
@@ -71,6 +94,10 @@ function registerSettingsIpc({
       hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
       startHidden: appEnvironment.startHidden,
       windowOpacityLevel: windowController.getWindowOpacityLevel(),
+      gnomeShortcuts: {
+        available: gnomeShortcutInstaller.isAvailable(),
+        installed: await gnomeShortcutInstaller.isInstalled()
+      },
       themePreference: appState?.themePreference === 'dark' || appState?.themePreference === 'light'
         ? appState.themePreference
         : null

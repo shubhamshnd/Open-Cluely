@@ -365,26 +365,20 @@ function createWindowController({
     };
   }
 
-  function registerShortcuts() {
-    const registerShortcut = (shortcutId, handler) => {
-      const accelerator = getKeyboardShortcutAccelerator(shortcutId);
-      const isRegistered = globalShortcut.register(accelerator, handler);
-      if (!isRegistered) {
-        console.warn(`Failed to register shortcut "${shortcutId}" (${accelerator})`);
-      }
-    };
-
-    registerShortcut('toggleStealth', () => {
+  // One handler map per shortcut id: used by globalShortcut registration and
+  // by the single-instance `--action=<shortcutId>` dispatch (GNOME Wayland,
+  // where global shortcuts cannot fire while a native Wayland window has
+  // focus, triggers the same actions through a second-instance launch).
+  const shortcutActionHandlers = {
+    toggleStealth: () => {
       toggleStealthMode();
-    });
-
-    registerShortcut('takeScreenshot', async () => {
+    },
+    takeScreenshot: async () => {
       if (typeof onTakeStealthScreenshot === 'function') {
         await onTakeStealthScreenshot();
       }
-    });
-
-    registerShortcut('askAi', async () => {
+    },
+    askAi: async () => {
       if (typeof emitSttDebug === 'function') {
         emitSttDebug({
           event: 'shortcut-ask-ai',
@@ -392,13 +386,11 @@ function createWindowController({
         });
       }
       sendToRenderer('trigger-ask-ai');
-    });
-
-    registerShortcut('emergencyHide', () => {
+    },
+    emergencyHide: () => {
       emergencyHide();
-    });
-
-    registerShortcut('toggleTranscription', () => {
+    },
+    toggleTranscription: () => {
       if (typeof emitSttDebug === 'function') {
         emitSttDebug({
           event: 'shortcut-toggle',
@@ -406,39 +398,60 @@ function createWindowController({
         });
       }
       sendToRenderer('toggle-voice-recognition');
-    });
-
-    registerShortcut('moveWindowLeft', () => {
+    },
+    moveWindowLeft: () => {
       moveToPosition('left');
-    });
-
-    registerShortcut('moveWindowRight', () => {
+    },
+    moveWindowRight: () => {
       moveToPosition('right');
-    });
-
-    registerShortcut('moveWindowUp', () => {
+    },
+    moveWindowUp: () => {
       moveToPosition('top');
-    });
-
-    registerShortcut('moveWindowDown', () => {
+    },
+    moveWindowDown: () => {
       moveToPosition('bottom');
-    });
-
-    registerShortcut('windowSizePreset1', () => {
+    },
+    windowSizePreset1: () => {
       setWindowSizePreset(1);
-    });
-
-    registerShortcut('windowSizePreset2', () => {
+    },
+    windowSizePreset2: () => {
       setWindowSizePreset(2);
-    });
-
-    registerShortcut('windowSizePreset3', () => {
+    },
+    windowSizePreset3: () => {
       setWindowSizePreset(3);
-    });
-
-    registerShortcut('windowSizePreset4', () => {
+    },
+    windowSizePreset4: () => {
       setWindowSizePreset(4);
+    }
+  };
+
+  function registerShortcuts() {
+    for (const [shortcutId, handler] of Object.entries(shortcutActionHandlers)) {
+      const accelerator = getKeyboardShortcutAccelerator(shortcutId);
+      const isRegistered = globalShortcut.register(accelerator, handler);
+      if (!isRegistered) {
+        console.warn(`Failed to register shortcut "${shortcutId}" (${accelerator})`);
+      }
+    }
+  }
+
+  // Runs a shortcut handler by id (e.g. from a `--action=<id>` second-instance
+  // launch). Unknown ids are logged and ignored. Returns whether a handler ran.
+  function runShortcutAction(shortcutId) {
+    const handler = shortcutActionHandlers[shortcutId];
+    if (!handler) {
+      console.warn(`Ignoring unknown shortcut action "${shortcutId}"`);
+      return false;
+    }
+
+    Promise.resolve(handler()).catch((error) => {
+      console.error(`Shortcut action "${shortcutId}" failed:`, error);
     });
+    return true;
+  }
+
+  function getShortcutActionIds() {
+    return Object.keys(shortcutActionHandlers);
   }
 
   function unregisterShortcuts() {
@@ -479,11 +492,13 @@ function createWindowController({
     destroyWindow,
     emergencyHide,
     getMainWindow,
+    getShortcutActionIds,
     getWindowBounds,
     getWindowOpacityLevel,
     hasWindow,
     markVisible,
     registerShortcuts,
+    runShortcutAction,
     setWindowSizePreset,
     setWindowBounds,
     setWindowOpacityLevel,

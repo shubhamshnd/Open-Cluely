@@ -186,6 +186,18 @@ function createInvokeActions(ipcRenderer) {
       fallback: (error) => ({ success: false, error: error.message })
     }),
 
+    installGnomeShortcuts: invokeWithFallback(ipcRenderer, {
+      channel: 'gnome-shortcuts-install',
+      label: 'installGnomeShortcuts',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    removeGnomeShortcuts: invokeWithFallback(ipcRenderer, {
+      channel: 'gnome-shortcuts-remove',
+      label: 'removeGnomeShortcuts',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
     closeApp: invokeWithFallback(ipcRenderer, {
       channel: 'close-app',
       label: 'closeApp',
