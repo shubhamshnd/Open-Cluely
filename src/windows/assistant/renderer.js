@@ -465,7 +465,8 @@ function updateThemeToggleUi() {
     themeToggleBtn.classList.toggle('is-dark', isDarkMode);
     themeToggleBtn.setAttribute('aria-pressed', isDarkMode ? 'true' : 'false');
     themeToggleBtn.setAttribute('aria-label', ariaLabel);
-    themeToggleBtn.removeAttribute('title');
+    // Keep the tooltip in sync with the dynamic label so it never goes stale.
+    themeToggleBtn.setAttribute('title', ariaLabel);
 }
 
 function applyTheme(theme, options = {}) {
