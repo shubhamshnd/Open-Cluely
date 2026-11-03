@@ -289,6 +289,10 @@ export function createTranscriptionManager({
         return audioPipeline.getSystemAudioStream(sourceId);
     }
 
+    async function getSystemAudioMonitorStream() {
+        return audioPipeline.getSystemAudioMonitorStream();
+    }
+
     function resetSourceSampleQueue(source) {
         audioPipeline.resetSourceSampleQueue(source);
     }
@@ -379,21 +383,36 @@ export function createTranscriptionManager({
         resetFinalTranscriptBuffer('system');
 
         try {
-            const sources = await window.electronAPI.getDesktopSources();
-            if (!sources || sources.length === 0) throw new Error('No desktop sources found');
-            const sourceId = sources[0].id;
-            addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
+            // Platform comes from the preload bridge (process.platform), not
+            // a UA guess. On Linux, Chromium has no desktop-audio loopback
+            // and a chromeMediaSource:'desktop' request would hold a GNOME
+            // screencast session open for the whole transcription while
+            // returning no audio — so the host source captures the
+            // PipeWire/Pulse "Monitor of <output>" input instead, audio-only.
+            const isLinuxHost = window.electronAPI?.platform === 'linux';
+            let sourceId = null;
+
+            if (!isLinuxHost) {
+                const sources = await window.electronAPI.getDesktopSources();
+                if (!sources || sources.length === 0) throw new Error('No desktop sources found');
+                sourceId = sources[0].id;
+                addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
+            }
 
             const result = await window.electronAPI.startVoiceRecognition('system');
             if (result && result.error) throw new Error(result.error);
 
-            systemMediaStream = await getSystemAudioStream(sourceId);
+            systemMediaStream = isLinuxHost
+                ? await getSystemAudioMonitorStream()
+                : await getSystemAudioStream(sourceId);
 
             const videoTrack = systemMediaStream.getVideoTracks()[0];
             if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
                 throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
             }
 
+            // Only audio is used; stop any video track right away so a
+            // desktop-capture session (non-Linux path) is never held open.
             systemMediaStream.getVideoTracks().forEach((track) => track.stop());
 
             systemAudioContext = new AudioContext();
@@ -409,10 +428,10 @@ export function createTranscriptionManager({
             console.error('Failed to start system audio:', error);
 
             // Desktop-audio loopback is Windows-only in Chromium; on Linux
-            // the host source either fails getUserMedia or yields a stream
-            // with no usable audio track. Say so explicitly instead of a
-            // generic failure, and never leave the host source looking
-            // like it is listening.
+            // the host source captures a PipeWire/Pulse monitor input, so a
+            // typed unsupported error there means no "Monitor of …" device
+            // was found. Say so explicitly instead of a generic failure, and
+            // never leave the host source looking like it is listening.
             const unsupportedMessage = isSystemAudioUnsupportedError(error)
                 ? getSystemAudioUnsupportedMessage(window.navigator?.userAgent)
                 : null;

@@ -172,7 +172,7 @@ None are required. `package-lock.json` contains no `gypfile` entries and no inst
 ### Known limitations on Linux
 
 - **Content protection does not hide the window.** `HIDE_FROM_SCREEN_CAPTURE` / `setContentProtection` is only effective on Windows and macOS. On Linux the window is visible to screen capture and screen sharing.
-- **System-audio capture is limited.** Capturing what the speakers play (the `Host` source) is not supported the way it is on Windows; the microphone source works. The app reports a clear error instead of failing silently.
+- **Host audio comes from a PipeWire/Pulse monitor.** On Linux, Host audio is captured from the PipeWire/PulseAudio 'Monitor of <your output>' device (audio only, no screen capture). Screenshots on Wayland go through the system screenshot portal.
 - **Screenshots have a fallback.** If no external tool (`gnome-screenshot`, `scrot`, `import`, `grim`) is installed, the app uses Electron's `desktopCapturer`. On Wayland this goes through the XDG desktop portal and may show a permission prompt.
 - **Global shortcuts on Wayland** may need `--ozone-platform=x11` (see Setup).
 - Only the AppImage target is built on Linux; running it on newer distros may need `libfuse2`.
