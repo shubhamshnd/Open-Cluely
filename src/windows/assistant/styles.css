@@ -3643,3 +3643,51 @@ body.theme-dark .save-settings-btn {
 .monitor-log-list {
   max-height: 56px;
 }
+
+/* ---------- EDGES: margin around the frame controls ---------- */
+/* Close button: centered in a 30px handle it sat 5-6px from the top frame
+   edge and crowded the corner accent. Give it real air. */
+.drag-handle {
+  padding: 7px 14px 0 0;
+  align-items: flex-start;
+}
+
+/* Corner resize accents: an 18px triangle hard against the rounded frame
+   corner read as clipped and crowded the close button / Add button. Inset
+   them and trim the size; the grab area stays usable. */
+.resize-handle-ne,
+.resize-handle-se,
+.resize-handle-sw,
+.resize-handle-nw {
+  width: 14px;
+  height: 14px;
+}
+
+.resize-handle-ne {
+  top: 4px;
+  right: 4px;
+  border-radius: 0 8px 0 0;
+}
+
+.resize-handle-se {
+  right: 4px;
+  bottom: 4px;
+  border-radius: 0 0 8px 0;
+}
+
+.resize-handle-sw {
+  left: 4px;
+  bottom: 4px;
+  border-radius: 0 0 0 8px;
+}
+
+.resize-handle-nw {
+  top: 4px;
+  left: 4px;
+  border-radius: 8px 0 0 0;
+}
+
+/* Add button: lift the composer off the bottom frame edge. */
+.chat-composer {
+  padding-bottom: 9px;
+}
