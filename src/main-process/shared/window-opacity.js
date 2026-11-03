@@ -57,7 +57,17 @@ function setWindowOpacity(win, value, { platform = process.platform } = {}) {
     return;
   }
 
-  if (!win.isVisible()) win.showInactive();
+  if (!win.isVisible()) {
+    win.showInactive();
+    // Re-assert the always-on-top hint: it can be dropped across hide/show, and
+    // without it the window comes back behind the focused app.
+    if (typeof win.setAlwaysOnTop === 'function') {
+      win.setAlwaysOnTop(true);
+      setTimeout(() => {
+        if (!(typeof win.isDestroyed === 'function' && win.isDestroyed())) win.setAlwaysOnTop(true);
+      }, 50);
+    }
+  }
   applyCssOpacity(win, opacity).catch((error) => {
     console.warn('[WindowOpacity] Could not apply page opacity on Linux:', error && error.message);
   });

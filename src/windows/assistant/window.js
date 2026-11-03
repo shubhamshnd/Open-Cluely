@@ -109,6 +109,19 @@ function createAssistantWindow({
       appId: 'com.opencluely.app'
     });
   }
+  if (process.platform === 'linux') {
+    // Without this the window is mapped but has no _NET_WM_STATE_ABOVE hint, so
+    // after Alt+Shift+H the window reappears BEHIND the focused browser/Meet
+    // window and looks like the shortcut did nothing.
+    mainWindow.setAlwaysOnTop(true);
+    // Electron applies the hint reliably only once the window is mapped, so
+    // re-assert it whenever the window is shown.
+    mainWindow.on('show', () => {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(true);
+      }, 50);
+    });
+  }
 
   mainWindow.setContentProtection(hideFromScreenCapture);
   console.log(
