@@ -10,7 +10,8 @@
 //     gemini:    { apiKey, modelName },
 //     openai:    { apiKey, modelName },
 //     anthropic: { apiKey, modelName },
-//     bedrock:   { region, accessKeyId, secretAccessKey, modelId },
+//     bedrock:   { region, authMode, profile, accessKeyId, secretAccessKey,
+//                  sessionToken, apiKey, modelId },
 //     ollama:    { baseUrl, modelName } }
 // ============================================================================
 
@@ -19,6 +20,7 @@ const OpenAIService = require('./openai-service');
 const AnthropicService = require('./anthropic-service');
 const BedrockService = require('./bedrock-service');
 const OllamaService = require('./ollama-service');
+const { isAwsAuthReady } = require('../aws/credentials');
 const {
   getAiProviders,
   resolveAiProvider,
@@ -81,25 +83,45 @@ const PROVIDER_DEFINITIONS = {
     modelOf: (s) => resolveAnthropicModel(s.anthropic?.modelName)
   },
   bedrock: {
-    // Both key parts, or neither (default AWS credential chain).
+    // Readiness comes from the shared AWS auth resolver: default chain needs
+    // nothing, profile needs a name, keys need both parts, apiKey needs the
+    // key. An unset mode with key material keeps the legacy keys behavior.
     isConfigured: (s) => {
-      const hasKey = str(s.bedrock?.accessKeyId).length > 0;
-      const hasSecret = str(s.bedrock?.secretAccessKey).length > 0;
-      return hasKey === hasSecret;
+      const mode = str(s.bedrock?.authMode);
+      if (!mode && (str(s.bedrock?.accessKeyId) || str(s.bedrock?.secretAccessKey))) {
+        // Legacy shape: both key parts, or neither (default chain).
+        return str(s.bedrock?.accessKeyId).length > 0 && str(s.bedrock?.secretAccessKey).length > 0;
+      }
+      return isAwsAuthReady({
+        awsAuthMode: s.bedrock?.authMode,
+        awsProfile: s.bedrock?.profile,
+        awsAccessKeyId: s.bedrock?.accessKeyId,
+        awsSecretAccessKey: s.bedrock?.secretAccessKey,
+        awsSessionToken: s.bedrock?.sessionToken,
+        bedrockApiKey: s.bedrock?.apiKey
+      }, { purpose: 'bedrock' });
     },
     create: (s) =>
       new BedrockService({
         region: s.bedrock?.region,
+        authMode: s.bedrock?.authMode,
+        profile: s.bedrock?.profile,
         accessKeyId: s.bedrock?.accessKeyId,
         secretAccessKey: s.bedrock?.secretAccessKey,
+        sessionToken: s.bedrock?.sessionToken,
+        apiKey: s.bedrock?.apiKey,
         modelId: s.bedrock?.modelId,
         programmingLanguage: s.programmingLanguage
       }),
     configure: (service, s) =>
       service.updateConfiguration({
         region: s.bedrock?.region,
+        authMode: s.bedrock?.authMode,
+        profile: s.bedrock?.profile,
         accessKeyId: s.bedrock?.accessKeyId,
         secretAccessKey: s.bedrock?.secretAccessKey,
+        sessionToken: s.bedrock?.sessionToken,
+        apiKey: s.bedrock?.apiKey,
         modelId: s.bedrock?.modelId,
         programmingLanguage: s.programmingLanguage
       }),

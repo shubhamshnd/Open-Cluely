@@ -104,7 +104,7 @@ Use Notes to produce a shareable record at the end of a meeting or interview deb
 - Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
 - npm `10+`
 - At least one Gemini API key (configured in the app Settings UI)
-- One AssemblyAI API key (configured in the app Settings UI)
+- A speech-to-text backend (configured in the app Settings UI): one AssemblyAI API key, or AWS credentials for Amazon Transcribe (see *Speech-to-text (STT) providers*)
 
 **Linux screenshot support:** the primary capture path (`screenshot-desktop`) shells out to an external tool — install `gnome-screenshot`, `scrot`, or ImageMagick (`import`) on X11, or `grim` on Wayland. If none of these is present, the app automatically falls back to Electron's built-in `desktopCapturer` (works on X11 and on Wayland via the XDG desktop portal), which covers the common case with no extra install. If both paths fail, the UI shows an explicit error instead of failing silently.
 
@@ -202,6 +202,23 @@ On packaged builds (Windows portable, Linux AppImage, macOS), the capture/startu
 - Global keyboard shortcuts
 
 The first item in each model/language list is treated as the default.
+
+### Speech-to-text (STT) providers
+
+Settings → **Speech-to-text provider** picks the streaming transcription backend; only the selected provider's fields are shown, and the select is disabled while transcription is running (stop transcription to switch).
+
+- **AssemblyAI** (default): needs one AssemblyAI API key. Streaming pricing is billed by AssemblyAI per session.
+- **Amazon Transcribe**: streams 16 kHz PCM per source (`StartStreamTranscription`). Needs AWS credentials (below) and a region (default `us-east-1`); language is one of `en-US`, `en-IN`, `en-GB`, `en-AU`, `hi-IN`. Streaming costs **$0.0001667/second ≈ $0.60/hour per stream** (us-east-1 pricing) — Mic and Host are separate streams, so running both costs ≈ $1.20/hour. The IAM identity needs `transcribe:StartStreamTranscription`.
+- An optional **custom vocabulary** (Settings → Custom words → *Create / update vocabulary*) improves recognition of names and jargon. The vocabulary is named `open-cluely-<language>` and also needs `transcribe:CreateVocabulary`, `transcribe:UpdateVocabulary` and `transcribe:GetVocabulary`. Transcribe phrases can't contain spaces, so spaces become hyphens (`REST API` → `REST-API`).
+
+### AWS credentials (Bedrock and Amazon Transcribe)
+
+One **AWS Auth Method** block in Settings is shared by Amazon Bedrock (AI provider) and Amazon Transcribe (STT provider); it appears when either is selected:
+
+- **Default (AWS credential chain)** — no keys stored; the SDK resolves `AWS_PROFILE`, environment variables, `~/.aws`, or an instance role.
+- **AWS profile** — a named profile from `~/.aws/config` / `~/.aws/credentials`. The app lists profile *names only* (Refresh re-reads the files); credential values are only ever read by the AWS SDK, never by the app.
+- **Access key + secret (+ optional session token)** — static keys; the session token is only for temporary (STS) credentials.
+- **Bedrock API key** — bearer key, sent as `Authorization: Bearer …`. **Bedrock only: Amazon Transcribe cannot use it.** Bedrock *model listing* (Fetch) needs SigV4 credentials and is unavailable in this mode.
 
 ### Persisted Files
 

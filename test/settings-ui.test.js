@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { getAiProviders } = require('../src/config');
+const { getAiProviders, getAwsAuthModes, getSttProviders } = require('../src/config');
 
 const html = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/renderer.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/styles.css'), 'utf8');
@@ -46,9 +46,71 @@ test('each provider has exactly one settings group, hidden by default except Gem
   }
 });
 
-test('Bedrock group explains the credential chain and the top bar badge exists', () => {
-  assert.match(html, /Leave both blank to use the AWS credential chain/);
+test('Bedrock group keeps region+model and the top bar badge exists', () => {
+  assert.match(html, /id="setting-bedrock-region"/);
+  assert.match(html, /id="setting-bedrock-model"/);
   assert.match(html, /id="chat-provider-model"/);
+  // The legacy per-provider key fields were replaced by the shared AWS block.
+  assert.doesNotMatch(html, /setting-bedrock-access-key/);
+  assert.doesNotMatch(html, /setting-bedrock-secret/);
+});
+
+test('shared AWS credentials block: one option per auth mode, sub-groups hidden', () => {
+  assert.match(html, /<div id="aws-credentials-group" class="hidden">/);
+  assert.ok(manager.includes('aws-credentials-group'), 'AWS block not wired in settings-panel-manager');
+
+  const select = html.match(/<select id="setting-aws-auth-mode"[\s\S]*?<\/select>/)[0];
+  const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(values, getAwsAuthModes());
+
+  for (const id of [
+    'setting-aws-profile-select',
+    'setting-aws-profile',
+    'refresh-aws-profiles',
+    'setting-aws-access-key',
+    'setting-aws-secret',
+    'setting-aws-session-token',
+    'setting-bedrock-api-key'
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing ${id}`);
+  }
+  for (const groupId of ['aws-profile-group', 'aws-keys-group', 'aws-api-key-group']) {
+    const matches = html.match(new RegExp(`<div id="${groupId}"[^>]*>`)) || [];
+    assert.equal(matches.length, 1, `missing group ${groupId}`);
+    assert.match(matches[0], /class="[^"]*\bhidden\b/, `${groupId} should start hidden`);
+  }
+  // The Bedrock API key helper must say Transcribe cannot use it.
+  assert.match(html, /Bedrock only; Amazon Transcribe can't use it/);
+});
+
+test('speech-to-text provider select offers every configured STT provider', () => {
+  const select = html.match(/<select id="setting-stt-provider"[\s\S]*?<\/select>/)[0];
+  const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(values, getSttProviders());
+  assert.ok(manager.includes('setting-stt-provider'), 'STT select not wired in settings-panel-manager');
+
+  // AssemblyAI fields stay in their own visible-by-default group; the
+  // Transcribe group starts hidden with its region and language fields.
+  assert.match(html, /<div id="assemblyai-stt-group">/);
+  assert.match(html, /<div id="transcribe-stt-group" class="hidden">/);
+  assert.match(html, /id="setting-transcribe-region"/);
+  assert.match(html, /id="setting-transcribe-language"/);
+  // The lock hint for switching provider while transcription runs.
+  assert.match(html, /<div id="stt-provider-locked-hint" class="settings-helper-text hidden">/);
+});
+
+test('Transcribe custom vocabulary UI exists inside the Transcribe group', () => {
+  const group = html.match(/<div id="transcribe-stt-group"[\s\S]*$/)?.[0] || '';
+  for (const id of [
+    'setting-transcribe-vocabulary-words',
+    'transcribe-vocabulary-save',
+    'transcribe-vocabulary-status'
+  ]) {
+    assert.ok(group.includes(`id="${id}"`), `missing ${id} in the Transcribe group`);
+  }
+  // The helper explains the spaces-to-hyphens rule.
+  assert.match(html, /spaces become hyphens/);
+  assert.ok(manager.includes('transcribe-vocabulary-save'), 'vocabulary button not wired in settings-panel-manager');
 });
 
 test('stylesheet has a bare .hidden rule with display: none (provider groups rely on it)', () => {

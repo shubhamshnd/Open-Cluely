@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { isConfiguredAiProvider } = require('../../config');
+const {
+  isConfiguredAiProvider,
+  isConfiguredAwsAuthMode,
+  isConfiguredSttProvider,
+  isConfiguredTranscribeLanguage
+} = require('../../config');
 
 const APP_STATE_DIR_NAME = 'cache';
 const APP_STATE_FILE_NAME = 'app-state.json';
@@ -20,6 +25,20 @@ function getDefaultAppState() {
     bedrockAccessKeyId: null,
     bedrockSecretAccessKey: null,
     bedrockModelId: null,
+    // AWS auth, shared by Bedrock and Amazon Transcribe. `awsAuthMode: null`
+    // means "not migrated yet": sanitizeAppState derives it once from the
+    // legacy bedrockAccessKeyId/bedrockSecretAccessKey pair.
+    awsAuthMode: null,
+    awsProfile: null,
+    awsAccessKeyId: null,
+    awsSecretAccessKey: null,
+    awsSessionToken: null,
+    bedrockApiKey: null,
+    // Speech-to-text provider ('assemblyai' default) + Amazon Transcribe.
+    sttProvider: 'assemblyai',
+    transcribeRegion: null,
+    transcribeLanguage: null,
+    transcribeVocabularyName: null,
     // Ordered provider names tried when the active provider fails with an
     // auth, quota, timeout or connection error. Empty = no fallback.
     providerFallback: [],
@@ -75,11 +94,47 @@ function sanitizeAppState(state) {
       'bedrockRegion',
       'bedrockAccessKeyId',
       'bedrockSecretAccessKey',
-      'bedrockModelId'
+      'bedrockModelId',
+      'awsProfile',
+      'awsAccessKeyId',
+      'awsSecretAccessKey',
+      'awsSessionToken',
+      'bedrockApiKey',
+      'transcribeRegion',
+      'transcribeVocabularyName'
     ]) {
       if (typeof state[key] === 'string' && state[key].trim()) {
         nextState[key] = state[key].trim();
       }
+    }
+
+    // AWS auth mode. One-time migration: a state file with the legacy Bedrock
+    // key pair but no auth mode yet becomes mode 'keys' with those values;
+    // anything else without a mode becomes 'default'. Once a mode is set it
+    // is always kept, so the migration can never re-trigger.
+    const savedAuthMode = typeof state.awsAuthMode === 'string' ? state.awsAuthMode.trim() : '';
+    const legacyAccessKeyId = typeof state.bedrockAccessKeyId === 'string' ? state.bedrockAccessKeyId.trim() : '';
+    const legacySecretAccessKey = typeof state.bedrockSecretAccessKey === 'string' ? state.bedrockSecretAccessKey.trim() : '';
+    if (isConfiguredAwsAuthMode(savedAuthMode)) {
+      nextState.awsAuthMode = savedAuthMode;
+    } else if (legacyAccessKeyId && legacySecretAccessKey) {
+      nextState.awsAuthMode = 'keys';
+      if (!nextState.awsAccessKeyId) {
+        nextState.awsAccessKeyId = legacyAccessKeyId;
+      }
+      if (!nextState.awsSecretAccessKey) {
+        nextState.awsSecretAccessKey = legacySecretAccessKey;
+      }
+    } else {
+      nextState.awsAuthMode = 'default';
+    }
+
+    if (typeof state.sttProvider === 'string' && isConfiguredSttProvider(state.sttProvider.trim())) {
+      nextState.sttProvider = state.sttProvider.trim();
+    }
+
+    if (typeof state.transcribeLanguage === 'string' && isConfiguredTranscribeLanguage(state.transcribeLanguage.trim())) {
+      nextState.transcribeLanguage = state.transcribeLanguage.trim();
     }
 
     if (Array.isArray(state.providerFallback)) {
@@ -213,5 +268,7 @@ module.exports = {
   getDefaultAppState,
   getAppStatePath,
   loadAppState,
-  saveAppState
+  saveAppState,
+  // Exported for tests; the migration/normalization rules all live here.
+  sanitizeAppState
 };

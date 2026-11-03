@@ -42,7 +42,7 @@ function createIpcHarness({ captureOverrides = {} } = {}) {
   const sent = [];
   registerAssemblyAiIpc({
     ipcMain,
-    assemblyAiService: service,
+    sttService: service,
     linuxMonitorCapture: capture,
     sendToRenderer: (channel, data) => sent.push([channel, data])
   });

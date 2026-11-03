@@ -60,6 +60,28 @@ const ASSEMBLY_AI_SPEECH_MODELS = [
   'universal-streaming-multilingual'
 ];
 
+// AWS auth methods, shared by Amazon Bedrock and Amazon Transcribe. The first
+// entry is the default. 'apiKey' (Bedrock API key / bearer) works for Bedrock
+// only — Amazon Transcribe has no bearer scheme.
+const AWS_AUTH_MODES = ['default', 'profile', 'keys', 'apiKey'];
+const AWS_AUTH_MODE_LABELS = {
+  default: 'Default (AWS credential chain)',
+  profile: 'AWS profile',
+  keys: 'Access key + secret (+ optional session token)',
+  apiKey: 'Bedrock API key'
+};
+
+// Speech-to-text providers. The first entry is the default.
+const STT_PROVIDERS = ['assemblyai', 'transcribe'];
+const STT_PROVIDER_LABELS = {
+  assemblyai: 'AssemblyAI',
+  transcribe: 'Amazon Transcribe'
+};
+
+// Amazon Transcribe streaming configuration.
+const DEFAULT_TRANSCRIBE_REGION = 'us-east-1';
+const TRANSCRIBE_LANGUAGES = ['en-US', 'en-IN', 'en-GB', 'en-AU', 'hi-IN'];
+
 // Programming language configuration.
 // The first language in this list is treated as the default language everywhere.
 const PROGRAMMING_LANGUAGES = [
@@ -387,6 +409,70 @@ function resolveProgrammingLanguage(languageName) {
     : getDefaultProgrammingLanguage();
 }
 
+// AWS auth mode configuration functions
+function getAwsAuthModes() {
+  return [...AWS_AUTH_MODES];
+}
+
+function getAwsAuthModeLabels() {
+  return { ...AWS_AUTH_MODE_LABELS };
+}
+
+function isConfiguredAwsAuthMode(mode) {
+  return AWS_AUTH_MODES.includes(mode);
+}
+
+function resolveAwsAuthMode(mode, fallback = AWS_AUTH_MODES[0]) {
+  return isConfiguredAwsAuthMode(mode) ? mode : fallback;
+}
+
+// Speech-to-text provider configuration functions
+function getSttProviders() {
+  return [...STT_PROVIDERS];
+}
+
+function getSttProviderLabels() {
+  return { ...STT_PROVIDER_LABELS };
+}
+
+function isConfiguredSttProvider(providerName) {
+  return STT_PROVIDERS.includes(providerName);
+}
+
+function resolveSttProvider(providerName) {
+  return isConfiguredSttProvider(providerName) ? providerName : STT_PROVIDERS[0];
+}
+
+function getSttProviderLabel(providerName) {
+  return STT_PROVIDER_LABELS[resolveSttProvider(providerName)] || resolveSttProvider(providerName);
+}
+
+// Amazon Transcribe configuration functions
+function getTranscribeLanguages() {
+  return [...TRANSCRIBE_LANGUAGES];
+}
+
+function getDefaultTranscribeLanguage() {
+  return TRANSCRIBE_LANGUAGES[0];
+}
+
+function isConfiguredTranscribeLanguage(language) {
+  return TRANSCRIBE_LANGUAGES.includes(language);
+}
+
+function resolveTranscribeLanguage(language) {
+  return isConfiguredTranscribeLanguage(language) ? language : getDefaultTranscribeLanguage();
+}
+
+function getDefaultTranscribeRegion() {
+  return DEFAULT_TRANSCRIBE_REGION;
+}
+
+function resolveTranscribeRegion(region) {
+  const normalized = String(region || '').trim();
+  return normalized || DEFAULT_TRANSCRIBE_REGION;
+}
+
 // AssemblyAI speech model configuration functions
 function getAssemblyAiSpeechModels() {
   if (!Array.isArray(ASSEMBLY_AI_SPEECH_MODELS) || ASSEMBLY_AI_SPEECH_MODELS.length === 0) {
@@ -456,6 +542,21 @@ module.exports = {
   getDefaultOllamaModel,
   isConfiguredAiProvider,
   resolveAiProvider,
+  getAwsAuthModes,
+  getAwsAuthModeLabels,
+  isConfiguredAwsAuthMode,
+  resolveAwsAuthMode,
+  getSttProviders,
+  getSttProviderLabels,
+  isConfiguredSttProvider,
+  resolveSttProvider,
+  getSttProviderLabel,
+  getTranscribeLanguages,
+  getDefaultTranscribeLanguage,
+  isConfiguredTranscribeLanguage,
+  resolveTranscribeLanguage,
+  getDefaultTranscribeRegion,
+  resolveTranscribeRegion,
   getAssemblyAiSpeechModels,
   getDefaultAssemblyAiSpeechModel,
   getGeminiModels,

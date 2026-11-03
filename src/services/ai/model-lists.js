@@ -14,8 +14,8 @@ const FETCHABLE_PROVIDERS = ['openai', 'bedrock'];
 
 const defaultFactories = {
   openai: ({ apiKey }) => new OpenAIService(apiKey),
-  bedrock: ({ region, accessKeyId, secretAccessKey }) =>
-    new BedrockService({ region, accessKeyId, secretAccessKey })
+  bedrock: ({ region, authMode, profile, accessKeyId, secretAccessKey, sessionToken, apiKey }) =>
+    new BedrockService({ region, authMode, profile, accessKeyId, secretAccessKey, sessionToken, apiKey })
 };
 
 function str(value) {
@@ -38,8 +38,11 @@ async function fetchProviderModels(provider, params = {}, factories = defaultFac
     const service = factories[name]({
       apiKey: str(params.apiKey),
       region: str(params.region),
+      authMode: str(params.authMode),
+      profile: str(params.profile),
       accessKeyId: str(params.accessKeyId),
-      secretAccessKey: str(params.secretAccessKey)
+      secretAccessKey: str(params.secretAccessKey),
+      sessionToken: str(params.sessionToken)
     });
 
     if (!service.ready()) {
@@ -47,7 +50,7 @@ async function fetchProviderModels(provider, params = {}, factories = defaultFac
         success: false,
         error: name === 'openai'
           ? 'Enter your OpenAI API key first.'
-          : 'Enter both AWS keys, or clear both to use the AWS credential chain.'
+          : 'Complete the AWS credentials in Settings (or pick Default to use the AWS credential chain).'
       };
     }
 

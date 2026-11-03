@@ -1719,6 +1719,14 @@ body.chat-resizing * {
   min-width: 0;
 }
 
+.settings-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 54px;
+  line-height: 1.45;
+}
+
 .settings-input-toggle {
   height: 30px;
   min-width: 50px;
