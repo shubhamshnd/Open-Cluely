@@ -160,7 +160,7 @@ function createSettingsHarness({ appState = {}, vocabResult } = {}) {
   const fakeVocab = createFakeTranscribeClient({});
   registerSettingsIpc({
     ipcMain,
-    app: { isPackaged: false, getAppPath: () => '/tmp' },
+    app: { isPackaged: false, getAppPath: () => '/unused', getPath: () => '/unused-user-data' },
     getAppEnvironment: () => ({}),
     getAppState: () => currentState,
     setAppState: (next) => {
