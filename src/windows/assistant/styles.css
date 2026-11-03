@@ -2251,3 +2251,74 @@ body.theme-dark .settings-body::-webkit-scrollbar-thumb:hover {
   text-overflow: ellipsis;
   max-width: 55%;
 }
+
+/* Light theme Settings panel.
+ * The panel background is near-opaque white (--glass-settings-bg), but the base
+ * .settings-* rules use white text meant for the dark glass look, so in light
+ * mode labels, inputs and the close icon rendered white-on-white. Dark theme
+ * already overrides these above; this gives light theme readable equivalents. */
+body:not(.theme-dark) .settings-panel {
+  color: rgba(15, 23, 42, 0.92);
+}
+
+body:not(.theme-dark) .settings-title,
+body:not(.theme-dark) .settings-label,
+body:not(.theme-dark) .settings-shortcut-button,
+body:not(.theme-dark) .settings-shortcut-description,
+body:not(.theme-dark) .settings-shortcuts-empty,
+body:not(.theme-dark) .settings-shortcut-key {
+  color: rgba(15, 23, 42, 0.88);
+}
+
+body:not(.theme-dark) .settings-helper-text {
+  color: rgba(51, 65, 85, 0.85);
+}
+
+body:not(.theme-dark) .settings-input {
+  color: rgba(15, 23, 42, 0.95);
+  background-color: rgba(241, 245, 249, 0.95);
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .settings-input:focus {
+  background-color: #ffffff;
+  border-color: rgba(37, 99, 235, 0.7);
+}
+
+body:not(.theme-dark) .settings-input::placeholder {
+  color: rgba(100, 116, 139, 0.9);
+}
+
+body:not(.theme-dark) select.settings-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%23334155' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+}
+
+body:not(.theme-dark) select.settings-input option {
+  color: #0f172a;
+  background: #ffffff;
+}
+
+body:not(.theme-dark) .settings-helper-text code {
+  color: rgba(15, 23, 42, 0.92);
+  background: rgba(226, 232, 240, 0.9);
+}
+
+body:not(.theme-dark) #close-settings.close-btn {
+  color: rgba(153, 27, 27, 0.95);
+  background: rgba(254, 226, 226, 0.95);
+  border-color: rgba(220, 38, 38, 0.55);
+}
+
+body:not(.theme-dark) #close-settings.close-btn:hover {
+  background: rgba(254, 202, 202, 1);
+}
+
+body:not(.theme-dark) .settings-value-chip,
+body:not(.theme-dark) .settings-input-toggle {
+  color: rgba(30, 64, 175, 0.95);
+}
+
+body:not(.theme-dark) .settings-shortcut-row {
+  background: rgba(241, 245, 249, 0.9);
+  border-color: rgba(148, 163, 184, 0.4);
+}
