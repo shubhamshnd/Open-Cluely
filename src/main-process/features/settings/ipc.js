@@ -19,7 +19,10 @@ const {
   getTranscribeLanguages,
   getDefaultTranscribeRegion,
   resolveTranscribeRegion,
-  resolveTranscribeLanguage
+  resolveTranscribeLanguage,
+  getTranscribeAuthModes,
+  getTranscribeAuthModeLabels,
+  resolveTranscribeAuthMode
 } = require('../../../config');
 const { createGnomeShortcutInstaller } = require('../../shared/shortcut-actions');
 const {
@@ -122,6 +125,15 @@ function registerSettingsIpc({
       transcribeLanguage: resolveTranscribeLanguage(appState?.transcribeLanguage),
       transcribeLanguages: getTranscribeLanguages(),
       transcribeVocabularyName: typeof appState?.transcribeVocabularyName === 'string' ? appState.transcribeVocabularyName : '',
+      // Transcribe-only AWS credential split. Secrets go out masked, exactly
+      // like the shared AWS keys above; the profile travels as a plain name.
+      transcribeAuthMode: resolveTranscribeAuthMode(appState?.transcribeAuthMode),
+      transcribeAuthModes: getTranscribeAuthModes(),
+      transcribeAuthModeLabels: getTranscribeAuthModeLabels(),
+      transcribeAwsProfile: typeof appState?.transcribeAwsProfile === 'string' ? appState.transcribeAwsProfile : '',
+      transcribeAwsAccessKeyId: maskSecretValue(appState?.transcribeAwsAccessKeyId),
+      transcribeAwsSecretAccessKey: maskSecretValue(appState?.transcribeAwsSecretAccessKey),
+      transcribeAwsSessionToken: maskSecretValue(appState?.transcribeAwsSessionToken),
       providerFallback: Array.isArray(appState?.providerFallback) ? appState.providerFallback : [],
       ollamaBaseUrl: geminiRuntime.getActiveOllamaBaseUrl(),
       ollamaModel: geminiRuntime.getActiveOllamaModel(),
@@ -181,7 +193,14 @@ function registerSettingsIpc({
         awsAccessKeyId: resolveSecretOnSave(payload?.awsAccessKeyId, appState?.awsAccessKeyId),
         awsSecretAccessKey: resolveSecretOnSave(payload?.awsSecretAccessKey, appState?.awsSecretAccessKey),
         awsSessionToken: resolveSecretOnSave(payload?.awsSessionToken, appState?.awsSessionToken),
-        bedrockApiKey: appState?.bedrockApiKey
+        bedrockApiKey: appState?.bedrockApiKey,
+        // The Transcribe-only split: vocabulary creation signs with the same
+        // credentials the stream would use (shared block or the override).
+        transcribeAuthMode: payload?.transcribeAuthMode ?? appState?.transcribeAuthMode,
+        transcribeAwsProfile: payload?.transcribeAwsProfile ?? appState?.transcribeAwsProfile,
+        transcribeAwsAccessKeyId: resolveSecretOnSave(payload?.transcribeAwsAccessKeyId, appState?.transcribeAwsAccessKeyId),
+        transcribeAwsSecretAccessKey: resolveSecretOnSave(payload?.transcribeAwsSecretAccessKey, appState?.transcribeAwsSecretAccessKey),
+        transcribeAwsSessionToken: resolveSecretOnSave(payload?.transcribeAwsSessionToken, appState?.transcribeAwsSessionToken)
       }, { purpose: 'transcribe' });
       if (auth.error) {
         return { success: false, error: auth.error };
@@ -302,6 +321,14 @@ function registerSettingsIpc({
         transcribeRegion: String(settings.transcribeRegion || '').trim() || null,
         transcribeLanguage: resolveTranscribeLanguage(settings.transcribeLanguage),
         transcribeVocabularyName: String(settings.transcribeVocabularyName || '').trim() || null,
+        // Transcribe-only AWS credential split: 'inherit' keeps the shared
+        // block; secrets follow the same masked-echo rules as every other key
+        // (masked or omitted keeps the stored value, explicit blank clears).
+        transcribeAuthMode: resolveTranscribeAuthMode(settings.transcribeAuthMode),
+        transcribeAwsProfile: String(settings.transcribeAwsProfile || '').trim() || null,
+        transcribeAwsAccessKeyId: resolveSecretOnSave(settings.transcribeAwsAccessKeyId, storedState.transcribeAwsAccessKeyId) || null,
+        transcribeAwsSecretAccessKey: resolveSecretOnSave(settings.transcribeAwsSecretAccessKey, storedState.transcribeAwsSecretAccessKey) || null,
+        transcribeAwsSessionToken: resolveSecretOnSave(settings.transcribeAwsSessionToken, storedState.transcribeAwsSessionToken) || null,
         providerFallback: nextProviderFallback,
         ollamaBaseUrl: nextOllamaBaseUrl,
         ollamaModel: nextOllamaModel,
