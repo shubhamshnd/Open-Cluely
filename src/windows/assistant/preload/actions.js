@@ -179,6 +179,12 @@ function createInvokeActions(ipcRenderer) {
       fallback: (error) => ({ success: false, error: error.message, profiles: [] })
     }),
 
+    saveTranscribeVocabulary: invokeWithFallback(ipcRenderer, {
+      channel: 'transcribe-vocabulary-save',
+      label: 'saveTranscribeVocabulary',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
     saveSettings: invokeWithFallback(ipcRenderer, {
       channel: 'save-settings',
       label: 'saveSettings',

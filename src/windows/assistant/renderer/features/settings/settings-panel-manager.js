@@ -243,6 +243,72 @@ export function createSettingsPanelManager({
         byId('setting-stt-provider')?.addEventListener('change', (event) => {
             updateSttProviderVisibility(event.target.value);
         });
+        byId('transcribe-vocabulary-save')?.addEventListener('click', () => {
+            saveTranscribeVocabulary();
+        });
+    }
+
+    function updateTranscribeVocabularyStatus() {
+        const status = byId('transcribe-vocabulary-status');
+        if (status && !status.dataset.working) {
+            status.textContent = currentTranscribeVocabularyName
+                ? `Active vocabulary: ${currentTranscribeVocabularyName}`
+                : '';
+        }
+    }
+
+    // Create / update vocabulary: sends the words plus the auth/region values
+    // currently in the form (the main process falls back to saved settings),
+    // then polls until READY/FAILED and reports the outcome here.
+    async function saveTranscribeVocabulary() {
+        const button = byId('transcribe-vocabulary-save');
+        const status = byId('transcribe-vocabulary-status');
+        const phrasesText = byId('setting-transcribe-vocabulary-words')?.value || '';
+
+        try {
+            if (button) {
+                button.disabled = true;
+            }
+            if (status) {
+                status.dataset.working = '1';
+                status.textContent = 'Creating vocabulary... (can take up to 2 minutes)';
+            }
+
+            const result = await window.electronAPI.saveTranscribeVocabulary({
+                language: byId('setting-transcribe-language')?.value || 'en-US',
+                phrasesText,
+                region: byId('setting-transcribe-region')?.value.trim() || '',
+                awsAuthMode: byId('setting-aws-auth-mode')?.value,
+                awsProfile: byId('setting-aws-profile')?.value.trim(),
+                awsAccessKeyId: byId('setting-aws-access-key')?.value.trim(),
+                awsSecretAccessKey: byId('setting-aws-secret')?.value.trim(),
+                awsSessionToken: byId('setting-aws-session-token')?.value.trim()
+            });
+
+            if (status) {
+                delete status.dataset.working;
+            }
+            if (result?.success) {
+                currentTranscribeVocabularyName = result.vocabularyName || currentTranscribeVocabularyName;
+                if (status) {
+                    status.textContent = `Active vocabulary: ${currentTranscribeVocabularyName} (READY)`;
+                }
+                showFeedback?.('Custom vocabulary saved.', 'success');
+            } else if (status) {
+                status.textContent = result?.error || 'Vocabulary save failed.';
+                showFeedback?.(result?.error || 'Vocabulary save failed.', 'error');
+            }
+        } catch (error) {
+            console.error('Failed to save Transcribe vocabulary:', error);
+            if (status) {
+                delete status.dataset.working;
+                status.textContent = error.message || 'Vocabulary save failed.';
+            }
+        } finally {
+            if (button) {
+                button.disabled = false;
+            }
+        }
     }
 
     function populateModelSelect(selectElement, models, selectedModel) {
@@ -626,6 +692,7 @@ export function createSettingsPanelManager({
                     byId('setting-transcribe-region').value = settings.transcribeRegion || settings.defaultTranscribeRegion || 'us-east-1';
                 }
                 populateTranscribeLanguageOptions(settings.transcribeLanguages, settings.transcribeLanguage);
+                updateTranscribeVocabularyStatus();
                 if (settingWindowOpacity) {
                     settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
                 }

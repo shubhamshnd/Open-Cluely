@@ -99,6 +99,20 @@ test('speech-to-text provider select offers every configured STT provider', () =
   assert.match(html, /<div id="stt-provider-locked-hint" class="settings-helper-text hidden">/);
 });
 
+test('Transcribe custom vocabulary UI exists inside the Transcribe group', () => {
+  const group = html.match(/<div id="transcribe-stt-group"[\s\S]*$/)?.[0] || '';
+  for (const id of [
+    'setting-transcribe-vocabulary-words',
+    'transcribe-vocabulary-save',
+    'transcribe-vocabulary-status'
+  ]) {
+    assert.ok(group.includes(`id="${id}"`), `missing ${id} in the Transcribe group`);
+  }
+  // The helper explains the spaces-to-hyphens rule.
+  assert.match(html, /spaces become hyphens/);
+  assert.ok(manager.includes('transcribe-vocabulary-save'), 'vocabulary button not wired in settings-panel-manager');
+});
+
 test('stylesheet has a bare .hidden rule with display: none (provider groups rely on it)', () => {
   // settings-panel-manager toggles only the `hidden` class on the provider
   // groups and the Ollama model dropdown; without a bare `.hidden` rule those

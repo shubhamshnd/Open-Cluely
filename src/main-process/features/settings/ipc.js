@@ -1,5 +1,9 @@
 const { fetchProviderModels } = require('../../../services/ai/model-lists');
-const { listAwsProfiles } = require('../../../services/aws/credentials');
+const { listAwsProfiles, resolveAwsAuth } = require('../../../services/aws/credentials');
+const {
+  createOrUpdateVocabulary,
+  defaultCreateClient
+} = require('../../../services/stt/transcribe-vocabulary');
 const {
   getAiProviderLabel,
   getOpenAIModels,
@@ -33,7 +37,9 @@ function registerSettingsIpc({
   setAssemblyAiSpeechModel,
   keyboardShortcuts,
   assemblyAiSpeechModels,
-  defaultAssemblyAiSpeechModel
+  defaultAssemblyAiSpeechModel,
+  // Injectable for tests: (clientConfig) => TranscribeClient-like.
+  createTranscribeClient = defaultCreateClient
 }) {
   // GNOME Wayland: global shortcuts cannot fire while a native Wayland window
   // has focus, so the user can opt into real GNOME keybindings. Only
@@ -152,6 +158,50 @@ function registerSettingsIpc({
 
   // Settings AWS profile dropdown Refresh: names only, never values.
   ipcMain.handle('list-aws-profiles', async () => listAwsProfiles());
+
+  // Settings "Create / update vocabulary" (Amazon Transcribe custom words).
+  // Uses the auth values currently in the form (falling back to saved state),
+  // polls until READY/FAILED, and persists the vocabulary name on success.
+  ipcMain.handle('transcribe-vocabulary-save', async (_event, payload = {}) => {
+    try {
+      const appState = typeof getAppState === 'function' ? getAppState() : null;
+      const auth = resolveAwsAuth({
+        awsAuthMode: payload?.awsAuthMode ?? appState?.awsAuthMode,
+        awsProfile: payload?.awsProfile ?? appState?.awsProfile,
+        awsAccessKeyId: payload?.awsAccessKeyId ?? appState?.awsAccessKeyId,
+        awsSecretAccessKey: payload?.awsSecretAccessKey ?? appState?.awsSecretAccessKey,
+        awsSessionToken: payload?.awsSessionToken ?? appState?.awsSessionToken,
+        bedrockApiKey: appState?.bedrockApiKey
+      }, { purpose: 'transcribe' });
+      if (auth.error) {
+        return { success: false, error: auth.error };
+      }
+
+      const region = resolveTranscribeRegion(payload?.region ?? appState?.transcribeRegion);
+      const clientConfig = { region };
+      if (auth.credentials) {
+        clientConfig.credentials = auth.credentials;
+      }
+      const client = createTranscribeClient(clientConfig);
+
+      const result = await createOrUpdateVocabulary({
+        client,
+        language: payload?.language,
+        phrasesText: payload?.phrasesText
+      });
+      if (!result.success) {
+        return result;
+      }
+
+      const updatedAppState = saveAppState(app, { transcribeVocabularyName: result.vocabularyName });
+      setAppState(updatedAppState);
+      console.log('Saved Transcribe custom vocabulary name:', result.vocabularyName);
+      return { success: true, vocabularyName: result.vocabularyName, state: result.state };
+    } catch (error) {
+      console.error('Error saving Transcribe vocabulary:', error?.message);
+      return { success: false, error: error?.message || 'Vocabulary save failed.' };
+    }
+  });
 
   ipcMain.handle('set-theme-preference', (_event, payload = {}) => {
     try {

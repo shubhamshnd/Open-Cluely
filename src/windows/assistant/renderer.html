@@ -418,6 +418,15 @@
             <label class="settings-label">Language</label>
             <select id="setting-transcribe-language" class="settings-input"></select>
           </div>
+          <div class="settings-group">
+            <label class="settings-label">Custom Words (optional)</label>
+            <textarea id="setting-transcribe-vocabulary-words" class="settings-input settings-textarea" rows="3" placeholder="One word or phrase per line"></textarea>
+            <div class="settings-helper-text">Transcribe phrases can't contain spaces, so spaces become hyphens (&quot;REST API&quot; → &quot;REST-API&quot;). Saved as vocabulary open-cluely-&lt;language&gt;.</div>
+            <div class="settings-input-row">
+              <button type="button" id="transcribe-vocabulary-save" class="settings-input-toggle">Create / update vocabulary</button>
+            </div>
+            <div id="transcribe-vocabulary-status" class="settings-helper-text"></div>
+          </div>
         </div>
         <div class="settings-group">
           <div class="settings-label-row">
