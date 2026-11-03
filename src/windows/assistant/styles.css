@@ -2913,7 +2913,7 @@ body:not(.theme-dark) .chat-manual-input:focus {
 }
 
 body:not(.theme-dark) .chat-manual-input::placeholder {
-  color: #64748b;
+  color: #475569;
 }
 
 body:not(.theme-dark) .chat-manual-send {
@@ -3365,7 +3365,7 @@ body.theme-dark .chat-manual-input {
 }
 
 body.theme-dark .chat-manual-input::placeholder {
-  color: #94a3b8;
+  color: #cbd5e1;
 }
 
 body.theme-dark .chat-manual-send {
