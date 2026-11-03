@@ -374,11 +374,13 @@ function createGnomeShortcutInstaller({
     }
 
     try {
-      const existing = await readExistingPaths();
-      await writePathList(mergeCustomKeybindingPaths(existing, ourPaths));
       for (const entry of entries) {
         await writeEntry(entry);
       }
+      // Publish only fully configured bindings. Re-read after the slow entry
+      // writes so unrelated shortcuts added in the meantime are retained.
+      const existing = await readExistingPaths();
+      await writePathList(mergeCustomKeybindingPaths(existing, ourPaths));
       return {
         success: true,
         message: `Added ${entries.length} shortcuts under GNOME Settings → Keyboard → Custom Shortcuts.`

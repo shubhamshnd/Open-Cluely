@@ -277,6 +277,19 @@ test('install adds our entries and preserves the user\'s custom0', async () => {
   ]);
 });
 
+test('failed entry configuration does not publish an installed shortcut list', async () => {
+  const { store, execFileImpl } = createFakeGsettings([CUSTOM0]);
+  const installer = createInstaller((file, args) => {
+    if (args[0] === 'set' && args[1].startsWith(`${CUSTOM_KEYBINDING_SCHEMA}:`)) {
+      return Promise.reject(new Error('write denied'));
+    }
+    return execFileImpl(file, args);
+  });
+  assert.equal((await installer.install()).success, false);
+  assert.equal(await installer.isInstalled(), false);
+  assert.deepEqual(store.list, [CUSTOM0]);
+});
+
 test('remove drops only our entries and resets them', async () => {
   const { store, execFileImpl } = createFakeGsettings([CUSTOM0]);
   const installer = createInstaller(execFileImpl);
