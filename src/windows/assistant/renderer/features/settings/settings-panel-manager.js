@@ -200,6 +200,54 @@ export function createSettingsPanelManager({
         }
     }
 
+    // Fetch buttons for OpenAI and Bedrock (Task D3).
+    async function fetchProviderModelList(provider, button, params, applyModels) {
+        try {
+            button.textContent = '...';
+            button.disabled = true;
+            const result = await window.electronAPI.listProviderModels({ provider, ...params });
+            if (!result?.success) {
+                showFeedback?.(result?.error || 'Could not fetch models.', 'error');
+                return;
+            }
+            applyModels(result.models);
+            showFeedback?.(`Found ${result.models.length} models.`, 'success');
+        } catch (error) {
+            console.error(`Failed to fetch ${provider} models:`, error);
+            showFeedback?.('Could not fetch models.', 'error');
+        } finally {
+            button.textContent = 'Fetch';
+            button.disabled = false;
+        }
+    }
+
+    function bindFetchProviderModels() {
+        const openaiBtn = byId('fetch-openai-models');
+        const bedrockBtn = byId('fetch-bedrock-models');
+
+        openaiBtn?.addEventListener('click', () => {
+            fetchProviderModelList(
+                'openai',
+                openaiBtn,
+                { apiKey: byId('setting-openai-key')?.value.trim() },
+                (models) => populateModelSelect(byId('setting-openai-model'), models, byId('setting-openai-model')?.value)
+            );
+        });
+
+        bedrockBtn?.addEventListener('click', () => {
+            fetchProviderModelList(
+                'bedrock',
+                bedrockBtn,
+                {
+                    region: byId('setting-bedrock-region')?.value.trim(),
+                    accessKeyId: byId('setting-bedrock-access-key')?.value.trim(),
+                    secretAccessKey: byId('setting-bedrock-secret')?.value.trim()
+                },
+                (models) => populateDatalist(byId('bedrock-model-options'), models)
+            );
+        });
+    }
+
     function bindFetchOllamaModels() {
         if (!fetchOllamaModelsBtn) {
             return;
@@ -430,6 +478,7 @@ export function createSettingsPanelManager({
     bindApiKeyVisibilityToggle(byId('setting-bedrock-secret'), byId('toggle-bedrock-secret-visibility'), 'AWS secret access');
     bindProviderToggle();
     bindFetchOllamaModels();
+    bindFetchProviderModels();
 
     return {
         normalizeWindowOpacityLevel,

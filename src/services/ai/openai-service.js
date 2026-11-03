@@ -15,6 +15,11 @@ const {
   resolveProgrammingLanguage
 } = require('../../config');
 
+// Chat-capable model ids; embeddings, speech, image and moderation models are
+// excluded so the picker only offers models this service can call.
+const OPENAI_CHAT_MODEL_PATTERN = /^(gpt-|chatgpt-|o\d)/;
+const OPENAI_NON_CHAT_PATTERN = /(embedding|whisper|tts|dall-e|moderation|audio|realtime|transcribe|image|search|instruct|davinci|babbage)/;
+
 class OpenAIService extends BaseProviderService {
   constructor(apiKey, options = {}) {
     super(options);
@@ -32,6 +37,24 @@ class OpenAIService extends BaseProviderService {
 
   ready() {
     return this.apiKey.length > 0;
+  }
+
+  // List chat-capable models for the settings "Fetch" button (Task D3).
+  async listModels() {
+    const page = await this.client.models.list();
+    let items = [];
+    if (page && typeof page[Symbol.asyncIterator] === 'function') {
+      // SDK Page objects auto-paginate when iterated.
+      for await (const item of page) {
+        items.push(item);
+      }
+    } else if (Array.isArray(page?.data)) {
+      items = page.data;
+    }
+    return items
+      .map((model) => String(model?.id || ''))
+      .filter((id) => OPENAI_CHAT_MODEL_PATTERN.test(id) && !OPENAI_NON_CHAT_PATTERN.test(id))
+      .sort();
   }
 
   updateConfiguration(options = {}) {
@@ -121,18 +144,6 @@ class OpenAIService extends BaseProviderService {
     const responseText = response.choices?.[0]?.message?.content || '';
     console.log(`[OpenAI API] Non-streaming ${request.type} request completed (${responseText.length} chars)`);
     return responseText;
-  }
-
-  // Used by the settings panel "Fetch" button (Task D3).
-  async listModels() {
-    const page = await this.client.models.list();
-    const models = [];
-    for await (const item of page) {
-      if (item && typeof item.id === 'string') {
-        models.push(item.id);
-      }
-    }
-    return models;
   }
 }
 

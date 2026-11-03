@@ -1,3 +1,4 @@
+const { fetchProviderModels } = require('../../../services/ai/model-lists');
 const {
   getAiProviderLabel,
   getOpenAIModels,
@@ -74,6 +75,19 @@ function registerSettingsIpc({
         ? appState.themePreference
         : null
     };
+  });
+
+  // Settings "Fetch" buttons: list models with the values currently typed in
+  // the form (not yet saved). Falls back to saved credentials when blank.
+  ipcMain.handle('list-provider-models', async (_event, payload = {}) => {
+    const provider = String(payload?.provider || '').trim().toLowerCase();
+    const saved = geminiRuntime.getProviderSettings(provider) || {};
+    return fetchProviderModels(provider, {
+      apiKey: payload?.apiKey || saved.apiKey,
+      region: payload?.region || saved.region,
+      accessKeyId: payload?.accessKeyId ?? saved.accessKeyId,
+      secretAccessKey: payload?.secretAccessKey ?? saved.secretAccessKey
+    });
   });
 
   ipcMain.handle('set-theme-preference', (_event, payload = {}) => {
