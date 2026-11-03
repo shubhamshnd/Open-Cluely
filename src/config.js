@@ -32,6 +32,18 @@ const ANTHROPIC_MODELS = [
   { id: 'claude-haiku-4-5', supportsImages: true }
 ];
 
+// Amazon Bedrock configuration (Converse API — one client covers Claude,
+// Llama, Nova, and other Bedrock models).
+// The AWS account must have model access enabled in the Bedrock console or
+// calls fail with AccessDeniedException. Cross-region inference profile ids
+// (the `us.` prefix) work as model ids too.
+const DEFAULT_BEDROCK_REGION = 'us-east-1';
+const BEDROCK_MODELS = [
+  { id: 'us.anthropic.claude-sonnet-5-5', supportsImages: true },
+  { id: 'amazon.nova-lite-v1:0', supportsImages: true },
+  { id: 'us.moonshotai.kimi-k3', supportsImages: false }
+];
+
 // AssemblyAI speech model configuration.
 // The first model in this list is treated as the default model everywhere.
 const ASSEMBLY_AI_SPEECH_MODELS = [
@@ -281,6 +293,56 @@ function anthropicModelSupportsImages(modelName) {
   return /^claude-(3|4|5|sonnet|haiku|opus)/i.test(String(modelName || ''));
 }
 
+// Bedrock configuration functions
+function getBedrockModels() {
+  if (!Array.isArray(BEDROCK_MODELS) || BEDROCK_MODELS.length === 0) {
+    throw new Error('Bedrock models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return BEDROCK_MODELS.map((entry) => ({ ...entry }));
+}
+
+function getDefaultBedrockModel() {
+  return getBedrockModels()[0].id;
+}
+
+function getDefaultBedrockRegion() {
+  return DEFAULT_BEDROCK_REGION;
+}
+
+function isConfiguredBedrockModel(modelId) {
+  return getBedrockModels().some((entry) => entry.id === modelId);
+}
+
+// Bedrock model ids are account- and region-specific (including inference
+// profile ids), so any non-empty id the user entered or fetched resolves.
+function resolveBedrockModel(modelId) {
+  const normalized = String(modelId || '').trim();
+  return normalized || getDefaultBedrockModel();
+}
+
+function resolveBedrockRegion(region) {
+  const normalized = String(region || '').trim();
+  return normalized || DEFAULT_BEDROCK_REGION;
+}
+
+// Vision support: curated flags win; otherwise a conservative id heuristic.
+// Unknown ids are treated as text-only so Screen AI falls back to OCR text.
+function bedrockModelSupportsImages(modelId) {
+  const configured = getBedrockModels().find((entry) => entry.id === modelId);
+  if (configured) {
+    return configured.supportsImages === true;
+  }
+
+  const normalized = String(modelId || '').toLowerCase();
+  return (
+    normalized.includes('claude') ||
+    normalized.includes('nova') ||
+    normalized.includes('vision') ||
+    normalized.includes('pixtral')
+  );
+}
+
 // Programming language configuration functions
 function getProgrammingLanguages() {
   if (!Array.isArray(PROGRAMMING_LANGUAGES) || PROGRAMMING_LANGUAGES.length === 0) {
@@ -382,8 +444,15 @@ module.exports = {
   getDefaultProgrammingLanguage,
   getProgrammingLanguages,
   anthropicModelSupportsImages,
+  bedrockModelSupportsImages,
   getAnthropicModels,
+  getBedrockModels,
   getDefaultAnthropicModel,
+  getDefaultBedrockModel,
+  getDefaultBedrockRegion,
+  isConfiguredBedrockModel,
+  resolveBedrockModel,
+  resolveBedrockRegion,
   resolveAnthropicModel,
   isConfiguredAnthropicModel,
   isConfiguredAssemblyAiSpeechModel,
