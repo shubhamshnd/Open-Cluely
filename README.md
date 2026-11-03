@@ -100,13 +100,17 @@ Use Notes to produce a shareable record at the end of a meeting or interview deb
 
 ### Requirements
 
-- Windows 10/11 is the primary development target for this repo.
+- Windows 10/11 is the primary development target for this repo; Linux is supported with the limitations listed below.
 - Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
 - npm `10+`
 - At least one Gemini API key (configured in the app Settings UI)
 - One AssemblyAI API key (configured in the app Settings UI)
 
+**Linux screenshot support:** the primary capture path (`screenshot-desktop`) shells out to an external tool — install `gnome-screenshot`, `scrot`, or ImageMagick (`import`) on X11, or `grim` on Wayland. If none of these is present, the app automatically falls back to Electron's built-in `desktopCapturer` (works on X11 and on Wayland via the XDG desktop portal), which covers the common case with no extra install. If both paths fail, the UI shows an explicit error instead of failing silently.
+
 ### Setup
+
+Windows (PowerShell):
 
 ```powershell
 nvm install 20.20.1
@@ -115,7 +119,22 @@ npm ci
 Copy-Item .env.example .env
 ```
 
+Linux / macOS (bash):
+
+```bash
+nvm install 20.20.1
+nvm use 20.20.1
+npm ci
+cp .env.example .env
+```
+
 API keys are configured from the in-app Settings panel after launch.
+
+On Linux under Wayland, global shortcuts may not register through the default Ozone backend. If they don't, start the app through XWayland:
+
+```bash
+npm start -- --ozone-platform=x11
+```
 
 Start the app:
 
@@ -141,18 +160,22 @@ npm run build:win
 This creates:
 
 ```text
-dist/GoogleChrome.exe
+dist/OpenCluely.exe
 ```
 
-You can then run the packaged app directly by double-clicking `dist/GoogleChrome.exe`.
+You can then run the packaged app directly by double-clicking `dist/OpenCluely.exe`.
 
-### Native Windows Build Tools
+### Native build tools
 
-This app depends on native modules. If `npm ci` fails with `node-gyp` or Visual Studio toolchain errors, install the C++ build tools and Python:
+None are required. `package-lock.json` contains no `gypfile` entries and no install scripts that compile native code (the only `postinstall` is the harmless `opencollective-postinstall` banner), so `npm ci` does not need Visual Studio Build Tools, Python, or a C++ compiler on any OS.
 
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
+### Known limitations on Linux
+
+- **Content protection does not hide the window.** `HIDE_FROM_SCREEN_CAPTURE` / `setContentProtection` is only effective on Windows and macOS. On Linux the window is visible to screen capture and screen sharing.
+- **System-audio capture is limited.** Capturing what the speakers play (the `Host` source) is not supported the way it is on Windows; the microphone source works. The app reports a clear error instead of failing silently.
+- **Screenshots have a fallback.** If no external tool (`gnome-screenshot`, `scrot`, `import`, `grim`) is installed, the app uses Electron's `desktopCapturer`. On Wayland this goes through the XDG desktop portal and may show a permission prompt.
+- **Global shortcuts on Wayland** may need `--ozone-platform=x11` (see Setup).
+- Only the AppImage target is built on Linux; running it on newer distros may need `libfuse2`.
 
 ## Configuration
 
@@ -304,8 +327,11 @@ All keyboard shortcuts are customizable. Configure them in `src/config.js` to ma
 - `npm start` runs the app from source.
 - `npm run start:hidden` launches it in background mode from source.
 - `npm run dev` enables Electron logging.
+- `npm test` runs every `test/*.test.js` file via `scripts/run-tests.js` (works on Node 18-24; a bare `node --test test` fails on Node 24).
 - `npm run build:win` creates the portable Windows executable.
-- `npm run build` runs the default `electron-builder` flow.
+- `npm run build:linux` creates the Linux AppImage.
+- `npm run build:mac` creates the macOS build.
+- `npm run build` builds for the current OS.
 
 ## Build
 
@@ -318,39 +344,40 @@ npm run build:win
 Expected output:
 
 ```text
-dist/GoogleChrome.exe
+dist/OpenCluely.exe
 ```
+
+On Linux: `npm run build:linux` produces `dist/Open Cluely-1.0.0.AppImage`.
 
 Notes:
 
 - This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
 - `.env` is **not** bundled during packaging; packaged builds read settings from `cache/app-state.json` in the user-data directory (edit them from the in-app Settings panel).
 - The current Windows build is configured as a portable `x64` target with:
-  - Product name: `Google Chrome (2)`
-  - Executable name: `GoogleChrome.exe`
-  - App ID: `com.google.chrome`
-  - Publisher name: `Google LLC`
+  - Product name: `Open Cluely`
+  - Executable name: `OpenCluely.exe`
+  - App ID: `com.opencluely.app`
 - If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
-- The repo already includes [`assets/chrome.ico`](./assets/chrome.ico) for the Windows target. Add `assets/chrome.icns` and `assets/chrome.png` before relying on the macOS or Linux targets defined in `package.json`.
+- Original app icons for all three platforms live in [`assets/`](./assets/) (`icon.ico`, `icon.icns`, `icon.png`) and are wired into `package.json`.
 
 ### Running The Built App
 
 After building:
 
 1. Open the `dist/` folder.
-2. Run `GoogleChrome.exe`.
+2. Run `OpenCluely.exe`.
 3. If you want background launch behavior, either set `START_HIDDEN=true` before building or launch with:
 
 ```powershell
-.\dist\GoogleChrome.exe --start-hidden
+.\dist\OpenCluely.exe --start-hidden
 ```
 
 ### Build Checks
 
 After packaging, verify:
 
-- `dist/GoogleChrome.exe` exists
-- the executable shows the Chrome icon
+- `dist/OpenCluely.exe` exists
+- the executable shows the Open Cluely icon
 - the app launches correctly without needing `npm start`
 
 For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md).
