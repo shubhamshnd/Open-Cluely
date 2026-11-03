@@ -119,6 +119,12 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
   const wss = new WebSocketServer({ server: httpServer });
 
+  // ws re-emits the attached HTTP server's 'error' (e.g. EADDRINUSE) on the
+  // WebSocketServer. Without a listener that becomes an uncaught exception and
+  // Electron shows a crash dialog. httpServer's own 'error' handler below
+  // already records and logs it, so nothing else to do here.
+  wss.on('error', () => {});
+
   wss.on('connection', (ws) => {
     clients.add(ws);
     setClientCount(clients.size);
