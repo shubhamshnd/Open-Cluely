@@ -53,6 +53,21 @@ function isAbortError(error) {
   return error?.name === 'AbortError' || error?.name === 'AbortSignalTimeoutError';
 }
 
+// Auth/credential failures get the credential label ("Amazon Transcribe
+// credentials (profile transcribe-profile)") so the user can tell WHICH identity AWS
+// rejected; transport errors (socket, timeout) keep the plain connection
+// prefix. Matching is on the SDK error name first, then message wording —
+// never on key material (SDK messages don't echo secrets, and the label
+// itself carries none).
+function isCredentialError(error) {
+  const name = String(error?.name || '');
+  if (/AccessDenied|UnrecognizedClient|InvalidSignature|ExpiredToken|CredentialsProvider|TokenRefresh|Unauthorized|InvalidClientToken/i.test(name)) {
+    return true;
+  }
+  const message = String(error?.message || '');
+  return /not authorized|access denied|signature|security token|credential|session token|expired|unable to locate/i.test(message);
+}
+
 function createAwsTranscribeService({
   getTranscribeSettings,
   getGeminiService,
@@ -301,9 +316,15 @@ function createAwsTranscribeService({
         message: error?.message || 'Unknown Transcribe error'
       });
       sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'stream-error');
+      // Credential failures name the identity in use ("Amazon Transcribe
+      // credentials (profile transcribe-profile): …") so the user knows WHICH
+      // credential set AWS rejected; transport errors keep the plain prefix.
+      const errorText = isCredentialError(error)
+        ? `${session.credentialLabel}: ${error?.message || 'Unknown Transcribe error'}`
+        : `Connection error (${resolvedSource}): ${error?.message || 'Unknown Transcribe error'}`;
       sendToRenderer('vosk-error', session.withAttempt({
         source: resolvedSource,
-        error: `Connection error (${resolvedSource}): ${error?.message || 'Unknown Transcribe error'}`,
+        error: errorText,
         sessionId: session.id
       }));
       resetSourceState(resolvedSource);
@@ -420,6 +441,7 @@ function createAwsTranscribeService({
         client,
         abortController: new AbortController(),
         queue: { chunks: [], waiting: null, ended: false },
+        credentialLabel: auth.credentialLabel || 'Amazon Transcribe credentials',
         withAttempt
       };
 

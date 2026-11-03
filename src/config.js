@@ -78,6 +78,17 @@ const STT_PROVIDER_LABELS = {
   transcribe: 'Amazon Transcribe'
 };
 
+// Amazon Transcribe can either reuse the shared AWS auth block above
+// ('inherit' — the default, exactly the historical behavior) or sign in with
+// its own IAM identity: a different named profile or its own access keys. A
+// Bedrock API key is not offered here: Transcribe has no bearer scheme.
+const TRANSCRIBE_AUTH_MODES = ['inherit', 'profile', 'keys'];
+const TRANSCRIBE_AUTH_MODE_LABELS = {
+  inherit: 'Same as Bedrock (default)',
+  profile: 'Different AWS profile',
+  keys: 'Access key + secret (+ optional session token)'
+};
+
 // Amazon Transcribe streaming configuration.
 const DEFAULT_TRANSCRIBE_REGION = 'us-east-1';
 const TRANSCRIBE_LANGUAGES = ['en-US', 'en-IN', 'en-GB', 'en-AU', 'hi-IN'];
@@ -464,6 +475,23 @@ function resolveTranscribeLanguage(language) {
   return isConfiguredTranscribeLanguage(language) ? language : getDefaultTranscribeLanguage();
 }
 
+// Amazon Transcribe auth split configuration functions
+function getTranscribeAuthModes() {
+  return [...TRANSCRIBE_AUTH_MODES];
+}
+
+function getTranscribeAuthModeLabels() {
+  return { ...TRANSCRIBE_AUTH_MODE_LABELS };
+}
+
+function isConfiguredTranscribeAuthMode(mode) {
+  return TRANSCRIBE_AUTH_MODES.includes(mode);
+}
+
+function resolveTranscribeAuthMode(mode, fallback = TRANSCRIBE_AUTH_MODES[0]) {
+  return isConfiguredTranscribeAuthMode(mode) ? mode : fallback;
+}
+
 function getDefaultTranscribeRegion() {
   return DEFAULT_TRANSCRIBE_REGION;
 }
@@ -555,6 +583,10 @@ module.exports = {
   getDefaultTranscribeLanguage,
   isConfiguredTranscribeLanguage,
   resolveTranscribeLanguage,
+  getTranscribeAuthModes,
+  getTranscribeAuthModeLabels,
+  isConfiguredTranscribeAuthMode,
+  resolveTranscribeAuthMode,
   getDefaultTranscribeRegion,
   resolveTranscribeRegion,
   getAssemblyAiSpeechModels,

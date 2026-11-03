@@ -115,7 +115,9 @@ async function startApplication() {
   });
 
   // Amazon Transcribe: the second STT provider. Reads its region/language/
-  // vocabulary and the shared AWS auth state from app state at start time.
+  // vocabulary and AWS auth state from app state at start time — the shared
+  // block plus the optional Transcribe-only override (transcribeAuthMode
+  // 'inherit' means the shared block, exactly the historical behavior).
   const awsTranscribeService = createAwsTranscribeService({
     getTranscribeSettings: () => ({
       region: appState?.transcribeRegion,
@@ -127,7 +129,12 @@ async function startApplication() {
         awsAccessKeyId: appState?.awsAccessKeyId,
         awsSecretAccessKey: appState?.awsSecretAccessKey,
         awsSessionToken: appState?.awsSessionToken,
-        bedrockApiKey: appState?.bedrockApiKey
+        bedrockApiKey: appState?.bedrockApiKey,
+        transcribeAuthMode: appState?.transcribeAuthMode,
+        transcribeAwsProfile: appState?.transcribeAwsProfile,
+        transcribeAwsAccessKeyId: appState?.transcribeAwsAccessKeyId,
+        transcribeAwsSecretAccessKey: appState?.transcribeAwsSecretAccessKey,
+        transcribeAwsSessionToken: appState?.transcribeAwsSessionToken
       }
     }),
     getGeminiService: () => geminiRuntime.getService(),
