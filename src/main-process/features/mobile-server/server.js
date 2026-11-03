@@ -161,8 +161,8 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
         // ── Ask AI ─────────────────────────────────────────────────────────
         case 'ask-ai': {
-          if (!geminiRuntime || !geminiRuntime.hasApiKeys()) {
-            sendTo(ws, 'error', { message: 'No API key configured. Add it in the desktop Settings.' });
+          if (!geminiRuntime || !geminiRuntime.isReady()) {
+            sendTo(ws, 'error', { message: 'AI provider is not configured. Add its credentials in the desktop Settings.' });
             break;
           }
 

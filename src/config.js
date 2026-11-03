@@ -1,7 +1,16 @@
 // AI provider configuration.
-// Supported providers: 'gemini' and 'ollama'.
-const AI_PROVIDERS = ['gemini', 'ollama'];
+// Supported providers: 'gemini', 'openai', 'anthropic', 'bedrock' and 'ollama'.
+const AI_PROVIDERS = ['gemini', 'openai', 'anthropic', 'bedrock', 'ollama'];
 const DEFAULT_AI_PROVIDER = 'gemini';
+
+// Human-readable labels for the settings panel and the top bar.
+const AI_PROVIDER_LABELS = {
+  gemini: 'Gemini',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  bedrock: 'Amazon Bedrock',
+  ollama: 'Ollama'
+};
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 const DEFAULT_OLLAMA_MODEL = 'llama3.2';
@@ -193,6 +202,10 @@ function isConfiguredAiProvider(providerName) {
 
 function resolveAiProvider(providerName) {
   return isConfiguredAiProvider(providerName) ? providerName : DEFAULT_AI_PROVIDER;
+}
+
+function getAiProviderLabel(providerName) {
+  return AI_PROVIDER_LABELS[resolveAiProvider(providerName)] || resolveAiProvider(providerName);
 }
 
 function getDefaultOllamaBaseUrl() {
@@ -429,6 +442,7 @@ function getKeyboardShortcutAccelerator(shortcutId) {
 
 module.exports = {
   getAiProviders,
+  getAiProviderLabel,
   getDefaultAiProvider,
   getDefaultOllamaBaseUrl,
   getDefaultOllamaModel,

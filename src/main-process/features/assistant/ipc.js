@@ -1,4 +1,6 @@
-﻿function registerAssistantIpc({
+﻿const { getAiProviderLabel } = require('../../../config');
+
+function registerAssistantIpc({
   ipcMain,
   screenshotManager,
   ocrService,
@@ -9,6 +11,11 @@
   quitApplication
 }) {
   let chatContext = [];
+
+  function getNotConfiguredMessage() {
+    const providerName = getAiProviderLabel(geminiRuntime.getActiveAiProvider());
+    return `${providerName} is not configured. Add its credentials in Settings.`;
+  }
 
   function getAllKeysUnavailableMessage() {
     return 'All configured Gemini API keys are currently unavailable (quota exhausted or invalid). Please wait and try again later.';
@@ -26,8 +33,9 @@
       return 'Cannot connect to Ollama. Make sure Ollama is running locally.';
     }
 
-    if (normalizedMessage.includes('no api key configured') || normalizedMessage.includes('no gemini api key')) {
-      return 'No Gemini API key configured. Add it in Settings.';
+    if (normalizedMessage.includes('no api key configured') || normalizedMessage.includes('no gemini api key') ||
+      normalizedMessage.includes('is not configured')) {
+      return getNotConfiguredMessage();
     }
 
     if (
@@ -78,9 +86,9 @@
     console.log('Programming language preference:', geminiRuntime.getActiveProgrammingLanguage());
     console.log('Screenshots count:', screenshotManager.getScreenshotsCount());
 
-    if (!geminiRuntime.hasApiKeys()) {
+    if (!geminiRuntime.isReady()) {
       sendToRenderer('analysis-result', {
-        error: 'No Gemini API key configured. Add it in Settings.'
+        error: getNotConfiguredMessage()
       });
       return;
     }
@@ -193,8 +201,8 @@
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-ask-ai');
 
-      if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+      if (!geminiRuntime.isReady()) {
+        throw new Error(getNotConfiguredMessage());
       }
 
       const transcriptContext = typeof payload?.transcriptContext === 'string'
@@ -320,8 +328,8 @@
   ipcMain.handle('suggest-response', async (_event, context) => {
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-suggest');
-      if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+      if (!geminiRuntime.isReady()) {
+        throw new Error(getNotConfiguredMessage());
       }
 
       const payload = typeof context === 'object' && context !== null
@@ -362,8 +370,8 @@
   ipcMain.handle('generate-meeting-notes', async (_event, payload = {}) => {
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-notes');
-      if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+      if (!geminiRuntime.isReady()) {
+        throw new Error(getNotConfiguredMessage());
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
@@ -398,8 +406,8 @@
   ipcMain.handle('generate-follow-up-email', async () => {
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-followup');
-      if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+      if (!geminiRuntime.isReady()) {
+        throw new Error(getNotConfiguredMessage());
       }
 
       const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
@@ -420,8 +428,8 @@
   ipcMain.handle('answer-question', async (_event, question) => {
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-answer');
-      if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+      if (!geminiRuntime.isReady()) {
+        throw new Error(getNotConfiguredMessage());
       }
 
       const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
@@ -442,8 +450,8 @@
   ipcMain.handle('get-conversation-insights', async (_event, payload = {}) => {
     try {
       assemblyAiService.flushAllSttHistoryBuffers('pre-insights');
-      if (!geminiRuntime.hasApiKeys()) {
-        throw new Error('No Gemini API key configured. Add it in Settings.');
+      if (!geminiRuntime.isReady()) {
+        throw new Error(getNotConfiguredMessage());
       }
 
       const contextStringOverride = typeof payload?.contextString === 'string'
