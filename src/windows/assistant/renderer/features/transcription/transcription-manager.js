@@ -2,6 +2,18 @@ import { getSystemAudioUnsupportedMessage, isSystemAudioUnsupportedError } from 
 
 const MAX_MONITOR_LOG_ENTRIES = 80;
 
+// Compact monitor rule: the full panel shows while any source is doing
+// something (connecting, listening, error) or when the user asked for it;
+// idle collapses to the single-line header so the chat gets the height.
+export function resolveMonitorExpanded({ sourceStatuses, userOverride }) {
+    if (userOverride === true || userOverride === false) {
+        return userOverride;
+    }
+    return Object.values(sourceStatuses || {}).some(
+        (status) => status === 'connecting' || status === 'listening' || status === 'error'
+    );
+}
+
 export function createTranscriptionManager({
     transcriptionSourceState,
     normalizeSourceRule,
@@ -12,6 +24,9 @@ export function createTranscriptionManager({
     transcriptionToggle,
     sourceSystemToggle,
     sourceMicToggle,
+    transcriptionMonitor,
+    monitorHeader,
+    monitorChevron,
     monitorMasterState,
     monitorStatusSystem,
     monitorStatusMic,
@@ -23,6 +38,9 @@ export function createTranscriptionManager({
     isAutoScrollEnabled = () => true,
     isChatNearBottom = () => true
 }) {
+    // null = automatic (expanded while a source is active); true/false = the
+    // user's explicit click choice until they click again.
+    let monitorUserOverride = null;
     let micAudioContext = null;
     let micMediaStream = null;
     let micScriptProcessor = null;
@@ -101,6 +119,12 @@ export function createTranscriptionManager({
         const resolvedSource = normalizeSource(source);
         transcriptionSourceState.setSourceStatus(resolvedSource, status);
 
+        // A live source always re-engages automatic expansion: a user's
+        // collapse choice must never hide fresh transcription activity.
+        if (status === 'connecting' || status === 'listening' || status === 'error') {
+            monitorUserOverride = null;
+        }
+
         if (typeof liveText === 'string' && liveText.trim().length > 0) {
             monitorLastText[resolvedSource] = liveText.trim();
         }
@@ -131,6 +155,23 @@ export function createTranscriptionManager({
 
     function renderMonitorState() {
         updateTranscriptionUI();
+
+        const expanded = resolveMonitorExpanded({
+            sourceStatuses,
+            userOverride: monitorUserOverride
+        });
+        if (transcriptionMonitor) {
+            transcriptionMonitor.classList.toggle('compact', !expanded);
+        }
+        if (monitorHeader) {
+            monitorHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            monitorHeader.title = expanded
+                ? 'Hide transcription details'
+                : 'Show transcription details';
+        }
+        if (monitorChevron) {
+            monitorChevron.textContent = expanded ? '▾' : '▸';
+        }
 
         const statusMap = {
             off: 'Off',
@@ -217,6 +258,18 @@ export function createTranscriptionManager({
             row.textContent = `${formatMonitorTime(item.timestamp)} ${sourcePrefix}${item.event}: ${item.message}${metaText}`;
             monitorLogList.appendChild(row);
         }
+    }
+
+    // Header click: pin the panel to the opposite of its current effective
+    // state; the next click flips it back. Source activity changes return to
+    // automatic behavior so a live source is never hidden.
+    function toggleMonitorExpanded() {
+        const current = resolveMonitorExpanded({
+            sourceStatuses,
+            userOverride: monitorUserOverride
+        });
+        monitorUserOverride = !current;
+        renderMonitorState();
     }
 
     function resetFinalTranscriptBuffer(source) {
@@ -833,6 +886,7 @@ export function createTranscriptionManager({
         addMonitorLog,
         updateTranscriptionUI,
         renderMonitorState,
+        toggleMonitorExpanded,
         setSourceSelected,
         toggleMasterTranscription,
         flushAllFinalTranscripts,

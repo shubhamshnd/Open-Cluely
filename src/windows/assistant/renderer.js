@@ -177,6 +177,9 @@ async function copyMobileUrlToClipboard() {
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
+const transcriptionMonitor = document.getElementById('transcription-monitor');
+const monitorHeader = document.getElementById('monitor-header');
+const monitorChevron = document.getElementById('monitor-chevron');
 const monitorMasterState = document.getElementById('monitor-master-state');
 const monitorStatusSystem = document.getElementById('monitor-status-system');
 const monitorStatusMic = document.getElementById('monitor-status-mic');
@@ -322,6 +325,9 @@ const transcriptionManager = createTranscriptionManager({
     transcriptionToggle,
     sourceSystemToggle,
     sourceMicToggle,
+    transcriptionMonitor,
+    monitorHeader,
+    monitorChevron,
     monitorMasterState,
     monitorStatusSystem,
     monitorStatusMic,
@@ -352,6 +358,16 @@ async function init() {
     if (chatAutoScrollToggle) {
         chatAutoScrollToggle.addEventListener('click', () => setAutoScrollEnabled(!autoScrollEnabledState));
         paintAutoScrollToggle();
+    }
+    if (monitorHeader) {
+        const onMonitorHeaderToggle = () => transcriptionManager.toggleMonitorExpanded();
+        monitorHeader.addEventListener('click', onMonitorHeaderToggle);
+        monitorHeader.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onMonitorHeaderToggle();
+            }
+        });
     }
     if (window.electronAPI?.onClearFromMobile) {
         window.electronAPI.onClearFromMobile(() => {

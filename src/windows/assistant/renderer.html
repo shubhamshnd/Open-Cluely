@@ -139,11 +139,21 @@
       </div>
     </div>
     
-    <div id="transcription-monitor" class="transcription-monitor">
-      <div class="monitor-header">
+    <div id="transcription-monitor" class="transcription-monitor compact">
+      <div
+        id="monitor-header"
+        class="monitor-header"
+        role="button"
+        tabindex="0"
+        aria-expanded="false"
+        aria-controls="monitor-details"
+        title="Show or hide transcription details"
+      >
         <span class="monitor-title">Transcription Monitor</span>
         <span id="monitor-master-state" class="monitor-master-state">Idle</span>
+        <span id="monitor-chevron" class="monitor-chevron" aria-hidden="true">▸</span>
       </div>
+      <div id="monitor-details" class="monitor-details">
       <div class="monitor-source-grid">
         <div class="monitor-source-row">
           <span class="monitor-source-label">Host</span>
@@ -157,6 +167,7 @@
         </div>
       </div>
       <div id="monitor-log-list" class="monitor-log-list"></div>
+      </div>
     </div>
 
     <!-- Chat Interface -->
