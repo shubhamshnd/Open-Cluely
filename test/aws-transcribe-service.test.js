@@ -351,6 +351,19 @@ test('custom vocabulary and language reach the StartStreamTranscription command'
   await flushTicks();
 });
 
+test('server stream end releases the request audio iterator and client without an explicit stop', async () => {
+  const { service, fakeState } = createHarness({ fake: { events: [final('complete')] } });
+  service.startAssemblyAiStream('system', { attemptId: 'server-end' });
+  await flushTicks();
+  let audioEnded = false;
+  fakeState.streamDrained.then(() => { audioEnded = true; });
+  await flushTicks();
+  service.stopVoiceRecognition({ source: 'system', attemptId: 'server-end' });
+  service.dispose();
+  assert.equal(audioEnded, true, 'the request audio iterator must not remain waiting after server termination');
+  assert.equal(fakeState.destroyed, true, 'the client must not be lost when the session slot is reset');
+});
+
 test('chunks are dropped (counted, debug-logged) when no session exists', () => {
   const { service, sent } = createHarness();
   for (let index = 0; index < 25; index += 1) {

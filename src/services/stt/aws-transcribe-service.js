@@ -306,6 +306,10 @@ function createAwsTranscribeService({
         sessionId: session.id
       }));
       resetSourceState(resolvedSource);
+    } finally {
+      // Every terminal path owns cleanup, including server EOF and errors.
+      // Once the session slot is reset, a later Stop/dispose cannot find it.
+      endSession(session);
     }
   }
 
