@@ -465,7 +465,8 @@ function updateThemeToggleUi() {
     themeToggleBtn.classList.toggle('is-dark', isDarkMode);
     themeToggleBtn.setAttribute('aria-pressed', isDarkMode ? 'true' : 'false');
     themeToggleBtn.setAttribute('aria-label', ariaLabel);
-    themeToggleBtn.removeAttribute('title');
+    // Keep the tooltip in sync with the dynamic label so it never goes stale.
+    themeToggleBtn.setAttribute('title', ariaLabel);
 }
 
 function applyTheme(theme, options = {}) {
@@ -637,6 +638,7 @@ function updateProviderBadge(settings) {
     const provider = settings?.aiProviderLabels?.[settings.aiProvider] || settings?.aiProvider || '';
     const model = settings?.activeModelName || '';
     badge.textContent = provider && model ? `${provider} \u00B7 ${model}` : provider;
+    badge.title = badge.textContent || 'Active AI provider and model';
 }
 
 async function loadShortcutConfig() {
@@ -1125,12 +1127,13 @@ function showFeedback(message, type = 'info') {
         statusText.className = `status-text ${type} show`;
         statusText.style.display = 'block';
 
+        const visibleMs = type === 'error' ? 8000 : 3000;
         setTimeout(() => {
             statusText.classList.remove('show');
             setTimeout(() => {
                 statusText.style.display = 'none';
             }, 300);
-        }, 3000);
+        }, visibleMs);
     }
 }
 
