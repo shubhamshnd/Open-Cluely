@@ -15,7 +15,7 @@ Each OS target must be built on that OS (or a matching CI runner). The Windows a
 
 ## Prerequisites
 
-- Node.js 18+ (20 or later recommended) and npm 10+.
+- Node.js 20.19+ (or 22.12+) and npm 10+. `npm test` needs at least 20.19 to import the renderer's ES modules.
 - No C++ toolchain, Visual Studio Build Tools, or Python is needed. The dependency tree has no native modules that compile on install (`package-lock.json` has no `gypfile` entries).
 - Linux: `libfuse2` may be required to *run* an AppImage on newer distros. It is not needed to build one.
 

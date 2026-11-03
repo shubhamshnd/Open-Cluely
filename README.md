@@ -327,7 +327,7 @@ All keyboard shortcuts are customizable. Configure them in `src/config.js` to ma
 - `npm start` runs the app from source.
 - `npm run start:hidden` launches it in background mode from source.
 - `npm run dev` enables Electron logging.
-- `npm test` runs every `test/*.test.js` file via `scripts/run-tests.js` (works on Node 18-24; a bare `node --test test` fails on Node 24).
+- `npm test` runs every `test/*.test.js` file via `scripts/run-tests.js` (needs Node 20.19+ or 22.12+; older Node cannot import the renderer's ES modules; a bare `node --test test` fails on Node 24).
 - `npm run build:win` creates the portable Windows executable.
 - `npm run build:linux` creates the Linux AppImage.
 - `npm run build:mac` creates the macOS build.

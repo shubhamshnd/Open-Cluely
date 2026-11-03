@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Cross-platform test runner that works on Node 18-24.
+ * Cross-platform test runner. Needs Node 20.19+ or 22.12+: the renderer
+ * modules under test are ES modules in plain .js files, which older Node
+ * (18, 20.18) cannot import without "type": "module".
  *
  * Problem: the quoted glob form and directory form for node --test
  * have inconsistent behavior across Node versions.
