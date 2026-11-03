@@ -216,16 +216,29 @@ function getAppStatePath(app) {
 }
 
 function ensureAppStateDir(app) {
-  fs.mkdirSync(getAppStateDir(app), { recursive: true });
+  const stateDir = getAppStateDir(app);
+  fs.mkdirSync(stateDir, { recursive: true });
+  // The state file holds API keys: the directory must not be listable by
+  // other users. Best-effort — on filesystems without POSIX modes (or
+  // Windows, where only the write bit maps) this is a no-op.
+  try {
+    fs.chmodSync(stateDir, 0o700);
+  } catch (_) { /* ignore */ }
 }
 
 function writeAppStateFile(app, state) {
   ensureAppStateDir(app);
+  const statePath = getAppStatePath(app);
   fs.writeFileSync(
-    getAppStatePath(app),
+    statePath,
     `${JSON.stringify(state, null, 2)}\n`,
     'utf8'
   );
+  // Tighten after every write: covers both fresh files (umask default is
+  // typically 0644) and pre-existing wide-open files.
+  try {
+    fs.chmodSync(statePath, 0o600);
+  } catch (_) { /* ignore */ }
 }
 
 function loadAppState(app) {
