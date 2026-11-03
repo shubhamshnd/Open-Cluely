@@ -333,6 +333,51 @@ test('a mid-stream error maps to vosk-error and ends the session', async () => {
   void service;
 });
 
+test('credential errors name the credential set in use; transport errors keep the plain prefix', async () => {
+  // AccessDenied with a Transcribe-only profile override: the error must say
+  // WHICH credentials failed ("(profile transcribe-profile)"), never the key material.
+  const denied = new Error('User is not authorized to perform transcribe:StartStreamTranscription');
+  denied.name = 'AccessDeniedException';
+  const { service, sent } = createHarness({
+    settings: {
+      awsAuth: {
+        awsAuthMode: 'profile',
+        awsProfile: 'bedrock-profile',
+        transcribeAuthMode: 'profile',
+        transcribeAwsProfile: 'transcribe-profile'
+      }
+    },
+    fake: { sendError: denied }
+  });
+  service.startAssemblyAiStream('system', { attemptId: 'att-cred' });
+  await flushTicks();
+  const credErrors = eventsOf(sent, 'vosk-error');
+  assert.equal(credErrors.length, 1);
+  assert.match(credErrors[0].error, /^Amazon Transcribe credentials \(profile transcribe-profile\): /);
+  assert.match(credErrors[0].error, /not authorized/);
+
+  // The inherit path labels the shared identity instead.
+  const denied2 = new Error('The security token included in the request is invalid.');
+  denied2.name = 'UnrecognizedClientException';
+  const harness2 = createHarness({
+    settings: { awsAuth: { awsAuthMode: 'profile', awsProfile: 'bedrock-profile', transcribeAuthMode: 'inherit' } },
+    fake: { sendError: denied2 }
+  });
+  harness2.service.startAssemblyAiStream('system', { attemptId: 'att-inh' });
+  await flushTicks();
+  const inhErrors = eventsOf(harness2.sent, 'vosk-error');
+  assert.equal(inhErrors.length, 1);
+  assert.match(inhErrors[0].error, /^Amazon Transcribe credentials \(shared profile bedrock-profile\): /);
+
+  // A transport error is NOT a credential failure: plain connection prefix.
+  const harness3 = createHarness({ fake: { sendError: new Error('socket hang up') } });
+  harness3.service.startAssemblyAiStream('system', { attemptId: 'att-net' });
+  await flushTicks();
+  const netErrors = eventsOf(harness3.sent, 'vosk-error');
+  assert.equal(netErrors.length, 1);
+  assert.match(netErrors[0].error, /^Connection error \(system\): socket hang up$/);
+});
+
 test('custom vocabulary and language reach the StartStreamTranscription command', async () => {
   const { service, fakeState } = createHarness({
     settings: { language: 'hi-IN', vocabularyName: 'open-cluely-hi-IN' },

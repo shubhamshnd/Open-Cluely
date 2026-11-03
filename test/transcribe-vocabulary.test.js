@@ -238,3 +238,54 @@ test('ipc: Bedrock API key mode is rejected for vocabulary creation before any A
   assert.equal(fakeVocab.sent.length, 0);
   assert.equal(savedStates.length, 0);
 });
+
+test('ipc: a Transcribe-only profile override rescues vocabulary creation from a shared apiKey mode', async () => {
+  // The shared block is a Bedrock API key (unusable for Transcribe), but the
+  // split gives Transcribe its own profile: creation must go through with
+  // credentials from fromIni({ profile: 'transcribe-profile' }), proving per-purpose
+  // isolation at the IPC layer. The provider is lazy — ~/.aws is never read.
+  const { handlers, fakeVocab, savedStates } = createSettingsHarness({
+    appState: {
+      awsAuthMode: 'apiKey',
+      bedrockApiKey: 'fake-...key',
+      transcribeAuthMode: 'profile',
+      transcribeAwsProfile: 'transcribe-profile'
+    }
+  });
+  const result = await handlers.get('transcribe-vocabulary-save')({}, {
+    language: 'en-US',
+    phrasesText: 'GraphQL'
+  });
+  assert.equal(result.success, true);
+  assert.equal(typeof fakeVocab.config.credentials, 'function', 'profile mode attaches a lazy credential provider');
+  assert.deepEqual(savedStates, [{ transcribeVocabularyName: 'open-cluely-en-US' }]);
+});
+
+test('ipc: payload-level override fields win over stored ones, masked secrets resolve against stored', async () => {
+  const storedSecret = 'fakeStoredTranscribeSecret0000';
+  const { handlers, fakeVocab } = createSettingsHarness({
+    appState: {
+      awsAuthMode: 'default',
+      transcribeAuthMode: 'keys',
+      transcribeAwsAccessKeyId: 'AKIAFAKESTORED00000',
+      transcribeAwsSecretAccessKey: storedSecret
+    }
+  });
+  // The form echoes the masked secret back: resolution must keep the stored
+  // one, and the static credentials object must carry it (functions aren't
+  // inspectable, but static keys are).
+  const { maskSecretValue } = require('../src/services/state/secret-masking.js');
+  const result = await handlers.get('transcribe-vocabulary-save')({}, {
+    language: 'en-US',
+    phrasesText: 'GraphQL',
+    transcribeAuthMode: 'keys',
+    transcribeAwsAccessKeyId: maskSecretValue('AKIAFAKESTORED00000'),
+    transcribeAwsSecretAccessKey: maskSecretValue(storedSecret),
+    transcribeAwsSessionToken: ''
+  });
+  assert.equal(result.success, true);
+  assert.deepEqual(fakeVocab.config.credentials, {
+    accessKeyId: 'AKIAFAKESTORED00000',
+    secretAccessKey: storedSecret
+  }, 'masked echo resolves to the stored split keys');
+});

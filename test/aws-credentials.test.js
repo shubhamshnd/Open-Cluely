@@ -134,6 +134,179 @@ test('readiness per mode and purpose', () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Transcribe-only credential split (transcribeAuthMode: inherit|profile|keys)
+// ---------------------------------------------------------------------------
+
+test('transcribe split: inherit (and missing/garbage mode) resolves the shared block with a label', () => {
+  const calls = [];
+  const fakeFromIni = (options) => { calls.push(options); return async () => ({}); };
+  for (const transcribeAuthMode of [undefined, null, '', 'inherit', 'bogus', 'apiKey']) {
+    const auth = resolveAwsAuth(
+      { awsAuthMode: 'profile', awsProfile: 'bedrock-profile', transcribeAuthMode },
+      { purpose: 'transcribe', fromIni: fakeFromIni }
+    );
+    assert.equal(auth.mode, 'profile');
+    assert.equal(auth.error, undefined);
+    assert.equal(auth.credentialLabel, 'Amazon Transcribe credentials (shared profile bedrock-profile)');
+  }
+  assert.equal(calls.length, 6);
+  assert.ok(calls.every((call) => call.profile === 'bedrock-profile'), 'the shared profile is used, never an override');
+
+  // Shared default chain and shared keys get their own labels.
+  assert.equal(
+    resolveAwsAuth({}, { purpose: 'transcribe' }).credentialLabel,
+    'Amazon Transcribe credentials (shared default credential chain)'
+  );
+  assert.equal(
+    resolveAwsAuth(keysState(), { purpose: 'transcribe' }).credentialLabel,
+    'Amazon Transcribe credentials (shared access keys)'
+  );
+});
+
+test('transcribe split: profile override uses transcribeAwsProfile, not the shared block', () => {
+  const calls = [];
+  const fakeProvider = async () => ({ accessKeyId: 'x', secretAccessKey: 'y' });
+  const auth = resolveAwsAuth(
+    {
+      awsAuthMode: 'profile',
+      awsProfile: 'bedrock-profile',
+      transcribeAuthMode: 'profile',
+      transcribeAwsProfile: 'transcribe-profile'
+    },
+    { purpose: 'transcribe', fromIni: (options) => { calls.push(options); return fakeProvider; } }
+  );
+  assert.equal(auth.error, undefined);
+  assert.equal(auth.credentials, fakeProvider);
+  assert.deepEqual(calls, [{ profile: 'transcribe-profile' }], 'fromIni receives the Transcribe profile name only');
+  assert.equal(auth.credentialLabel, 'Amazon Transcribe credentials (profile transcribe-profile)');
+
+  const missing = resolveAwsAuth({ transcribeAuthMode: 'profile' }, { purpose: 'transcribe' });
+  assert.match(missing.error, /different AWS profile/);
+  assert.match(missing.error, /Amazon Transcribe/);
+  assert.equal(missing.credentials, undefined);
+});
+
+test('transcribe split: keys override uses the transcribeAws* keys with optional session token', () => {
+  const auth = resolveAwsAuth(
+    {
+      awsAuthMode: 'profile',
+      awsProfile: 'bedrock-profile',
+      transcribeAuthMode: 'keys',
+      transcribeAwsAccessKeyId: FAKE_ACCESS_KEY,
+      transcribeAwsSecretAccessKey: FAKE_SECRET,
+      transcribeAwsSessionToken: FAKE_TOKEN
+    },
+    { purpose: 'transcribe' }
+  );
+  assert.deepEqual(auth.credentials, {
+    accessKeyId: FAKE_ACCESS_KEY,
+    secretAccessKey: FAKE_SECRET,
+    sessionToken: FAKE_TOKEN
+  });
+  assert.equal(auth.credentialLabel, 'Amazon Transcribe credentials (access keys)');
+
+  for (const broken of [
+    { transcribeAuthMode: 'keys', transcribeAwsAccessKeyId: FAKE_ACCESS_KEY },
+    { transcribeAuthMode: 'keys', transcribeAwsSecretAccessKey: FAKE_SECRET },
+    { transcribeAuthMode: 'keys' }
+  ]) {
+    const failed = resolveAwsAuth(broken, { purpose: 'transcribe' });
+    assert.match(failed.error, /Amazon Transcribe/);
+    assert.match(failed.error, /both an access key ID and a secret access key/);
+    assert.equal(failed.credentials, undefined);
+  }
+});
+
+test('transcribe split: per-purpose isolation — each side ignores the other\'s override', () => {
+  const state = {
+    awsAuthMode: 'profile',
+    awsProfile: 'bedrock-profile',
+    transcribeAuthMode: 'keys',
+    transcribeAwsAccessKeyId: FAKE_ACCESS_KEY,
+    transcribeAwsSecretAccessKey: FAKE_SECRET
+  };
+  const calls = [];
+  const fakeFromIni = (options) => { calls.push(options); return async () => ({}); };
+
+  // Bedrock sees only the shared block: no override fields, no label.
+  const bedrock = resolveAwsAuth(state, { purpose: 'bedrock', fromIni: fakeFromIni });
+  assert.equal(bedrock.mode, 'profile');
+  assert.equal(bedrock.credentialLabel, undefined, 'Bedrock results keep the pre-split shape');
+  assert.deepEqual(calls, [{ profile: 'bedrock-profile' }]);
+
+  // Transcribe sees only the override.
+  const transcribe = resolveAwsAuth(state, { purpose: 'transcribe', fromIni: fakeFromIni });
+  assert.equal(transcribe.mode, 'keys');
+  assert.equal(calls.length, 1, 'the override never touches the shared profile');
+
+  // And the reverse: a shared apiKey (unusable for Transcribe) stops being an
+  // error the moment Transcribe has its own profile.
+  const splitState = {
+    awsAuthMode: 'apiKey',
+    bedrockApiKey: FAKE_BEDROCK_KEY,
+    transcribeAuthMode: 'profile',
+    transcribeAwsProfile: 'transcribe-profile'
+  };
+  assert.match(
+    resolveAwsAuth({ awsAuthMode: 'apiKey', bedrockApiKey: FAKE_BEDROCK_KEY }, { purpose: 'transcribe' }).error,
+    /cannot be used for Amazon Transcribe/
+  );
+  const rescued = resolveAwsAuth(splitState, { purpose: 'transcribe', fromIni: fakeFromIni });
+  assert.equal(rescued.error, undefined);
+  assert.equal(rescued.credentialLabel, 'Amazon Transcribe credentials (profile transcribe-profile)');
+  // Bedrock keeps working with its API key in the very same state.
+  const bedrockApiKey = resolveAwsAuth(splitState, { purpose: 'bedrock' });
+  assert.deepEqual(bedrockApiKey.token, { token: FAKE_BEDROCK_KEY });
+});
+
+test('transcribe split: readiness follows the override fields', () => {
+  assert.equal(isAwsAuthReady({ transcribeAuthMode: 'profile', transcribeAwsProfile: 'transcribe-profile' }, { purpose: 'transcribe' }), true);
+  assert.equal(isAwsAuthReady({ transcribeAuthMode: 'profile' }, { purpose: 'transcribe' }), false);
+  assert.equal(
+    isAwsAuthReady({ transcribeAuthMode: 'keys', transcribeAwsAccessKeyId: FAKE_ACCESS_KEY }, { purpose: 'transcribe' }),
+    false
+  );
+  assert.equal(
+    isAwsAuthReady({
+      transcribeAuthMode: 'keys',
+      transcribeAwsAccessKeyId: FAKE_ACCESS_KEY,
+      transcribeAwsSecretAccessKey: FAKE_SECRET
+    }, { purpose: 'transcribe' }),
+    true
+  );
+  // 'inherit' readiness is the shared block's readiness, override fields ignored.
+  assert.equal(
+    isAwsAuthReady({ awsAuthMode: 'profile', transcribeAuthMode: 'inherit', transcribeAwsProfile: 'transcribe-profile' }, { purpose: 'transcribe' }),
+    false
+  );
+});
+
+test('transcribe split: error strings and labels never contain key material', () => {
+  const cases = [
+    resolveAwsAuth({ transcribeAuthMode: 'keys', transcribeAwsAccessKeyId: FAKE_ACCESS_KEY }, { purpose: 'transcribe' }),
+    resolveAwsAuth({ transcribeAuthMode: 'profile', transcribeAwsProfile: '' }, { purpose: 'transcribe' }),
+    resolveAwsAuth({
+      transcribeAuthMode: 'keys',
+      transcribeAwsAccessKeyId: FAKE_ACCESS_KEY,
+      transcribeAwsSecretAccessKey: FAKE_SECRET,
+      transcribeAwsSessionToken: FAKE_TOKEN
+    }, { purpose: 'transcribe' }),
+    resolveAwsAuth({ awsAuthMode: 'apiKey', bedrockApiKey: FAKE_BEDROCK_KEY }, { purpose: 'transcribe' })
+  ];
+  for (const auth of cases) {
+    for (const text of [auth.error, auth.credentialLabel]) {
+      if (!text) {
+        continue;
+      }
+      assert.doesNotMatch(text, new RegExp(FAKE_ACCESS_KEY));
+      assert.doesNotMatch(text, new RegExp(FAKE_SECRET.slice(0, 8)));
+      assert.doesNotMatch(text, new RegExp(FAKE_BEDROCK_KEY));
+      assert.doesNotMatch(text, new RegExp(FAKE_TOKEN));
+    }
+  }
+});
+
 test('profile-name parsing: config format keeps default/profile sections only', () => {
   const config = [
     '# comment',

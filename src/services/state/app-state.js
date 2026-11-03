@@ -4,7 +4,8 @@ const {
   isConfiguredAiProvider,
   isConfiguredAwsAuthMode,
   isConfiguredSttProvider,
-  isConfiguredTranscribeLanguage
+  isConfiguredTranscribeLanguage,
+  isConfiguredTranscribeAuthMode
 } = require('../../config');
 
 const APP_STATE_DIR_NAME = 'cache';
@@ -39,6 +40,14 @@ function getDefaultAppState() {
     transcribeRegion: null,
     transcribeLanguage: null,
     transcribeVocabularyName: null,
+    // Optional Transcribe-only AWS credentials. 'inherit' (the default) uses
+    // the shared block above, exactly the historical behavior; 'profile' and
+    // 'keys' use the transcribeAws* fields and leave Bedrock untouched.
+    transcribeAuthMode: 'inherit',
+    transcribeAwsProfile: null,
+    transcribeAwsAccessKeyId: null,
+    transcribeAwsSecretAccessKey: null,
+    transcribeAwsSessionToken: null,
     // Ordered provider names tried when the active provider fails with an
     // auth, quota, timeout or connection error. Empty = no fallback.
     providerFallback: [],
@@ -101,7 +110,11 @@ function sanitizeAppState(state) {
       'awsSessionToken',
       'bedrockApiKey',
       'transcribeRegion',
-      'transcribeVocabularyName'
+      'transcribeVocabularyName',
+      'transcribeAwsProfile',
+      'transcribeAwsAccessKeyId',
+      'transcribeAwsSecretAccessKey',
+      'transcribeAwsSessionToken'
     ]) {
       if (typeof state[key] === 'string' && state[key].trim()) {
         nextState[key] = state[key].trim();
@@ -135,6 +148,13 @@ function sanitizeAppState(state) {
 
     if (typeof state.transcribeLanguage === 'string' && isConfiguredTranscribeLanguage(state.transcribeLanguage.trim())) {
       nextState.transcribeLanguage = state.transcribeLanguage.trim();
+    }
+
+    // Transcribe-only auth split: an unrecognized stored mode (older/newer
+    // state files, hand edits) falls back to 'inherit' — the pre-split
+    // behavior — so a bad value can never break transcription.
+    if (typeof state.transcribeAuthMode === 'string' && isConfiguredTranscribeAuthMode(state.transcribeAuthMode.trim())) {
+      nextState.transcribeAuthMode = state.transcribeAuthMode.trim();
     }
 
     if (Array.isArray(state.providerFallback)) {

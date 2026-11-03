@@ -35,6 +35,11 @@ const FAKE_AWS_ACCESS_KEY = 'AKIAFAKEKEY0000000';
 const FAKE_AWS_SECRET = 'fakeSecretKeyfakeSecretKeyfakeSec';
 const FAKE_AWS_TOKEN = 'FQoGZXIvYXdzEfakeSessionTokenfakeSessionToken';
 const FAKE_BEDROCK_KEY = 'fake-bedrock-api-key-7777';
+// Transcribe-only split credentials (obviously fake; distinct last-4 so the
+// masked forms cannot be confused with the shared AWS keys above).
+const FAKE_TR_ACCESS_KEY = 'AKIAFAKETRANSCRIBE00';
+const FAKE_TR_SECRET = 'fakeTranscribeSecretfakeTranscribeKey';
+const FAKE_TR_TOKEN = 'FQoGZXIvYXdzEfakeTranscribeSessionTok';
 
 // ---------------------------------------------------------------------------
 // Pure masking helpers
@@ -185,7 +190,12 @@ const FULL_STATE = {
   awsAccessKeyId: FAKE_AWS_ACCESS_KEY,
   awsSecretAccessKey: FAKE_AWS_SECRET,
   awsSessionToken: FAKE_AWS_TOKEN,
-  bedrockApiKey: FAKE_BEDROCK_KEY
+  bedrockApiKey: FAKE_BEDROCK_KEY,
+  transcribeAuthMode: 'keys',
+  transcribeAwsProfile: 'transcribe-profile',
+  transcribeAwsAccessKeyId: FAKE_TR_ACCESS_KEY,
+  transcribeAwsSecretAccessKey: FAKE_TR_SECRET,
+  transcribeAwsSessionToken: FAKE_TR_TOKEN
 };
 
 const ALL_FAKE_SECRETS = [
@@ -197,7 +207,10 @@ const ALL_FAKE_SECRETS = [
   FAKE_AWS_ACCESS_KEY,
   FAKE_AWS_SECRET,
   FAKE_AWS_TOKEN,
-  FAKE_BEDROCK_KEY
+  FAKE_BEDROCK_KEY,
+  FAKE_TR_ACCESS_KEY,
+  FAKE_TR_SECRET,
+  FAKE_TR_TOKEN
 ];
 
 test('get-settings never returns a stored secret in cleartext', async () => {
@@ -218,6 +231,14 @@ test('get-settings never returns a stored secret in cleartext', async () => {
   assert.equal(settings.awsSessionToken, `${MASK_BULLETS}oken`);
   assert.equal(settings.bedrockApiKey, `${MASK_BULLETS}7777`);
 
+  // The Transcribe-only split: secrets masked, mode + profile name readable.
+  assert.equal(settings.transcribeAuthMode, 'keys');
+  assert.deepEqual(settings.transcribeAuthModes, ['inherit', 'profile', 'keys']);
+  assert.equal(settings.transcribeAwsProfile, 'transcribe-profile', 'profile names are not secrets');
+  assert.equal(settings.transcribeAwsAccessKeyId, `${MASK_BULLETS}BE00`);
+  assert.equal(settings.transcribeAwsSecretAccessKey, `${MASK_BULLETS}eKey`);
+  assert.equal(settings.transcribeAwsSessionToken, `${MASK_BULLETS}nTok`);
+
   // The "configured" flags the renderer actually needs still work.
   assert.equal(settings.hasGeminiApiKeys, true);
   assert.equal(settings.hasAssemblyAiApiKey, true);
@@ -231,6 +252,12 @@ test('get-settings with no stored secrets returns empty fields, not bullets', as
   assert.equal(settings.awsAccessKeyId, '');
   assert.equal(settings.hasGeminiApiKeys, false);
   assert.equal(settings.hasAssemblyAiApiKey, false);
+  // The split defaults to 'inherit' with empty fields.
+  assert.equal(settings.transcribeAuthMode, 'inherit');
+  assert.equal(settings.transcribeAwsProfile, '');
+  assert.equal(settings.transcribeAwsAccessKeyId, '');
+  assert.equal(settings.transcribeAwsSecretAccessKey, '');
+  assert.equal(settings.transcribeAwsSessionToken, '');
 });
 
 test('model Fetch preserves the original blank-key fallback and resolves masked credentials', async () => {
@@ -256,6 +283,7 @@ function baseSavePayload(overrides = {}) {
     bedrockApiKey: '',
     sttProvider: 'assemblyai',
     transcribeLanguage: 'en-US',
+    transcribeAuthMode: 'inherit',
     ...overrides
   };
 }
@@ -270,6 +298,54 @@ test('save-settings clears every stored secret when the form explicitly sends bl
     'awsAccessKeyId', 'awsSecretAccessKey', 'awsSessionToken', 'bedrockApiKey']) {
     assert.equal(saved[field] || '', '', `${field}: explicit empty must clear`);
   }
+});
+
+test('save-settings: transcribe split fields persist; masked echo keeps stored secrets, blank clears', async () => {
+  const { handlers, savedPartials } = createSettingsHarness({ appState: { ...FULL_STATE } });
+
+  // 1. Masked echo (the no-touch round trip): stored split secrets survive.
+  let result = await handlers.get('save-settings')({}, baseSavePayload({
+    transcribeAuthMode: 'keys',
+    transcribeAwsProfile: 'transcribe-profile',
+    transcribeAwsAccessKeyId: maskSecretValue(FAKE_TR_ACCESS_KEY),
+    transcribeAwsSecretAccessKey: maskSecretValue(FAKE_TR_SECRET),
+    transcribeAwsSessionToken: maskSecretValue(FAKE_TR_TOKEN)
+  }));
+  assert.equal(result.success, true);
+  let saved = savedPartials[savedPartials.length - 1];
+  assert.equal(saved.transcribeAuthMode, 'keys');
+  assert.equal(saved.transcribeAwsProfile, 'transcribe-profile');
+  assert.equal(saved.transcribeAwsAccessKeyId, FAKE_TR_ACCESS_KEY, 'masked echo must not overwrite the stored key');
+  assert.equal(saved.transcribeAwsSecretAccessKey, FAKE_TR_SECRET);
+  assert.equal(saved.transcribeAwsSessionToken, FAKE_TR_TOKEN);
+
+  // 2. Omitted fields keep the stored values too (older renderers).
+  result = await handlers.get('save-settings')({}, baseSavePayload());
+  assert.equal(result.success, true);
+  saved = savedPartials[savedPartials.length - 1];
+  assert.equal(saved.transcribeAuthMode, 'inherit', 'an omitted mode saves as inherit');
+  assert.equal(saved.transcribeAwsSecretAccessKey, FAKE_TR_SECRET, 'omitted secret field keeps the stored value');
+
+  // 3. Explicit blanks clear; a typed value replaces.
+  result = await handlers.get('save-settings')({}, baseSavePayload({
+    transcribeAuthMode: 'profile',
+    transcribeAwsProfile: 'transcribe-profile',
+    transcribeAwsAccessKeyId: '',
+    transcribeAwsSecretAccessKey: '',
+    transcribeAwsSessionToken: ''
+  }));
+  assert.equal(result.success, true);
+  saved = savedPartials[savedPartials.length - 1];
+  assert.equal(saved.transcribeAuthMode, 'profile');
+  assert.equal(saved.transcribeAwsAccessKeyId, null, 'explicit blank clears the stored key');
+  assert.equal(saved.transcribeAwsSecretAccessKey, null);
+  assert.equal(saved.transcribeAwsSessionToken, null);
+
+  // 4. An unknown mode can never persist: it sanitizes to 'inherit'.
+  result = await handlers.get('save-settings')({}, baseSavePayload({ transcribeAuthMode: 'bogus' }));
+  assert.equal(result.success, true);
+  saved = savedPartials[savedPartials.length - 1];
+  assert.equal(saved.transcribeAuthMode, 'inherit');
 });
 
 test('save-settings keeps stored secrets when the form echoes the masked values back', async () => {

@@ -23,6 +23,13 @@ test('defaults: empty state gets the default AWS auth mode and AssemblyAI STT', 
   assert.equal(state.transcribeRegion, null);
   assert.equal(state.transcribeLanguage, null);
   assert.equal(state.transcribeVocabularyName, null);
+  // The Transcribe-only credential split defaults to 'inherit' (shared
+  // credentials) with no stored override values — the pre-split behavior.
+  assert.equal(state.transcribeAuthMode, 'inherit');
+  assert.equal(state.transcribeAwsProfile, null);
+  assert.equal(state.transcribeAwsAccessKeyId, null);
+  assert.equal(state.transcribeAwsSecretAccessKey, null);
+  assert.equal(state.transcribeAwsSessionToken, null);
 });
 
 test('migration: legacy Bedrock key pair with no auth mode becomes mode keys', () => {
@@ -84,11 +91,44 @@ test('new fields are trimmed; unknown values fall back to safe defaults', () => 
   assert.equal(transcribe.transcribeLanguage, 'hi-IN');
 });
 
+test('transcribe auth split: valid modes survive, unknown modes sanitize to inherit', () => {
+  const profile = sanitizeAppState({
+    transcribeAuthMode: 'profile',
+    transcribeAwsProfile: ' transcribe-profile '
+  });
+  assert.equal(profile.transcribeAuthMode, 'profile');
+  assert.equal(profile.transcribeAwsProfile, 'transcribe-profile');
+
+  const keys = sanitizeAppState({
+    transcribeAuthMode: 'keys',
+    transcribeAwsAccessKeyId: ` ${FAKE_ACCESS_KEY} `,
+    transcribeAwsSecretAccessKey: ` ${FAKE_SECRET} `,
+    transcribeAwsSessionToken: ' tok '
+  });
+  assert.equal(keys.transcribeAuthMode, 'keys');
+  assert.equal(keys.transcribeAwsAccessKeyId, FAKE_ACCESS_KEY);
+  assert.equal(keys.transcribeAwsSecretAccessKey, FAKE_SECRET);
+  assert.equal(keys.transcribeAwsSessionToken, 'tok');
+
+  // Unknown/garbage modes can never break transcription: they become
+  // 'inherit' (the shared block), and a re-save keeps it stable.
+  for (const bogus of ['bogus', 'apiKey', 'PROFILE', '', null, undefined, 42]) {
+    const state = sanitizeAppState({ transcribeAuthMode: bogus });
+    assert.equal(state.transcribeAuthMode, 'inherit', `mode ${JSON.stringify(bogus)} must sanitize to inherit`);
+    assert.equal(sanitizeAppState(state).transcribeAuthMode, 'inherit');
+  }
+
+  // An explicit 'inherit' is kept as-is (not confused with "not migrated").
+  assert.equal(sanitizeAppState({ transcribeAuthMode: 'inherit' }).transcribeAuthMode, 'inherit');
+});
+
 test('default state shape stays complete', () => {
   const defaults = getDefaultAppState();
   for (const key of [
     'awsAuthMode', 'awsProfile', 'awsAccessKeyId', 'awsSecretAccessKey', 'awsSessionToken',
-    'bedrockApiKey', 'sttProvider', 'transcribeRegion', 'transcribeLanguage', 'transcribeVocabularyName'
+    'bedrockApiKey', 'sttProvider', 'transcribeRegion', 'transcribeLanguage', 'transcribeVocabularyName',
+    'transcribeAuthMode', 'transcribeAwsProfile', 'transcribeAwsAccessKeyId',
+    'transcribeAwsSecretAccessKey', 'transcribeAwsSessionToken'
   ]) {
     assert.ok(key in defaults, `missing ${key}`);
   }

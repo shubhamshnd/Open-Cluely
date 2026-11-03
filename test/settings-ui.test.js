@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { getAiProviders, getAwsAuthModes, getSttProviders } = require('../src/config');
+const { getAiProviders, getAwsAuthModes, getSttProviders, getTranscribeAuthModes } = require('../src/config');
 
 const html = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/renderer.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/styles.css'), 'utf8');
@@ -111,6 +111,50 @@ test('Transcribe custom vocabulary UI exists inside the Transcribe group', () =>
   // The helper explains the spaces-to-hyphens rule.
   assert.match(html, /spaces become hyphens/);
   assert.ok(manager.includes('transcribe-vocabulary-save'), 'vocabulary button not wired in settings-panel-manager');
+});
+
+test('Transcribe credential split UI: one option per split mode, per-mode groups hidden, manager wired', () => {
+  // The select offers exactly the configured split modes and lives inside
+  // the Transcribe STT group (below the shared AWS block).
+  const group = html.match(/<div id="transcribe-stt-group"[\s\S]*$/)?.[0] || '';
+  const select = group.match(/<select id="setting-transcribe-auth-mode"[\s\S]*?<\/select>/)?.[0] || '';
+  assert.ok(select, 'missing setting-transcribe-auth-mode in the Transcribe group');
+  const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(values, getTranscribeAuthModes());
+  assert.match(select, /Same as Bedrock \(default\)/);
+  assert.match(select, /Different AWS profile/);
+
+  // Every split field exists; the per-mode groups start hidden.
+  for (const id of [
+    'setting-transcribe-profile-select',
+    'setting-transcribe-profile',
+    'refresh-transcribe-profiles',
+    'setting-transcribe-access-key',
+    'setting-transcribe-secret',
+    'setting-transcribe-session-token'
+  ]) {
+    assert.ok(group.includes(`id="${id}"`), `missing ${id} in the Transcribe group`);
+  }
+  for (const groupId of ['transcribe-profile-group', 'transcribe-keys-group']) {
+    const matches = group.match(new RegExp(`<div id="${groupId}"[^>]*>`)) || [];
+    assert.equal(matches.length, 1, `missing group ${groupId}`);
+    assert.match(matches[0], /class="[^"]*\bhidden\b/, `${groupId} should start hidden`);
+  }
+
+  // Manager wiring: mode-change visibility toggle, profile select + Refresh,
+  // the save payload reader, and the Show toggles for the three key fields.
+  for (const marker of [
+    'updateTranscribeAuthModeVisibility',
+    'bindTranscribeAuthControls',
+    'readTranscribeAuthFormValues',
+    'populateTranscribeProfileOptions',
+    'refresh-transcribe-profiles',
+    'toggle-transcribe-access-key-visibility',
+    'toggle-transcribe-secret-visibility',
+    'toggle-transcribe-session-token-visibility'
+  ]) {
+    assert.ok(manager.includes(marker), `${marker} not wired in settings-panel-manager`);
+  }
 });
 
 test('stylesheet has a bare .hidden rule with display: none (provider groups rely on it)', () => {
