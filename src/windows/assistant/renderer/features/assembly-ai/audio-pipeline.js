@@ -1,5 +1,47 @@
 ﻿import { normalizeSource } from './source-state.js';
-import { createSystemAudioUnsupportedError } from './system-audio-errors.js';
+import { createSystemAudioUnsupportedError, NO_MONITOR_DEVICE_MESSAGE } from './system-audio-errors.js';
+
+const MONITOR_LABEL_PREFIX = 'Monitor of';
+
+// Pure device picker, exported for unit tests. `devices` is the array from
+// navigator.mediaDevices.enumerateDevices(). Returns the PipeWire/PulseAudio
+// "Monitor of <output>" audioinput to use for Linux host audio, preferring
+// the monitor of the default output; null when no monitor device exists.
+export function pickMonitorDevice(devices) {
+  const list = Array.isArray(devices) ? devices : [];
+  const monitors = list.filter(
+    (device) =>
+      device &&
+      device.kind === 'audioinput' &&
+      typeof device.label === 'string' &&
+      device.label.startsWith(MONITOR_LABEL_PREFIX)
+  );
+  if (monitors.length === 0) {
+    return null;
+  }
+
+  // The default output shows up as an audiooutput with deviceId 'default'
+  // whose label matches the real output, and PipeWire/Pulse names that
+  // output's monitor "Monitor of <same label>".
+  const defaultOutput = list.find(
+    (device) =>
+      device &&
+      device.kind === 'audiooutput' &&
+      device.deviceId === 'default' &&
+      typeof device.label === 'string' &&
+      device.label.length > 0
+  );
+  if (defaultOutput) {
+    const preferred = monitors.find(
+      (device) => device.label === `${MONITOR_LABEL_PREFIX} ${defaultOutput.label}`
+    );
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  return monitors[0];
+}
 
 const TARGET_SAMPLE_RATE = 16000;
 const TARGET_FRAME_MS = 100;
@@ -8,7 +50,7 @@ const TARGET_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * TARGET_FRAME_MS) /
 const MIN_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * MIN_FRAME_MS) / 1000);
 const WORKLET_MODULE_PATH = 'pcm-capture-worklet.js';
 
-export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedia }) {
+export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedia, enumerateDevices }) {
   const workletLoadedContexts = new WeakSet();
   const sourceSampleQueues = {
     mic: { chunks: [], length: 0 },
@@ -22,6 +64,12 @@ export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedi
     typeof getUserMedia === 'function'
       ? getUserMedia
       : (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+
+  // Also injectable for tests; used only by the Linux monitor-capture path.
+  const listMediaDevices =
+    typeof enumerateDevices === 'function'
+      ? enumerateDevices
+      : () => navigator.mediaDevices.enumerateDevices();
 
   function convertToPCM16(float32Data) {
     const int16Data = new Int16Array(float32Data.length);
@@ -138,6 +186,54 @@ export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedi
     }
 
     return stream;
+  }
+
+  // Linux host audio. Chromium's desktop-audio loopback is Windows-only, and
+  // on GNOME Wayland the desktop-capture call above would hold an
+  // xdg-desktop-portal screencast session open for the whole transcription
+  // while returning no audio. Capture the PipeWire/PulseAudio
+  // "Monitor of <output>" input instead — a plain audioinput, no screencast
+  // session, no video track.
+  async function getSystemAudioMonitorStream() {
+    let devices = await listMediaDevices();
+
+    // Device labels are only exposed after a microphone permission grant.
+    // If they are empty, do one short getUserMedia to trigger the grant,
+    // release its tracks immediately, then enumerate again.
+    const hasInputLabels = devices.some(
+      (device) =>
+        device &&
+        device.kind === 'audioinput' &&
+        typeof device.label === 'string' &&
+        device.label.length > 0
+    );
+    if (!hasInputLabels) {
+      try {
+        const permissionStream = await requestUserMedia({ audio: true });
+        permissionStream?.getTracks().forEach((track) => track.stop());
+      } catch (_) {
+        // Without the grant the labels stay empty and no monitor can be
+        // matched below, which surfaces the typed unsupported error.
+      }
+      devices = await listMediaDevices();
+    }
+
+    const monitorDevice = pickMonitorDevice(devices);
+    if (!monitorDevice) {
+      throw createSystemAudioUnsupportedError(NO_MONITOR_DEVICE_MESSAGE);
+    }
+
+    addMonitorLog('info', 'monitor-device', `Host audio: ${monitorDevice.label}`, 'system');
+
+    return requestUserMedia({
+      audio: {
+        deviceId: { exact: monitorDevice.deviceId },
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      },
+      video: false
+    });
   }
 
   function resetSourceSampleQueue(source) {
@@ -297,6 +393,7 @@ export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedi
   return {
     buildAudioProcessor,
     drainSourceSampleQueue,
+    getSystemAudioMonitorStream,
     getSystemAudioStream,
     isLikelyCameraTrack,
     resetChunkCounter,

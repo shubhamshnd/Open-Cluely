@@ -8,6 +8,9 @@ function createElectronApi(ipcRenderer) {
   return {
     ...invokeActions,
     ...eventActions,
+    // process.platform from the preload's Node context; the renderer uses it
+    // to pick the Linux host-audio path instead of guessing from the UA.
+    platform: process.platform,
     log: (message) => {
       console.log('PreloadAPI log:', message);
     },

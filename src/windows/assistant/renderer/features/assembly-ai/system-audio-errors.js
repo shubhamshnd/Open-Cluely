@@ -1,13 +1,15 @@
-// Typed error shared by the audio pipeline (which throws it when desktop/
+// Typed error shared by the audio pipeline (which throws it when host/
 // loopback audio cannot be captured) and the transcription manager (which
 // turns it into a clear, actionable message instead of a raw getUserMedia
-// failure). Chromium's desktop-audio loopback is Windows-only, so on Linux
-// host/system capture is genuinely unsupported, not merely broken.
+// failure). On Linux the host source captures the PipeWire/PulseAudio
+// "Monitor of <output>" input, so the only unsupported case left there is
+// a missing monitor device.
 
 export const SYSTEM_AUDIO_UNSUPPORTED = 'SYSTEM_AUDIO_UNSUPPORTED';
 
-const LINUX_UNSUPPORTED_MESSAGE =
-  "System/host audio capture isn't supported by Chromium on Linux. Use the Mic source, or route desktop audio through a PulseAudio/PipeWire 'Monitor of ...' device selected as your microphone.";
+export const NO_MONITOR_DEVICE_MESSAGE =
+  "No 'Monitor of …' audio device found. Make sure PipeWire/PulseAudio is running (pipewire-pulse), or pick the monitor device as your microphone.";
+const LINUX_UNSUPPORTED_MESSAGE = NO_MONITOR_DEVICE_MESSAGE;
 const GENERIC_UNSUPPORTED_MESSAGE =
   'System/host audio capture is unavailable on this platform. Use the Mic source instead.';
 
