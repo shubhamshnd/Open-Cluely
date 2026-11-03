@@ -20,6 +20,20 @@ function registerAssistantIpc({
   const TEXT_ONLY_NOTICE = 'This model cannot see images, so I am reading the text extracted from your screenshot instead.\n\n';
   const TEXT_ONLY_NO_TEXT_ERROR = 'This model cannot see images and no text could be extracted from the screenshot. Switch to a vision model in Settings or retake the screenshot.';
 
+  // The fallback provider can be text-only even when the active one sees
+  // images. Give it the OCR text (extracted lazily, once) instead of a blind
+  // prompt about a screenshot it cannot see; with no readable text, stop.
+  async function ensureOcrForService(service, currentOcrText, entries) {
+    if (!service || service.supportsImages !== false || String(currentOcrText || '').trim()) {
+      return currentOcrText;
+    }
+    const extracted = await ocrService.extractTextFromEntries(entries);
+    if (!String(extracted || '').trim()) {
+      throw new Error(TEXT_ONLY_NO_TEXT_ERROR);
+    }
+    return extracted;
+  }
+
   // Runs an AI action through the runtime's optional provider fallback. On a
   // switch the chat gets a line naming the provider that took over; for
   // Screen AI and Ask AI, whose text is shown verbatim, the line also leads
@@ -49,6 +63,10 @@ function registerAssistantIpc({
     const message = String(error?.message || '');
     const normalizedMessage = message.toLowerCase();
 
+    if (message === TEXT_ONLY_NO_TEXT_ERROR) {
+      return message;
+    }
+
     if (geminiRuntime.isAllKeysUnavailableError?.(error)) {
       return getAllKeysUnavailableMessage();
     }
@@ -73,7 +91,8 @@ function registerAssistantIpc({
       normalizedMessage.includes('401') ||
       normalizedMessage.includes('403')
     ) {
-      return 'Invalid Gemini API key. Please check the key values in Settings.';
+      const providerName = getAiProviderLabel(geminiRuntime.getActiveAiProvider());
+      return `Invalid ${providerName} credentials. Please check them in Settings.`;
     }
 
     if (
@@ -145,7 +164,7 @@ function registerAssistantIpc({
       sendToRenderer('ai-stream-start', { actionId: 'screenAi' });
 
       const textOnly = !geminiRuntime.activeSupportsImages();
-      const ocrText = geminiRuntime.getActiveAiProvider() === 'gemini' || textOnly
+      let ocrText = geminiRuntime.getActiveAiProvider() === 'gemini' || textOnly
         ? await ocrService.extractTextFromEntries(entries)
         : '';
 
@@ -158,11 +177,12 @@ function registerAssistantIpc({
         onChunk({ text: TEXT_ONLY_NOTICE, index: 0 });
       }
 
-      const answer = await runWithFallback('screenAi', (geminiService) => {
+      const answer = await runWithFallback('screenAi', async (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('AI model not initialized. Please check your API key.');
         }
 
+        ocrText = await ensureOcrForService(geminiService, ocrText, entries);
         return geminiService.analyzeScreenshots(
           imageParts,
           ocrText,
@@ -283,7 +303,7 @@ function registerAssistantIpc({
           usedScreenshots = true;
           usedScreenshotCount = imageParts.length;
           const textOnly = !geminiRuntime.activeSupportsImages();
-          const ocrText = geminiRuntime.getActiveAiProvider() === 'gemini' || textOnly
+          let ocrText = geminiRuntime.getActiveAiProvider() === 'gemini' || textOnly
             ? await ocrService.extractTextFromEntries(entries)
             : '';
 
@@ -299,11 +319,12 @@ function registerAssistantIpc({
               screenshotNotice = TEXT_ONLY_NOTICE;
               onChunk({ text: screenshotNotice, index: 0 });
             }
-            text = await runWithFallback('askAi', (geminiService) => {
+            text = await runWithFallback('askAi', async (geminiService) => {
               if (!geminiService || !geminiService.ready()) {
                 throw new Error('AI model not initialized. Please check your API key.');
               }
 
+              ocrText = await ensureOcrForService(geminiService, ocrText, entries);
               return geminiService.askAiWithSessionContextAndScreenshots(imageParts, {
                 contextString,
                 transcriptContext: [transcriptContext, ocrText].filter(Boolean).join('\n\n'),

@@ -9,7 +9,7 @@ const registerAssistantIpc = (() => {
   return mod.registerAssistantIpc || mod;
 })();
 
-function setup({ supportsImages, ocrText }) {
+function setup({ supportsImages, ocrText, failoverToTextOnly = false }) {
   const handlers = new Map();
   const sent = [];
   const calls = { analyze: [], askShots: [], ask: [], ocr: 0 };
@@ -32,6 +32,10 @@ function setup({ supportsImages, ocrText }) {
     }
   };
 
+  // Simulates D2: the active (vision) provider failed and the fallback that
+  // took over is a text-only service.
+  const textOnlyFallback = { ...service, supportsImages: false };
+
   const geminiRuntime = {
     isReady: () => true,
     getApiKeys: () => [],
@@ -39,7 +43,7 @@ function setup({ supportsImages, ocrText }) {
     getActiveProgrammingLanguage: () => 'python',
     getActiveAiProvider: () => 'bedrock',
     activeSupportsImages: () => supportsImages,
-    executeWithKeyFailover: async (op) => op(service, {})
+    executeWithKeyFailover: async (op) => op(failoverToTextOnly ? textOnlyFallback : service, {})
   };
 
   registerAssistantIpc({
@@ -119,4 +123,25 @@ test('Ask AI on a text-only model passes OCR text as transcript context', async 
   assert.equal(calls.askShots.length, 1);
   assert.match(calls.askShots[0].options.transcriptContext, /hello\n\nscreen words/);
   assert.match(result.text, /cannot see images/);
+});
+
+test('vision provider falling back to a text-only one gets OCR text, not a blind prompt', async () => {
+  const { handlers, sent, calls } = setup({ supportsImages: true, ocrText: 'screen words', failoverToTextOnly: true });
+  await handlers.get('analyze-stealth-with-context')({}, { contextString: '' });
+
+  assert.equal(calls.ocr, 1);
+  assert.equal(calls.analyze[0].ocr, 'screen words');
+
+  const ask = setup({ supportsImages: true, ocrText: 'screen words', failoverToTextOnly: true });
+  await ask.handlers.get('ask-ai-with-session-context')({}, { transcriptContext: 'hello' });
+  assert.match(ask.calls.askShots[0].options.transcriptContext, /hello\n\nscreen words/);
+});
+
+test('vision provider falling back to a text-only one with empty OCR reports it', async () => {
+  const { handlers, sent, calls } = setup({ supportsImages: true, ocrText: '', failoverToTextOnly: true });
+  await handlers.get('analyze-stealth-with-context')({}, { contextString: '' });
+
+  assert.equal(calls.analyze.length, 0);
+  const result = sent.find((entry) => entry.channel === 'analysis-result').payload;
+  assert.match(result.error, /no text could be extracted/);
 });
