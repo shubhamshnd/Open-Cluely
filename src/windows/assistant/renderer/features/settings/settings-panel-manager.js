@@ -258,6 +258,64 @@ export function createSettingsPanelManager({
         });
     }
 
+    // GNOME Wayland shortcut installer: only shown when the main process says
+    // the host is Linux + GNOME. Nothing is written until a button is clicked.
+    function updateGnomeShortcutsSection(gnomeShortcuts) {
+        const group = byId('gnome-shortcuts-group');
+        if (!group) {
+            return;
+        }
+
+        const available = Boolean(gnomeShortcuts?.available);
+        group.classList.toggle('hidden', !available);
+
+        const status = byId('gnome-shortcuts-status');
+        if (status && available) {
+            status.textContent = gnomeShortcuts?.installed
+                ? 'GNOME keyboard shortcuts are installed and work in any window.'
+                : '';
+        }
+    }
+
+    async function runGnomeShortcutAction(action) {
+        const addButton = byId('gnome-shortcuts-add');
+        const removeButton = byId('gnome-shortcuts-remove');
+        const status = byId('gnome-shortcuts-status');
+
+        try {
+            if (addButton) addButton.disabled = true;
+            if (removeButton) removeButton.disabled = true;
+            if (status) status.textContent = 'Working...';
+
+            const result = action === 'add'
+                ? await window.electronAPI.installGnomeShortcuts()
+                : await window.electronAPI.removeGnomeShortcuts();
+
+            if (status) {
+                status.textContent = result?.success
+                    ? (result.message || 'Done.')
+                    : (result?.error || 'Failed.');
+            }
+        } catch (error) {
+            console.error(`GNOME shortcut ${action} failed:`, error);
+            if (status) {
+                status.textContent = error.message || 'Failed.';
+            }
+        } finally {
+            if (addButton) addButton.disabled = false;
+            if (removeButton) removeButton.disabled = false;
+        }
+    }
+
+    function bindGnomeShortcutButtons() {
+        byId('gnome-shortcuts-add')?.addEventListener('click', () => {
+            runGnomeShortcutAction('add');
+        });
+        byId('gnome-shortcuts-remove')?.addEventListener('click', () => {
+            runGnomeShortcutAction('remove');
+        });
+    }
+
     function populateGeminiModelOptions(models, selectedModel) {
         if (!settingGeminiModel) {
             return;
@@ -393,6 +451,7 @@ export function createSettingsPanelManager({
                     settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
                 }
                 updateWindowOpacityValueLabel(settings.windowOpacityLevel);
+                updateGnomeShortcutsSection(settings.gnomeShortcuts);
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
@@ -479,6 +538,7 @@ export function createSettingsPanelManager({
     bindProviderToggle();
     bindFetchOllamaModels();
     bindFetchProviderModels();
+    bindGnomeShortcutButtons();
 
     return {
         normalizeWindowOpacityLevel,

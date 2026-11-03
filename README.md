@@ -174,7 +174,7 @@ None are required. `package-lock.json` contains no `gypfile` entries and no inst
 - **Content protection does not hide the window.** `HIDE_FROM_SCREEN_CAPTURE` / `setContentProtection` is only effective on Windows and macOS. On Linux the window is visible to screen capture and screen sharing.
 - **Host audio requires an exposed PipeWire/Pulse monitor.** The Linux Host source requests a 'Monitor of <your output>' audio input, audio-only, without desktop capture. Electron 28.3.3 on the tested Ubuntu 26.04/PipeWire host exposes only microphone inputs, so **Host audio does not work there**, even with `pipewire-pulse` running. The app reports an error; use the Mic source instead. A native monitor-capture route is still needed for Host audio on this setup.
 - **Screenshots have a fallback.** If no external tool (`gnome-screenshot`, `scrot`, `import`, `grim`) is installed, the app uses Electron's `desktopCapturer`. On Wayland this goes through the XDG desktop portal and may show a permission prompt.
-- **Global shortcuts on Wayland** may need `--ozone-platform=x11` (see Setup).
+- **Global shortcuts cannot fire while a native Wayland window has focus** (Electron 28 has no GlobalShortcuts-portal support). On GNOME, click **Add to GNOME shortcuts** under Settings → Keyboard Shortcuts to install them as real GNOME keyboard shortcuts that work in any window (single-instance `--action=<id>` launches; **Remove from GNOME shortcuts** reverts it, leaving your own custom shortcuts untouched). On other Wayland compositors, start with `--ozone-platform=x11` (see Setup) and keep an XWayland window focused.
 - Only the AppImage target is built on Linux; running it on newer distros may need `libfuse2`.
 
 ## Configuration

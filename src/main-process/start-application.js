@@ -33,6 +33,7 @@ const { createOcrService } = require('../services/ocr/service');
 const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
+const { parseShortcutActionArg } = require('./shared/shortcut-actions');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
 const { logStartupConfiguration, warnLinuxContentProtectionOnce } = require('./startup-logging');
 const { createMobileServer } = require('./features/mobile-server/server');
@@ -50,6 +51,15 @@ function resolveStartupOptions(argv = process.argv) {
 }
 
 async function startApplication() {
+  // Single instance: a launch with `--action=<shortcutId>` (e.g. from a GNOME
+  // custom keybinding on Wayland, where global shortcuts cannot fire while a
+  // native Wayland window is focused) is forwarded to the already-running
+  // instance via 'second-instance'; this second instance exits immediately.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
+
   let appEnvironment = null;
   let appState = null;
   let isShuttingDown = false;
@@ -119,6 +129,16 @@ async function startApplication() {
     getMainWindow: () => windowController.getMainWindow(),
     getAppEnvironment: () => appEnvironment,
     sendToRenderer
+  });
+
+  // A second instance launched with `--action=<shortcutId>` runs the same
+  // handler its globalShortcut registration uses. A first launch carrying
+  // `--action` simply starts normally and ignores it (nothing reads it here).
+  app.on('second-instance', (_event, secondInstanceArgv) => {
+    const actionId = parseShortcutActionArg(secondInstanceArgv);
+    if (actionId && windowController) {
+      windowController.runShortcutAction(actionId);
+    }
   });
 
   function loadPersistedAppState() {
