@@ -39,7 +39,12 @@ const MIME_TO_CONVERSE_FORMAT = {
 };
 
 function buildClientConfig({ region, accessKeyId, secretAccessKey }) {
-  const config = { region };
+  // Bound connect/idle time so a hung call surfaces as a timeout (and can
+  // trigger provider fallback) instead of hanging with no limit.
+  const config = {
+    region,
+    requestHandler: { connectionTimeout: 10_000, requestTimeout: 60_000 }
+  };
   // Only attach static credentials when BOTH parts are present; otherwise let
   // the default AWS credential chain resolve (env, profile, instance role).
   if (accessKeyId && secretAccessKey) {

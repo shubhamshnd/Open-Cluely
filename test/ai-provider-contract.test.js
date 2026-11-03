@@ -106,3 +106,21 @@ test('classifyProviderError handles real SDK connection and credential errors', 
   // A plain bad request must stay ineligible for fallback.
   assert.equal(classifyProviderError(Object.assign(new Error('bad input'), { status: 400 })), null);
 });
+
+test('real SDK clients have bounded timeouts so fallback can fire', async () => {
+  const OpenAIService = require('../src/services/ai/openai-service');
+  const AnthropicService = require('../src/services/ai/anthropic-service');
+  const BedrockService = require('../src/services/ai/bedrock-service');
+
+  for (const service of [new OpenAIService('x'), new AnthropicService('x')]) {
+    assert.ok(service.client.timeout > 0 && service.client.timeout <= 120_000);
+    assert.equal(service.client.maxRetries, 0);
+  }
+
+  const bedrock = new BedrockService({});
+  for (const client of [bedrock.runtimeClient, bedrock.bedrockClient]) {
+    const handlerConfig = await client.config.requestHandler.configProvider;
+    assert.ok(handlerConfig.requestTimeout > 0 && handlerConfig.requestTimeout <= 120_000);
+    assert.ok(handlerConfig.connectionTimeout > 0);
+  }
+});

@@ -18,6 +18,11 @@ const {
 const DEFAULT_MAX_TOKENS = 4096;
 const SYSTEM_PROMPT = 'You are a helpful AI assistant.';
 
+// Bound each request so a hung call surfaces as a timeout (and can trigger
+// provider fallback) instead of the SDK default of 10 minutes. Retries are
+// handled once by BaseProviderService, so the SDK's own retries are off.
+const SDK_CLIENT_OPTIONS = { timeout: 60_000, maxRetries: 0 };
+
 class AnthropicService extends BaseProviderService {
   constructor(apiKey, options = {}) {
     super(options);
@@ -25,7 +30,7 @@ class AnthropicService extends BaseProviderService {
     this.modelName = resolveAnthropicModel(options.modelName);
     this.maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
     // Allow tests to inject a stubbed SDK client.
-    this.client = options.client || new Anthropic({ apiKey: this.apiKey });
+    this.client = options.client || new Anthropic({ apiKey: this.apiKey, ...SDK_CLIENT_OPTIONS });
 
     console.log('AnthropicService initialized:', this.modelName);
   }
@@ -49,7 +54,7 @@ class AnthropicService extends BaseProviderService {
     if (apiKeyChanged) {
       this.apiKey = nextApiKey;
       if (!options.client) {
-        this.client = new Anthropic({ apiKey: this.apiKey });
+        this.client = new Anthropic({ apiKey: this.apiKey, ...SDK_CLIENT_OPTIONS });
       }
     }
     this.modelName = nextModelName;

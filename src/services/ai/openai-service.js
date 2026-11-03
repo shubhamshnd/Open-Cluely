@@ -20,13 +20,18 @@ const {
 const OPENAI_CHAT_MODEL_PATTERN = /^(gpt-|chatgpt-|o\d)/;
 const OPENAI_NON_CHAT_PATTERN = /(embedding|whisper|tts|dall-e|moderation|audio|realtime|transcribe|image|search|instruct|davinci|babbage)/;
 
+// Bound each request so a hung call surfaces as a timeout (and can trigger
+// provider fallback) instead of the SDK default of 10 minutes. Retries are
+// handled once by BaseProviderService, so the SDK's own retries are off.
+const SDK_CLIENT_OPTIONS = { timeout: 60_000, maxRetries: 0 };
+
 class OpenAIService extends BaseProviderService {
   constructor(apiKey, options = {}) {
     super(options);
     this.apiKey = String(apiKey || '').trim();
     this.modelName = resolveOpenAIModel(options.modelName);
     // Allow tests to inject a stubbed SDK client.
-    this.client = options.client || new OpenAI({ apiKey: this.apiKey });
+    this.client = options.client || new OpenAI({ apiKey: this.apiKey, ...SDK_CLIENT_OPTIONS });
 
     console.log('OpenAIService initialized:', this.modelName);
   }
@@ -68,7 +73,7 @@ class OpenAIService extends BaseProviderService {
     if (apiKeyChanged) {
       this.apiKey = nextApiKey;
       if (!options.client) {
-        this.client = new OpenAI({ apiKey: this.apiKey });
+        this.client = new OpenAI({ apiKey: this.apiKey, ...SDK_CLIENT_OPTIONS });
       }
     }
     this.modelName = nextModelName;
