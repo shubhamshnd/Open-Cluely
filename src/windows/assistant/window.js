@@ -41,8 +41,13 @@ function createAssistantWindow({
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false,
       offscreen: false,
+      // webSecurity must stay off: Settings fetches the Ollama model list
+      // (http://localhost:11434) from this file:// page, which needs a CORS
+      // exemption no localhost origin reliably grants. Renderer JS never sees
+      // stored secrets anyway (get-settings masks them) and the file:
+      // protocol handler below only serves app resources, so the remaining
+      // exposure is bounded.
       webSecurity: false,
-      allowRunningInsecureContent: true,
       experimentalFeatures: false,
       enableRemoteModule: false,
       sandbox: false
