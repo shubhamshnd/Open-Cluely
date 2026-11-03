@@ -7,7 +7,7 @@
     "start": "node scripts/run-electron.js",
     "start:hidden": "node scripts/run-electron.js --start-hidden",
     "dev": "node scripts/run-electron.js --enable-logging",
-    "test": "node --test test",
+    "test": "node scripts/run-tests.js",
     "build": "node scripts/run-build.js",
     "build:win": "node scripts/run-build.js --win portable",
     "build:mac": "node scripts/run-build.js --mac",
