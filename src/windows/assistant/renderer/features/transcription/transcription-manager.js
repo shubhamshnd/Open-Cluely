@@ -1,3 +1,5 @@
+import { getSystemAudioUnsupportedMessage, isSystemAudioUnsupportedError } from '../assembly-ai/system-audio-errors.js';
+
 const MAX_MONITOR_LOG_ENTRIES = 80;
 
 export function createTranscriptionManager({
@@ -405,15 +407,32 @@ export function createTranscriptionManager({
             addMonitorLog('info', 'source-active', 'Host source active', 'system');
         } catch (error) {
             console.error('Failed to start system audio:', error);
-            showFeedback(`System audio failed: ${error.message}`, 'error');
-            addMonitorLog('error', 'source-failed', error.message, 'system');
+
+            // Desktop-audio loopback is Windows-only in Chromium; on Linux
+            // the host source either fails getUserMedia or yields a stream
+            // with no usable audio track. Say so explicitly instead of a
+            // generic failure, and never leave the host source looking
+            // like it is listening.
+            const unsupportedMessage = isSystemAudioUnsupportedError(error)
+                ? getSystemAudioUnsupportedMessage(window.navigator?.userAgent)
+                : null;
+
+            if (unsupportedMessage) {
+                addChatMessage('system', unsupportedMessage);
+                showFeedback(unsupportedMessage, 'error');
+                addMonitorLog('error', 'system-audio-unsupported', unsupportedMessage, 'system');
+            } else {
+                showFeedback(`System audio failed: ${error.message}`, 'error');
+                addMonitorLog('error', 'source-failed', error.message, 'system');
+            }
+
             stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
             systemAudioContext = null;
             systemMediaStream = null;
             systemScriptProcessor = null;
             setSystemActive(false);
             resetSourceSampleQueue('system');
-            setSourceStatus('system', 'error', `Host error: ${error.message}`);
+            setSourceStatus('system', 'error', unsupportedMessage || `Host error: ${error.message}`);
             try {
                 await window.electronAPI.stopVoiceRecognition('system');
             } catch (_) {}

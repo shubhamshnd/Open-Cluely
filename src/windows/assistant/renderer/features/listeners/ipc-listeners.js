@@ -64,6 +64,16 @@ export function setupIpcListeners({
         }
     });
 
+    if (windowApi.onScreenshotError) {
+        windowApi.onScreenshotError((data) => {
+            const message = typeof data === 'string'
+                ? data
+                : (data && data.message) || 'Screenshot capture failed';
+            addChatMessage('system', `Error: ${message}`);
+            showFeedback(message, 'error');
+        });
+    }
+
     windowApi.onSetStealthMode((enabled) => {
         showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');
     });
