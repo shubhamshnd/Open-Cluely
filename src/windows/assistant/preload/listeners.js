@@ -6,6 +6,11 @@ function createEventActions(ipcRenderer) {
     label: 'onScreenshotTakenStealth'
   });
 
+  const onScreenshotError = createEventListener(ipcRenderer, {
+    channel: 'screenshot-error',
+    label: 'onScreenshotError'
+  });
+
   const onAnalysisStart = createEventListener(ipcRenderer, {
     channel: 'analysis-start',
     label: 'onAnalysisStart'
@@ -108,6 +113,7 @@ function createEventActions(ipcRenderer) {
 
   return {
     onScreenshotTakenStealth,
+    onScreenshotError,
     onAnalysisStart,
     onAnalysisResult,
     onSetStealthMode,
