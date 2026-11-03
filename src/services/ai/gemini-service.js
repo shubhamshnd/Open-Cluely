@@ -44,6 +44,16 @@ class GeminiService {
     this._initializeModel();
   }
 
+  // Shared provider contract: Gemini models used here all accept image input.
+  get supportsImages() {
+    return true;
+  }
+
+  // Shared provider contract: ready when an API key is configured.
+  ready() {
+    return this.apiKey.length > 0;
+  }
+
   _initializeModel() {
     try {
       console.log('Initializing Gemini model:', this.modelName);

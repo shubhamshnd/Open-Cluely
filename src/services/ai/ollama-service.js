@@ -46,6 +46,17 @@ class OllamaService {
     console.log('OllamaService initialized:', this.modelName, 'at', this.baseUrl);
   }
 
+  // Shared provider contract: images are never forwarded to Ollama today.
+  get supportsImages() {
+    return false;
+  }
+
+  // Shared provider contract: ready when a base URL is configured (always,
+  // since a default exists — the request itself fails if Ollama is down).
+  ready() {
+    return this.baseUrl.length > 0;
+  }
+
   updateConfiguration(options = {}) {
     const previousProgrammingLanguage = this.programmingLanguage;
     const nextBaseUrl = String(options.baseUrl ?? this.baseUrl).replace(/\/+$/, '');

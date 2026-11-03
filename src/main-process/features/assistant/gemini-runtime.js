@@ -1,5 +1,6 @@
 const GeminiService = require('../../../services/ai/gemini-service');
-const OllamaService = require('../../../services/ai/ollama-service');
+const { createProviderRegistry } = require('../../../services/ai/provider-registry');
+const { runWithFallback } = require('../../../services/ai/provider-fallback');
 const {
   resolveAiProvider,
   getAiProviders,
@@ -38,7 +39,15 @@ function normalizeGeminiApiKeys(keys) {
 
 function createGeminiRuntime() {
   let geminiService = null;
-  let ollamaService = null;
+  const providerRegistry = createProviderRegistry();
+  // Settings for the non-Gemini providers (keys/models live in app state and
+  // are pushed in via setProviderSettings). Gemini keeps its own key rotation.
+  const providerSettings = {
+    openai: { apiKey: '', modelName: '' },
+    anthropic: { apiKey: '', modelName: '' },
+    bedrock: { region: '', accessKeyId: '', secretAccessKey: '', modelId: '' }
+  };
+  let providerFallbackOrder = [];
   let activeAiProvider = getDefaultAiProvider();
   let activeGeminiModel = getDefaultGeminiModel();
   let activeProgrammingLanguage = getDefaultProgrammingLanguage();
@@ -95,6 +104,44 @@ function createGeminiRuntime() {
 
   function hasApiKeys() {
     return geminiApiKeys.length > 0;
+  }
+
+  function buildRegistrySettings() {
+    return {
+      programmingLanguage: activeProgrammingLanguage,
+      gemini: { apiKey: getActiveApiKey(), modelName: activeGeminiModel },
+      openai: { ...providerSettings.openai },
+      anthropic: { ...providerSettings.anthropic },
+      bedrock: { ...providerSettings.bedrock },
+      ollama: { baseUrl: activeOllamaBaseUrl, modelName: activeOllamaModel }
+    };
+  }
+
+  // Provider-agnostic readiness gate; replaces the Gemini-only hasApiKeys()
+  // check in assistant IPC and the mobile server.
+  function isReady(providerName = activeAiProvider) {
+    return providerRegistry.isReady(providerName, buildRegistrySettings());
+  }
+
+  function setProviderSettings(providerName, values = {}) {
+    if (!providerSettings[providerName]) {
+      throw new Error(`No configurable settings for provider "${providerName}".`);
+    }
+    for (const key of Object.keys(providerSettings[providerName])) {
+      if (values[key] !== undefined) {
+        providerSettings[providerName][key] = String(values[key] ?? '').trim();
+      }
+    }
+    return { ...providerSettings[providerName] };
+  }
+
+  function getProviderSettings(providerName) {
+    return providerSettings[providerName] ? { ...providerSettings[providerName] } : null;
+  }
+
+  // Model id for the "Provider · model" label in the top bar.
+  function getActiveModelName() {
+    return providerRegistry.getModel(activeAiProvider, buildRegistrySettings());
   }
 
   function initializeGeminiService(
@@ -253,20 +300,49 @@ function createGeminiRuntime() {
     );
   }
 
-  async function executeWithKeyFailover(operation) {
+  // Optional fallback list (app state `providerFallback`). Empty = none.
+  function setProviderFallback(list) {
+    providerFallbackOrder = (Array.isArray(list) ? list : [])
+      .map((name) => String(name || '').trim().toLowerCase())
+      .filter((name, index, all) => getAiProviders().includes(name) && all.indexOf(name) === index);
+    return [...providerFallbackOrder];
+  }
+
+  function getProviderFallback() {
+    return [...providerFallbackOrder];
+  }
+
+  // Runs `operation` on the active provider. When a fallback list is set and
+  // the active provider fails with an auth, quota, timeout, or connection
+  // error, tries the next READY provider and reports the switch through
+  // options.onProviderSwitch({ from, to, reason, notice }).
+  async function executeWithKeyFailover(operation, options = {}) {
     if (typeof operation !== 'function') {
       throw new Error('AI failover operation must be a function.');
     }
 
-    // For Ollama, no key failover — just execute directly
-    if (activeAiProvider === 'ollama') {
-      if (!ollamaService) {
-        initializeOllamaService();
+    const order = [activeAiProvider, ...providerFallbackOrder];
+    if (order.length === 1) {
+      return executeOnProvider(activeAiProvider, operation);
+    }
+
+    return runWithFallback({
+      order,
+      isReady: (name) => isReady(name),
+      run: (name) => executeOnProvider(name, operation),
+      onSwitch: options.onProviderSwitch
+    });
+  }
+
+  async function executeOnProvider(providerName, operation) {
+    // Non-Gemini providers have no key rotation — resolve via the registry.
+    if (providerName !== 'gemini') {
+      const service = providerRegistry.getService(providerName, buildRegistrySettings());
+      if (!service) {
+        throw new Error(`${providerName} is not configured. Add its credentials in Settings.`);
       }
-      if (!ollamaService) {
-        throw new Error('Ollama service not available. Check that Ollama is running.');
-      }
-      return await operation(ollamaService, {
+      return await operation(service, {
+        provider: providerName,
         activeApiKeyIndex: 0,
         activeApiKey: '',
         attempt: 1,
@@ -295,6 +371,7 @@ function createGeminiRuntime() {
 
       try {
         return await operation(geminiService, {
+          provider: 'gemini',
           activeApiKeyIndex,
           activeApiKey,
           attempt: attemptedKeys + 1,
@@ -334,40 +411,25 @@ function createGeminiRuntime() {
     activeProgrammingLanguage = resolveProgrammingLanguage(programmingLanguage);
 
     try {
-      console.log(
-        'Initializing Ollama AI Service with model and language:',
-        activeOllamaModel,
-        activeProgrammingLanguage
-      );
-
-      if (ollamaService) {
-        ollamaService.updateConfiguration({
-          baseUrl: activeOllamaBaseUrl,
-          modelName: activeOllamaModel,
-          programmingLanguage: activeProgrammingLanguage
-        });
-      } else {
-        ollamaService = new OllamaService({
-          baseUrl: activeOllamaBaseUrl,
-          modelName: activeOllamaModel,
-          programmingLanguage: activeProgrammingLanguage
-        });
-      }
-
-      console.log('Ollama AI Service initialized successfully');
-      return ollamaService;
+      return providerRegistry.getService('ollama', buildRegistrySettings());
     } catch (error) {
-      ollamaService = null;
+      providerRegistry.reset('ollama');
       console.error('Failed to initialize Ollama AI Service:', error);
       return null;
     }
   }
 
   function initializeAiService() {
-    if (activeAiProvider === 'ollama') {
-      return initializeOllamaService(activeOllamaBaseUrl, activeOllamaModel, activeProgrammingLanguage);
+    if (activeAiProvider === 'gemini') {
+      return initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
     }
-    return initializeGeminiService(getActiveApiKey(), activeGeminiModel, activeProgrammingLanguage);
+    try {
+      return providerRegistry.getService(activeAiProvider, buildRegistrySettings());
+    } catch (error) {
+      providerRegistry.reset(activeAiProvider);
+      console.error(`Failed to initialize ${activeAiProvider} AI Service:`, error);
+      return null;
+    }
   }
 
   function setActiveAiProvider(providerName) {
@@ -398,14 +460,28 @@ function createGeminiRuntime() {
   }
 
   function getService() {
-    if (activeAiProvider === 'ollama') {
-      return ollamaService;
+    if (activeAiProvider === 'gemini') {
+      return geminiService;
     }
-    return geminiService;
+    return providerRegistry.peek(activeAiProvider);
   }
 
   function getActiveGeminiModel() {
     return activeGeminiModel;
+  }
+
+  // True when the active model accepts image input. Unknown/unready services
+  // are treated as vision-capable so the normal "not configured" error wins.
+  function activeSupportsImages() {
+    let service = getService();
+    if (!service) {
+      try {
+        service = initializeAiService();
+      } catch (_error) {
+        service = null;
+      }
+    }
+    return service ? service.supportsImages !== false : true;
   }
 
   function getActiveProgrammingLanguage() {
@@ -433,6 +509,12 @@ function createGeminiRuntime() {
     setKeys,
     getApiKeys,
     hasApiKeys,
+    isReady,
+    setProviderFallback,
+    getProviderFallback,
+    setProviderSettings,
+    getProviderSettings,
+    getActiveModelName,
     getActiveApiKey,
     getActiveApiKeyIndex: () => activeApiKeyIndex,
     switchToNextKey,
@@ -440,6 +522,7 @@ function createGeminiRuntime() {
     isAllKeysUnavailableError,
     setActiveKeyIndexChangeHandler,
     getService,
+    activeSupportsImages,
     getAiProviders,
     getDefaultAiProvider,
     getActiveAiProvider,

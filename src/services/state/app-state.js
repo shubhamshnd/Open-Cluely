@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { isConfiguredAiProvider } = require('../../config');
 
 const APP_STATE_DIR_NAME = 'cache';
 const APP_STATE_FILE_NAME = 'app-state.json';
@@ -11,6 +12,17 @@ function getDefaultAppState() {
     assemblyAiApiKey: null,
     geminiApiKeyIndex: 0,
     geminiModel: null,
+    openaiApiKey: null,
+    openaiModel: null,
+    anthropicApiKey: null,
+    anthropicModel: null,
+    bedrockRegion: null,
+    bedrockAccessKeyId: null,
+    bedrockSecretAccessKey: null,
+    bedrockModelId: null,
+    // Ordered provider names tried when the active provider fails with an
+    // auth, quota, timeout or connection error. Empty = no fallback.
+    providerFallback: [],
     ollamaBaseUrl: null,
     ollamaModel: null,
     assemblyAiSpeechModel: null,
@@ -32,7 +44,7 @@ function sanitizeAppState(state) {
 
   if (state && typeof state === 'object' && !Array.isArray(state)) {
     const aiProvider = String(state.aiProvider ?? '').trim().toLowerCase();
-    if (aiProvider === 'gemini' || aiProvider === 'ollama') {
+    if (isConfiguredAiProvider(aiProvider)) {
       nextState.aiProvider = aiProvider;
     }
 
@@ -53,6 +65,27 @@ function sanitizeAppState(state) {
 
     if (typeof state.geminiModel === 'string' && state.geminiModel.trim()) {
       nextState.geminiModel = state.geminiModel.trim();
+    }
+
+    for (const key of [
+      'openaiApiKey',
+      'openaiModel',
+      'anthropicApiKey',
+      'anthropicModel',
+      'bedrockRegion',
+      'bedrockAccessKeyId',
+      'bedrockSecretAccessKey',
+      'bedrockModelId'
+    ]) {
+      if (typeof state[key] === 'string' && state[key].trim()) {
+        nextState[key] = state[key].trim();
+      }
+    }
+
+    if (Array.isArray(state.providerFallback)) {
+      nextState.providerFallback = state.providerFallback
+        .map((entry) => String(entry ?? '').trim().toLowerCase())
+        .filter((entry, index, list) => isConfiguredAiProvider(entry) && list.indexOf(entry) === index);
     }
 
     if (typeof state.ollamaBaseUrl === 'string' && state.ollamaBaseUrl.trim()) {

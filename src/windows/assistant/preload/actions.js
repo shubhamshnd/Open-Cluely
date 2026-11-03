@@ -153,6 +153,12 @@ function createInvokeActions(ipcRenderer) {
       fallback: (error) => ({ error: error.message })
     }),
 
+    listProviderModels: invokeWithFallback(ipcRenderer, {
+      channel: 'list-provider-models',
+      label: 'listProviderModels',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
     saveSettings: invokeWithFallback(ipcRenderer, {
       channel: 'save-settings',
       label: 'saveSettings',

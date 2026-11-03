@@ -2,6 +2,18 @@ function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
 
+const PROVIDER_GROUP_IDS = {
+    gemini: 'gemini-settings-group',
+    openai: 'openai-settings-group',
+    anthropic: 'anthropic-settings-group',
+    bedrock: 'bedrock-settings-group',
+    ollama: 'ollama-settings-group'
+};
+
+function byId(id) {
+    return document.getElementById(id);
+}
+
 export function createSettingsPanelManager({
     settingsPanel,
     settingAiProvider,
@@ -70,15 +82,50 @@ export function createSettingsPanelManager({
         });
     }
 
+    // Show only the selected provider's fields.
     function updateProviderVisibility(provider) {
-        const isGemini = provider !== 'ollama';
+        const selected = PROVIDER_GROUP_IDS[provider] ? provider : 'gemini';
+        for (const [name, groupId] of Object.entries(PROVIDER_GROUP_IDS)) {
+            byId(groupId)?.classList.toggle('hidden', name !== selected);
+        }
+    }
 
-        if (geminiSettingsGroup) {
-            geminiSettingsGroup.classList.toggle('hidden', !isGemini);
+    function populateModelSelect(selectElement, models, selectedModel) {
+        if (!selectElement) {
+            return;
         }
-        if (ollamaSettingsGroup) {
-            ollamaSettingsGroup.classList.toggle('hidden', isGemini);
+        const ids = (Array.isArray(models) ? models : [])
+            .map((entry) => (typeof entry === 'string' ? entry : entry?.id))
+            .filter(Boolean);
+        if (selectedModel && !ids.includes(selectedModel)) {
+            ids.unshift(selectedModel);
         }
+        selectElement.innerHTML = '';
+        ids.forEach((id) => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = id;
+            selectElement.appendChild(option);
+        });
+        if (selectedModel) {
+            selectElement.value = selectedModel;
+        }
+    }
+
+    function populateDatalist(datalist, models) {
+        if (!datalist) {
+            return;
+        }
+        datalist.innerHTML = '';
+        (Array.isArray(models) ? models : []).forEach((entry) => {
+            const id = typeof entry === 'string' ? entry : entry?.id;
+            if (!id) {
+                return;
+            }
+            const option = document.createElement('option');
+            option.value = id;
+            datalist.appendChild(option);
+        });
     }
 
     function bindProviderToggle() {
@@ -151,6 +198,54 @@ export function createSettingsPanelManager({
                 fetchOllamaModelsBtn.disabled = false;
             }
         }
+    }
+
+    // Fetch buttons for OpenAI and Bedrock (Task D3).
+    async function fetchProviderModelList(provider, button, params, applyModels) {
+        try {
+            button.textContent = '...';
+            button.disabled = true;
+            const result = await window.electronAPI.listProviderModels({ provider, ...params });
+            if (!result?.success) {
+                showFeedback?.(result?.error || 'Could not fetch models.', 'error');
+                return;
+            }
+            applyModels(result.models);
+            showFeedback?.(`Found ${result.models.length} models.`, 'success');
+        } catch (error) {
+            console.error(`Failed to fetch ${provider} models:`, error);
+            showFeedback?.('Could not fetch models.', 'error');
+        } finally {
+            button.textContent = 'Fetch';
+            button.disabled = false;
+        }
+    }
+
+    function bindFetchProviderModels() {
+        const openaiBtn = byId('fetch-openai-models');
+        const bedrockBtn = byId('fetch-bedrock-models');
+
+        openaiBtn?.addEventListener('click', () => {
+            fetchProviderModelList(
+                'openai',
+                openaiBtn,
+                { apiKey: byId('setting-openai-key')?.value.trim() },
+                (models) => populateModelSelect(byId('setting-openai-model'), models, byId('setting-openai-model')?.value)
+            );
+        });
+
+        bedrockBtn?.addEventListener('click', () => {
+            fetchProviderModelList(
+                'bedrock',
+                bedrockBtn,
+                {
+                    region: byId('setting-bedrock-region')?.value.trim(),
+                    accessKeyId: byId('setting-bedrock-access-key')?.value.trim(),
+                    secretAccessKey: byId('setting-bedrock-secret')?.value.trim()
+                },
+                (models) => populateDatalist(byId('bedrock-model-options'), models)
+            );
+        });
     }
 
     function bindFetchOllamaModels() {
@@ -256,6 +351,30 @@ export function createSettingsPanelManager({
                 if (settingGeminiKey) settingGeminiKey.value = settings.geminiApiKey || '';
                 populateGeminiModelOptions(settings.geminiModels, settings.geminiModel || settings.defaultGeminiModel);
 
+                // OpenAI / Anthropic / Bedrock settings
+                if (byId('setting-openai-key')) byId('setting-openai-key').value = settings.openaiApiKey || '';
+                populateModelSelect(byId('setting-openai-model'), settings.openaiModels, settings.openaiModel || settings.openaiModels?.[0]?.id);
+                if (byId('setting-anthropic-key')) byId('setting-anthropic-key').value = settings.anthropicApiKey || '';
+                populateModelSelect(byId('setting-anthropic-model'), settings.anthropicModels, settings.anthropicModel || settings.anthropicModels?.[0]?.id);
+                if (byId('setting-bedrock-region')) byId('setting-bedrock-region').value = settings.bedrockRegion || settings.defaultBedrockRegion || 'us-east-1';
+                if (byId('setting-bedrock-model')) byId('setting-bedrock-model').value = settings.bedrockModelId || settings.bedrockModels?.[0]?.id || '';
+                populateDatalist(byId('bedrock-model-options'), settings.bedrockModels);
+                if (byId('setting-bedrock-access-key')) byId('setting-bedrock-access-key').value = settings.bedrockAccessKeyId || '';
+                if (byId('setting-bedrock-secret')) byId('setting-bedrock-secret').value = settings.bedrockSecretAccessKey || '';
+
+                // Fallback provider (first entry of the saved fallback list)
+                const fallbackSelect = byId('setting-provider-fallback');
+                if (fallbackSelect) {
+                    fallbackSelect.innerHTML = '<option value="">None</option>';
+                    (settings.aiProviders || []).forEach((name) => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = settings.aiProviderLabels?.[name] || name;
+                        fallbackSelect.appendChild(option);
+                    });
+                    fallbackSelect.value = settings.providerFallback?.[0] || '';
+                }
+
                 // Ollama settings
                 if (settingOllamaBaseUrl) settingOllamaBaseUrl.value = settings.ollamaBaseUrl || 'http://localhost:11434';
                 if (settingOllamaModel) settingOllamaModel.value = settings.ollamaModel || 'llama3.2';
@@ -317,6 +436,16 @@ export function createSettingsPanelManager({
                 geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
                 assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
                 geminiModel: settingGeminiModel ? settingGeminiModel.value : '',
+                providerFallback: [byId('setting-provider-fallback')?.value]
+                    .filter((name) => name && name !== aiProvider),
+                openaiApiKey: byId('setting-openai-key')?.value.trim() || '',
+                openaiModel: byId('setting-openai-model')?.value || '',
+                anthropicApiKey: byId('setting-anthropic-key')?.value.trim() || '',
+                anthropicModel: byId('setting-anthropic-model')?.value || '',
+                bedrockRegion: byId('setting-bedrock-region')?.value.trim() || '',
+                bedrockModelId: byId('setting-bedrock-model')?.value.trim() || '',
+                bedrockAccessKeyId: byId('setting-bedrock-access-key')?.value.trim() || '',
+                bedrockSecretAccessKey: byId('setting-bedrock-secret')?.value.trim() || '',
                 ollamaBaseUrl: settingOllamaBaseUrl ? settingOllamaBaseUrl.value.trim() : '',
                 ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : '',
                 programmingLanguage: settingProgrammingLanguage.value,
@@ -344,8 +473,12 @@ export function createSettingsPanelManager({
 
     bindApiKeyVisibilityToggle(settingGeminiKey, toggleGeminiKeyVisibilityBtn, 'Gemini');
     bindApiKeyVisibilityToggle(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI');
+    bindApiKeyVisibilityToggle(byId('setting-openai-key'), byId('toggle-openai-key-visibility'), 'OpenAI');
+    bindApiKeyVisibilityToggle(byId('setting-anthropic-key'), byId('toggle-anthropic-key-visibility'), 'Anthropic');
+    bindApiKeyVisibilityToggle(byId('setting-bedrock-secret'), byId('toggle-bedrock-secret-visibility'), 'AWS secret access');
     bindProviderToggle();
     bindFetchOllamaModels();
+    bindFetchProviderModels();
 
     return {
         normalizeWindowOpacityLevel,

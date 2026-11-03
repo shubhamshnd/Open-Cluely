@@ -288,9 +288,8 @@ const settingsPanelManager = createSettingsPanelManager({
     settingWindowOpacityValue,
     applySettingsShortcutConfig: (settings) => applySettingsShortcutConfig(settings),
     showFeedback: (message, type) => showFeedback(message, type),
-    onSettingsSaved: (settings) => {
-        applyApiKeyAvailabilityFromSettings(settings);
-        updateUI();
+    onSettingsSaved: () => {
+        refreshProviderStatus();
     }
 });
 const transcriptionManager = createTranscriptionManager({
@@ -573,8 +572,11 @@ function applyApiKeyAvailabilityFromSettings(settings) {
         return;
     }
 
-    // Ollama doesn't require API keys, so treat it as always configured
-    if (settings.aiProvider === 'ollama') {
+    // Main process reports whether the ACTIVE provider is ready (key, AWS
+    // chain, or local server); fall back to Gemini key checks for old payloads.
+    if (typeof settings.aiReady === 'boolean') {
+        hasGeminiApiKeysConfigured = settings.aiReady;
+    } else if (settings.aiProvider === 'ollama') {
         hasGeminiApiKeysConfigured = true;
     } else if (typeof settings.hasGeminiApiKeys === 'boolean') {
         hasGeminiApiKeysConfigured = settings.hasGeminiApiKeys;
@@ -589,6 +591,31 @@ function applyApiKeyAvailabilityFromSettings(settings) {
     }
 }
 
+// Re-reads the main process view of the active provider: readiness flag and
+// the "Provider · model" label in the top bar.
+async function refreshProviderStatus() {
+    try {
+        const settings = await window.electronAPI?.getSettings?.();
+        if (settings && !settings.error) {
+            applyApiKeyAvailabilityFromSettings(settings);
+            updateProviderBadge(settings);
+        }
+    } catch (error) {
+        console.error('Failed to refresh provider status:', error);
+    }
+    updateUI();
+}
+
+function updateProviderBadge(settings) {
+    const badge = document.getElementById('chat-provider-model');
+    if (!badge) {
+        return;
+    }
+    const provider = settings?.aiProviderLabels?.[settings.aiProvider] || settings?.aiProvider || '';
+    const model = settings?.activeModelName || '';
+    badge.textContent = provider && model ? `${provider} \u00B7 ${model}` : provider;
+}
+
 async function loadShortcutConfig() {
     if (!window.electronAPI?.getSettings) {
         applyApiKeyAvailabilityFromSettings(null);
@@ -599,6 +626,7 @@ async function loadShortcutConfig() {
         const settings = await window.electronAPI.getSettings();
         applySettingsShortcutConfig(settings);
         applyApiKeyAvailabilityFromSettings(settings);
+        updateProviderBadge(settings);
         return settings;
     } catch (error) {
         console.error('Failed to load shortcut config:', error);
@@ -996,8 +1024,7 @@ function closeSettings() {
 async function saveSettings() {
     const result = await settingsPanelManager.saveSettings();
     if (result?.success && result?.settings) {
-        applyApiKeyAvailabilityFromSettings(result.settings);
-        updateUI();
+        await refreshProviderStatus();
     }
 }
 

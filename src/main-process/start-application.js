@@ -132,6 +132,21 @@ async function startApplication() {
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
     const activeOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(appState.ollamaBaseUrl);
     const activeOllamaModel = geminiRuntime.setActiveOllamaModel(appState.ollamaModel);
+    geminiRuntime.setProviderFallback(appState.providerFallback);
+    geminiRuntime.setProviderSettings('openai', {
+      apiKey: appState.openaiApiKey,
+      modelName: appState.openaiModel
+    });
+    geminiRuntime.setProviderSettings('anthropic', {
+      apiKey: appState.anthropicApiKey,
+      modelName: appState.anthropicModel
+    });
+    geminiRuntime.setProviderSettings('bedrock', {
+      region: appState.bedrockRegion,
+      accessKeyId: appState.bedrockAccessKeyId,
+      secretAccessKey: appState.bedrockSecretAccessKey,
+      modelId: appState.bedrockModelId
+    });
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
     const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
     const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
@@ -304,19 +319,7 @@ async function startApplication() {
       console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
     });
 
-    if (geminiRuntime.getActiveAiProvider() === 'ollama') {
-      geminiRuntime.initializeOllamaService(
-        geminiRuntime.getActiveOllamaBaseUrl(),
-        geminiRuntime.getActiveOllamaModel(),
-        geminiRuntime.getActiveProgrammingLanguage()
-      );
-    } else {
-      geminiRuntime.initializeGeminiService(
-        geminiRuntime.getActiveApiKey(),
-        geminiRuntime.getActiveGeminiModel(),
-        geminiRuntime.getActiveProgrammingLanguage()
-      );
-    }
+    geminiRuntime.initializeAiService();
 
     app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
     app.commandLine.appendSwitch('ignore-certificate-errors');

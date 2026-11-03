@@ -161,8 +161,8 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
         // ── Ask AI ─────────────────────────────────────────────────────────
         case 'ask-ai': {
-          if (!geminiRuntime || !geminiRuntime.hasApiKeys()) {
-            sendTo(ws, 'error', { message: 'No API key configured. Add it in the desktop Settings.' });
+          if (!geminiRuntime || !geminiRuntime.isReady()) {
+            sendTo(ws, 'error', { message: 'AI provider is not configured. Add its credentials in the desktop Settings.' });
             break;
           }
 
@@ -188,7 +188,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
                 const { imageParts } = await screenshotManager.buildImagePartsFromScreenshots({ strict: false });
                 if (imageParts.length > 0) {
                   text = await geminiRuntime.executeWithKeyFailover((svc) => {
-                    if (!svc || !svc.model) throw new Error('AI model not initialized');
+                    if (!svc || !svc.ready()) throw new Error('AI model not initialized');
                     return svc.askAiWithSessionContextAndScreenshots(imageParts, {
                       contextString,
                       transcriptContext: '',
@@ -202,7 +202,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
               if (!text) {
                 text = await geminiRuntime.executeWithKeyFailover((svc) => {
-                  if (!svc || !svc.model) throw new Error('AI model not initialized');
+                  if (!svc || !svc.ready()) throw new Error('AI model not initialized');
                   return svc.askAiWithSessionContext({
                     contextString,
                     transcriptContext: '',
