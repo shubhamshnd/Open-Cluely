@@ -325,7 +325,7 @@
               <option value="keys">Access key + secret (+ optional session token)</option>
               <option value="apiKey">Bedrock API key</option>
             </select>
-            <div class="settings-helper-text">Shared by Amazon Bedrock and Amazon Transcribe.</div>
+            <div class="settings-helper-text">Shared by Amazon Bedrock and Amazon Transcribe (unless Transcribe has its own credentials below).</div>
           </div>
           <div id="aws-profile-group" class="settings-group hidden">
             <label class="settings-label">AWS Profile</label>
@@ -413,7 +413,49 @@
           <div class="settings-group">
             <label class="settings-label">Transcribe Region</label>
             <input type="text" id="setting-transcribe-region" class="settings-input" placeholder="us-east-1" />
-            <div class="settings-helper-text">Uses the shared AWS credentials. Streaming is about $0.60/hour per source (Mic and Host are separate streams).</div>
+            <div class="settings-helper-text">Streaming is about $0.60/hour per source (Mic and Host are separate streams).</div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Transcribe AWS Credentials</label>
+            <select id="setting-transcribe-auth-mode" class="settings-input">
+              <option value="inherit">Same as Bedrock (default)</option>
+              <option value="profile">Different AWS profile</option>
+              <option value="keys">Access key + secret (+ optional session token)</option>
+            </select>
+            <div class="settings-helper-text">By default Transcribe signs in with the shared AWS credentials above. Pick a different profile or keys when Transcribe needs its own IAM identity (Bedrock is unaffected).</div>
+          </div>
+          <div id="transcribe-profile-group" class="settings-group hidden">
+            <label class="settings-label">Transcribe AWS Profile</label>
+            <div class="settings-input-row">
+              <select id="setting-transcribe-profile-select" class="settings-input"></select>
+              <button type="button" id="refresh-transcribe-profiles" class="settings-input-toggle" aria-label="Refresh Transcribe AWS profile list">Refresh</button>
+            </div>
+            <input type="text" id="setting-transcribe-profile" class="settings-input" placeholder="Or type a profile name..." autocomplete="off" />
+            <div class="settings-helper-text">Profile names are read from ~/.aws/config and ~/.aws/credentials. Only names are listed, never credentials.</div>
+          </div>
+          <div id="transcribe-keys-group" class="hidden">
+            <div class="settings-group">
+              <label class="settings-label">Transcribe AWS Access Key ID</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-transcribe-access-key" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-transcribe-access-key-visibility" class="settings-input-toggle" aria-label="Show Transcribe AWS access key ID" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">Transcribe AWS Secret Access Key</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-transcribe-secret" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-transcribe-secret-visibility" class="settings-input-toggle" aria-label="Show Transcribe AWS secret access key" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">Transcribe AWS Session Token (optional)</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-transcribe-session-token" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-transcribe-session-token-visibility" class="settings-input-toggle" aria-label="Show Transcribe AWS session token" aria-pressed="false">Show</button>
+              </div>
+              <div class="settings-helper-text">Only for temporary credentials (STS). Leave blank for long-lived keys.</div>
+            </div>
           </div>
           <div class="settings-group">
             <label class="settings-label">Language</label>

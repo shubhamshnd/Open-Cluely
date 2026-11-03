@@ -248,6 +248,88 @@ export function createSettingsPanelManager({
         });
     }
 
+    // ------------------------------------------------------------------
+    // Transcribe-only AWS credential split ('inherit' | 'profile' | 'keys').
+    // Only the chosen mode's fields are visible; 'inherit' shows nothing and
+    // the stream signs with the shared AWS block above.
+    // ------------------------------------------------------------------
+    function updateTranscribeAuthModeVisibility(mode) {
+        const resolved = mode === 'profile' || mode === 'keys' ? mode : 'inherit';
+        byId('transcribe-profile-group')?.classList.toggle('hidden', resolved !== 'profile');
+        byId('transcribe-keys-group')?.classList.toggle('hidden', resolved !== 'keys');
+    }
+
+    function populateTranscribeProfileOptions(profiles, selectedProfile) {
+        const select = byId('setting-transcribe-profile-select');
+        if (!select) {
+            return;
+        }
+        select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = profiles.length > 0 ? 'Pick a profile...' : 'No profiles found in ~/.aws';
+        select.appendChild(placeholder);
+        for (const name of Array.isArray(profiles) ? profiles : []) {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+        }
+        if (selectedProfile && profiles.includes(selectedProfile)) {
+            select.value = selectedProfile;
+        }
+    }
+
+    async function refreshTranscribeProfileList() {
+        const refreshButton = byId('refresh-transcribe-profiles');
+        try {
+            if (refreshButton) {
+                refreshButton.disabled = true;
+            }
+            const result = await window.electronAPI.listAwsProfiles();
+            if (result?.success === false) {
+                showFeedback?.(result?.error || 'Could not list AWS profiles.', 'error');
+                return;
+            }
+            populateTranscribeProfileOptions(result?.profiles, byId('setting-transcribe-profile')?.value.trim());
+        } catch (error) {
+            console.error('Failed to list AWS profiles:', error);
+            showFeedback?.('Could not list AWS profiles.', 'error');
+        } finally {
+            if (refreshButton) {
+                refreshButton.disabled = false;
+            }
+        }
+    }
+
+    function bindTranscribeAuthControls() {
+        byId('setting-transcribe-auth-mode')?.addEventListener('change', (event) => {
+            updateTranscribeAuthModeVisibility(event.target.value);
+        });
+        byId('setting-transcribe-profile-select')?.addEventListener('change', (event) => {
+            const profileInput = byId('setting-transcribe-profile');
+            if (profileInput && event.target.value) {
+                profileInput.value = event.target.value;
+            }
+        });
+        byId('refresh-transcribe-profiles')?.addEventListener('click', () => {
+            refreshTranscribeProfileList();
+        });
+    }
+
+    // The auth values the Transcribe section currently shows, for save and
+    // for the vocabulary button (the main process falls back to saved state
+    // and resolves masked secrets against it).
+    function readTranscribeAuthFormValues() {
+        return {
+            transcribeAuthMode: byId('setting-transcribe-auth-mode')?.value || 'inherit',
+            transcribeAwsProfile: byId('setting-transcribe-profile')?.value.trim() || '',
+            transcribeAwsAccessKeyId: byId('setting-transcribe-access-key')?.value.trim() || '',
+            transcribeAwsSecretAccessKey: byId('setting-transcribe-secret')?.value.trim() || '',
+            transcribeAwsSessionToken: byId('setting-transcribe-session-token')?.value.trim() || ''
+        };
+    }
+
     function updateTranscribeVocabularyStatus() {
         const status = byId('transcribe-vocabulary-status');
         if (status && !status.dataset.working) {
@@ -282,7 +364,10 @@ export function createSettingsPanelManager({
                 awsProfile: byId('setting-aws-profile')?.value.trim(),
                 awsAccessKeyId: byId('setting-aws-access-key')?.value.trim(),
                 awsSecretAccessKey: byId('setting-aws-secret')?.value.trim(),
-                awsSessionToken: byId('setting-aws-session-token')?.value.trim()
+                awsSessionToken: byId('setting-aws-session-token')?.value.trim(),
+                // The Transcribe-only split: vocabulary creation signs with
+                // the same credentials the stream would use.
+                ...readTranscribeAuthFormValues()
             });
 
             if (status) {
@@ -691,6 +776,16 @@ export function createSettingsPanelManager({
                 if (byId('setting-transcribe-region')) {
                     byId('setting-transcribe-region').value = settings.transcribeRegion || settings.defaultTranscribeRegion || 'us-east-1';
                 }
+                // Transcribe-only AWS credential split (masked secrets echo
+                // back exactly like the shared AWS keys above).
+                const transcribeAuthMode = settings.transcribeAuthMode || 'inherit';
+                if (byId('setting-transcribe-auth-mode')) byId('setting-transcribe-auth-mode').value = transcribeAuthMode;
+                updateTranscribeAuthModeVisibility(transcribeAuthMode);
+                if (byId('setting-transcribe-profile')) byId('setting-transcribe-profile').value = settings.transcribeAwsProfile || '';
+                populateTranscribeProfileOptions(settings.awsProfiles || [], settings.transcribeAwsProfile || '');
+                if (byId('setting-transcribe-access-key')) byId('setting-transcribe-access-key').value = settings.transcribeAwsAccessKeyId || '';
+                if (byId('setting-transcribe-secret')) byId('setting-transcribe-secret').value = settings.transcribeAwsSecretAccessKey || '';
+                if (byId('setting-transcribe-session-token')) byId('setting-transcribe-session-token').value = settings.transcribeAwsSessionToken || '';
                 populateTranscribeLanguageOptions(settings.transcribeLanguages, settings.transcribeLanguage);
                 updateTranscribeVocabularyStatus();
                 if (settingWindowOpacity) {
@@ -777,6 +872,7 @@ export function createSettingsPanelManager({
                 transcribeRegion: byId('setting-transcribe-region')?.value.trim() || '',
                 transcribeLanguage: byId('setting-transcribe-language')?.value || 'en-US',
                 transcribeVocabularyName: currentTranscribeVocabularyName,
+                ...readTranscribeAuthFormValues(),
                 windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
             };
 
@@ -806,9 +902,13 @@ export function createSettingsPanelManager({
     bindApiKeyVisibilityToggle(byId('setting-aws-secret'), byId('toggle-aws-secret-visibility'), 'AWS secret access');
     bindApiKeyVisibilityToggle(byId('setting-aws-session-token'), byId('toggle-aws-session-token-visibility'), 'AWS session');
     bindApiKeyVisibilityToggle(byId('setting-bedrock-api-key'), byId('toggle-bedrock-api-key-visibility'), 'Bedrock API');
+    bindApiKeyVisibilityToggle(byId('setting-transcribe-access-key'), byId('toggle-transcribe-access-key-visibility'), 'Transcribe AWS access key');
+    bindApiKeyVisibilityToggle(byId('setting-transcribe-secret'), byId('toggle-transcribe-secret-visibility'), 'Transcribe AWS secret access');
+    bindApiKeyVisibilityToggle(byId('setting-transcribe-session-token'), byId('toggle-transcribe-session-token-visibility'), 'Transcribe AWS session');
     bindProviderToggle();
     bindAwsAuthControls();
     bindSttProviderControls();
+    bindTranscribeAuthControls();
     bindFetchOllamaModels();
     bindFetchProviderModels();
     bindGnomeShortcutButtons();
