@@ -14,6 +14,12 @@ function byId(id) {
     return document.getElementById(id);
 }
 
+// The shared AWS credentials block is visible when the AI provider is Bedrock
+// OR the speech-to-text provider is Amazon Transcribe (Part 2 adds the STT
+// select; until then the STT provider stays 'assemblyai' here).
+let currentSttProvider = 'assemblyai';
+let currentAwsAuthMode = 'default';
+
 export function createSettingsPanelManager({
     settingsPanel,
     settingAiProvider,
@@ -88,6 +94,98 @@ export function createSettingsPanelManager({
         for (const [name, groupId] of Object.entries(PROVIDER_GROUP_IDS)) {
             byId(groupId)?.classList.toggle('hidden', name !== selected);
         }
+        updateAwsCredentialsVisibility(selected);
+    }
+
+    // The Bedrock API key option only makes sense when Bedrock is the AI
+    // provider — Amazon Transcribe has no bearer scheme. When it is not
+    // applicable the option is hidden and a selected apiKey mode falls back
+    // to the default chain.
+    function updateAwsCredentialsVisibility(provider) {
+        const awsGroup = byId('aws-credentials-group');
+        if (awsGroup) {
+            const show = provider === 'bedrock' || currentSttProvider === 'transcribe';
+            awsGroup.classList.toggle('hidden', !show);
+        }
+
+        const modeSelect = byId('setting-aws-auth-mode');
+        const apiKeyOption = modeSelect?.querySelector('option[value="apiKey"]');
+        if (apiKeyOption) {
+            apiKeyOption.hidden = provider !== 'bedrock';
+        }
+        if (provider !== 'bedrock' && currentAwsAuthMode === 'apiKey') {
+            currentAwsAuthMode = 'default';
+            if (modeSelect) {
+                modeSelect.value = 'default';
+            }
+        }
+        updateAwsAuthModeVisibility(currentAwsAuthMode);
+    }
+
+    // Only the fields for the chosen auth method are visible.
+    function updateAwsAuthModeVisibility(mode) {
+        currentAwsAuthMode = mode;
+        byId('aws-profile-group')?.classList.toggle('hidden', mode !== 'profile');
+        byId('aws-keys-group')?.classList.toggle('hidden', mode !== 'keys');
+        byId('aws-api-key-group')?.classList.toggle('hidden', mode !== 'apiKey');
+    }
+
+    function populateAwsProfileOptions(profiles, selectedProfile) {
+        const select = byId('setting-aws-profile-select');
+        if (!select) {
+            return;
+        }
+        select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = profiles.length > 0 ? 'Pick a profile...' : 'No profiles found in ~/.aws';
+        select.appendChild(placeholder);
+        for (const name of Array.isArray(profiles) ? profiles : []) {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+        }
+        if (selectedProfile && profiles.includes(selectedProfile)) {
+            select.value = selectedProfile;
+        }
+    }
+
+    async function refreshAwsProfileList() {
+        const refreshButton = byId('refresh-aws-profiles');
+        try {
+            if (refreshButton) {
+                refreshButton.disabled = true;
+            }
+            const result = await window.electronAPI.listAwsProfiles();
+            if (result?.success === false) {
+                showFeedback?.(result?.error || 'Could not list AWS profiles.', 'error');
+                return;
+            }
+            populateAwsProfileOptions(result?.profiles, byId('setting-aws-profile')?.value.trim());
+        } catch (error) {
+            console.error('Failed to list AWS profiles:', error);
+            showFeedback?.('Could not list AWS profiles.', 'error');
+        } finally {
+            if (refreshButton) {
+                refreshButton.disabled = false;
+            }
+        }
+    }
+
+    function bindAwsAuthControls() {
+        byId('setting-aws-auth-mode')?.addEventListener('change', (event) => {
+            updateAwsAuthModeVisibility(event.target.value);
+        });
+        byId('setting-aws-profile-select')?.addEventListener('change', (event) => {
+            const profileInput = byId('setting-aws-profile');
+            if (profileInput && event.target.value) {
+                profileInput.value = event.target.value;
+            }
+        });
+        byId('refresh-aws-profiles')?.addEventListener('click', () => {
+            refreshAwsProfileList();
+        });
     }
 
     function populateModelSelect(selectElement, models, selectedModel) {
@@ -240,8 +338,11 @@ export function createSettingsPanelManager({
                 bedrockBtn,
                 {
                     region: byId('setting-bedrock-region')?.value.trim(),
-                    accessKeyId: byId('setting-bedrock-access-key')?.value.trim(),
-                    secretAccessKey: byId('setting-bedrock-secret')?.value.trim()
+                    authMode: byId('setting-aws-auth-mode')?.value,
+                    profile: byId('setting-aws-profile')?.value.trim(),
+                    accessKeyId: byId('setting-aws-access-key')?.value.trim(),
+                    secretAccessKey: byId('setting-aws-secret')?.value.trim(),
+                    sessionToken: byId('setting-aws-session-token')?.value.trim()
                 },
                 (models) => populateDatalist(byId('bedrock-model-options'), models)
             );
@@ -417,8 +518,17 @@ export function createSettingsPanelManager({
                 if (byId('setting-bedrock-region')) byId('setting-bedrock-region').value = settings.bedrockRegion || settings.defaultBedrockRegion || 'us-east-1';
                 if (byId('setting-bedrock-model')) byId('setting-bedrock-model').value = settings.bedrockModelId || settings.bedrockModels?.[0]?.id || '';
                 populateDatalist(byId('bedrock-model-options'), settings.bedrockModels);
-                if (byId('setting-bedrock-access-key')) byId('setting-bedrock-access-key').value = settings.bedrockAccessKeyId || '';
-                if (byId('setting-bedrock-secret')) byId('setting-bedrock-secret').value = settings.bedrockSecretAccessKey || '';
+
+                // Shared AWS credentials (Bedrock + Amazon Transcribe)
+                const awsAuthMode = settings.awsAuthMode || 'default';
+                if (byId('setting-aws-auth-mode')) byId('setting-aws-auth-mode').value = awsAuthMode;
+                updateAwsAuthModeVisibility(awsAuthMode);
+                if (byId('setting-aws-profile')) byId('setting-aws-profile').value = settings.awsProfile || '';
+                populateAwsProfileOptions(settings.awsProfiles || [], settings.awsProfile || '');
+                if (byId('setting-aws-access-key')) byId('setting-aws-access-key').value = settings.awsAccessKeyId || '';
+                if (byId('setting-aws-secret')) byId('setting-aws-secret').value = settings.awsSecretAccessKey || '';
+                if (byId('setting-aws-session-token')) byId('setting-aws-session-token').value = settings.awsSessionToken || '';
+                if (byId('setting-bedrock-api-key')) byId('setting-bedrock-api-key').value = settings.bedrockApiKey || '';
 
                 // Fallback provider (first entry of the saved fallback list)
                 const fallbackSelect = byId('setting-provider-fallback');
@@ -503,8 +613,12 @@ export function createSettingsPanelManager({
                 anthropicModel: byId('setting-anthropic-model')?.value || '',
                 bedrockRegion: byId('setting-bedrock-region')?.value.trim() || '',
                 bedrockModelId: byId('setting-bedrock-model')?.value.trim() || '',
-                bedrockAccessKeyId: byId('setting-bedrock-access-key')?.value.trim() || '',
-                bedrockSecretAccessKey: byId('setting-bedrock-secret')?.value.trim() || '',
+                awsAuthMode: byId('setting-aws-auth-mode')?.value || 'default',
+                awsProfile: byId('setting-aws-profile')?.value.trim() || '',
+                awsAccessKeyId: byId('setting-aws-access-key')?.value.trim() || '',
+                awsSecretAccessKey: byId('setting-aws-secret')?.value.trim() || '',
+                awsSessionToken: byId('setting-aws-session-token')?.value.trim() || '',
+                bedrockApiKey: byId('setting-bedrock-api-key')?.value.trim() || '',
                 ollamaBaseUrl: settingOllamaBaseUrl ? settingOllamaBaseUrl.value.trim() : '',
                 ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : '',
                 programmingLanguage: settingProgrammingLanguage.value,
@@ -534,8 +648,12 @@ export function createSettingsPanelManager({
     bindApiKeyVisibilityToggle(settingAssemblyKey, toggleAssemblyKeyVisibilityBtn, 'AssemblyAI');
     bindApiKeyVisibilityToggle(byId('setting-openai-key'), byId('toggle-openai-key-visibility'), 'OpenAI');
     bindApiKeyVisibilityToggle(byId('setting-anthropic-key'), byId('toggle-anthropic-key-visibility'), 'Anthropic');
-    bindApiKeyVisibilityToggle(byId('setting-bedrock-secret'), byId('toggle-bedrock-secret-visibility'), 'AWS secret access');
+    bindApiKeyVisibilityToggle(byId('setting-aws-access-key'), byId('toggle-aws-access-key-visibility'), 'AWS access key');
+    bindApiKeyVisibilityToggle(byId('setting-aws-secret'), byId('toggle-aws-secret-visibility'), 'AWS secret access');
+    bindApiKeyVisibilityToggle(byId('setting-aws-session-token'), byId('toggle-aws-session-token-visibility'), 'AWS session');
+    bindApiKeyVisibilityToggle(byId('setting-bedrock-api-key'), byId('toggle-bedrock-api-key-visibility'), 'Bedrock API');
     bindProviderToggle();
+    bindAwsAuthControls();
     bindFetchOllamaModels();
     bindFetchProviderModels();
     bindGnomeShortcutButtons();

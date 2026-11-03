@@ -45,7 +45,7 @@ function createGeminiRuntime() {
   const providerSettings = {
     openai: { apiKey: '', modelName: '' },
     anthropic: { apiKey: '', modelName: '' },
-    bedrock: { region: '', accessKeyId: '', secretAccessKey: '', modelId: '' }
+    bedrock: { region: '', authMode: '', profile: '', accessKeyId: '', secretAccessKey: '', sessionToken: '', apiKey: '', modelId: '' }
   };
   let providerFallbackOrder = [];
   let activeAiProvider = getDefaultAiProvider();

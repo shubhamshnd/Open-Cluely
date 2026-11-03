@@ -1,10 +1,21 @@
 const { fetchProviderModels } = require('../../../services/ai/model-lists');
+const { listAwsProfiles } = require('../../../services/aws/credentials');
 const {
   getAiProviderLabel,
   getOpenAIModels,
   getAnthropicModels,
   getBedrockModels,
-  getDefaultBedrockRegion
+  getDefaultBedrockRegion,
+  getAwsAuthModes,
+  getAwsAuthModeLabels,
+  resolveAwsAuthMode,
+  getSttProviders,
+  getSttProviderLabels,
+  resolveSttProvider,
+  getTranscribeLanguages,
+  getDefaultTranscribeRegion,
+  resolveTranscribeRegion,
+  resolveTranscribeLanguage
 } = require('../../../config');
 const { createGnomeShortcutInstaller } = require('../../shared/shortcut-actions');
 
@@ -74,11 +85,29 @@ function registerSettingsIpc({
       anthropicModel: geminiRuntime.getProviderSettings('anthropic').modelName,
       anthropicModels: getAnthropicModels(),
       bedrockRegion: geminiRuntime.getProviderSettings('bedrock').region,
-      bedrockAccessKeyId: geminiRuntime.getProviderSettings('bedrock').accessKeyId,
-      bedrockSecretAccessKey: geminiRuntime.getProviderSettings('bedrock').secretAccessKey,
       bedrockModelId: geminiRuntime.getProviderSettings('bedrock').modelId,
       bedrockModels: getBedrockModels(),
       defaultBedrockRegion: getDefaultBedrockRegion(),
+      // AWS auth (shared by Bedrock and Amazon Transcribe). Profile listing
+      // returns NAMES only — credential values are never read by the app.
+      awsAuthMode: resolveAwsAuthMode(appState?.awsAuthMode),
+      awsAuthModes: getAwsAuthModes(),
+      awsAuthModeLabels: getAwsAuthModeLabels(),
+      awsProfile: typeof appState?.awsProfile === 'string' ? appState.awsProfile : '',
+      awsProfiles: listAwsProfiles().profiles,
+      awsAccessKeyId: typeof appState?.awsAccessKeyId === 'string' ? appState.awsAccessKeyId : '',
+      awsSecretAccessKey: typeof appState?.awsSecretAccessKey === 'string' ? appState.awsSecretAccessKey : '',
+      awsSessionToken: typeof appState?.awsSessionToken === 'string' ? appState.awsSessionToken : '',
+      bedrockApiKey: typeof appState?.bedrockApiKey === 'string' ? appState.bedrockApiKey : '',
+      // Speech-to-text provider + Amazon Transcribe settings.
+      sttProvider: resolveSttProvider(appState?.sttProvider),
+      sttProviders: getSttProviders(),
+      sttProviderLabels: getSttProviderLabels(),
+      transcribeRegion: resolveTranscribeRegion(appState?.transcribeRegion),
+      defaultTranscribeRegion: getDefaultTranscribeRegion(),
+      transcribeLanguage: resolveTranscribeLanguage(appState?.transcribeLanguage),
+      transcribeLanguages: getTranscribeLanguages(),
+      transcribeVocabularyName: typeof appState?.transcribeVocabularyName === 'string' ? appState.transcribeVocabularyName : '',
       providerFallback: Array.isArray(appState?.providerFallback) ? appState.providerFallback : [],
       ollamaBaseUrl: geminiRuntime.getActiveOllamaBaseUrl(),
       ollamaModel: geminiRuntime.getActiveOllamaModel(),
@@ -109,13 +138,20 @@ function registerSettingsIpc({
   ipcMain.handle('list-provider-models', async (_event, payload = {}) => {
     const provider = String(payload?.provider || '').trim().toLowerCase();
     const saved = geminiRuntime.getProviderSettings(provider) || {};
+    const appState = typeof getAppState === 'function' ? getAppState() : null;
     return fetchProviderModels(provider, {
       apiKey: payload?.apiKey || saved.apiKey,
       region: payload?.region || saved.region,
-      accessKeyId: payload?.accessKeyId ?? saved.accessKeyId,
-      secretAccessKey: payload?.secretAccessKey ?? saved.secretAccessKey
+      authMode: payload?.authMode ?? appState?.awsAuthMode ?? saved.authMode,
+      profile: payload?.profile ?? appState?.awsProfile ?? saved.profile,
+      accessKeyId: payload?.accessKeyId ?? appState?.awsAccessKeyId ?? saved.accessKeyId,
+      secretAccessKey: payload?.secretAccessKey ?? appState?.awsSecretAccessKey ?? saved.secretAccessKey,
+      sessionToken: payload?.sessionToken ?? appState?.awsSessionToken ?? saved.sessionToken
     });
   });
+
+  // Settings AWS profile dropdown Refresh: names only, never values.
+  ipcMain.handle('list-aws-profiles', async () => listAwsProfiles());
 
   ipcMain.handle('set-theme-preference', (_event, payload = {}) => {
     try {
@@ -154,10 +190,15 @@ function registerSettingsIpc({
         apiKey: settings.anthropicApiKey,
         modelName: settings.anthropicModel
       });
+      const nextAwsAuthMode = resolveAwsAuthMode(settings.awsAuthMode);
       const nextBedrock = geminiRuntime.setProviderSettings('bedrock', {
         region: settings.bedrockRegion,
-        accessKeyId: settings.bedrockAccessKeyId,
-        secretAccessKey: settings.bedrockSecretAccessKey,
+        authMode: nextAwsAuthMode,
+        profile: settings.awsProfile,
+        accessKeyId: settings.awsAccessKeyId,
+        secretAccessKey: settings.awsSecretAccessKey,
+        sessionToken: settings.awsSessionToken,
+        apiKey: settings.bedrockApiKey,
         modelId: settings.bedrockModelId
       });
       const nextProviderFallback = (Array.isArray(settings.providerFallback) ? settings.providerFallback : [])
@@ -183,9 +224,21 @@ function registerSettingsIpc({
         anthropicApiKey: nextAnthropic.apiKey || null,
         anthropicModel: nextAnthropic.modelName || null,
         bedrockRegion: nextBedrock.region || null,
-        bedrockAccessKeyId: nextBedrock.accessKeyId || null,
-        bedrockSecretAccessKey: nextBedrock.secretAccessKey || null,
+        // Legacy Bedrock key fields: superseded by the shared AWS auth state,
+        // cleared here so the one-time migration cannot resurrect them.
+        bedrockAccessKeyId: null,
+        bedrockSecretAccessKey: null,
         bedrockModelId: nextBedrock.modelId || null,
+        awsAuthMode: nextAwsAuthMode,
+        awsProfile: nextBedrock.profile || null,
+        awsAccessKeyId: nextBedrock.accessKeyId || null,
+        awsSecretAccessKey: nextBedrock.secretAccessKey || null,
+        awsSessionToken: nextBedrock.sessionToken || null,
+        bedrockApiKey: nextBedrock.apiKey || null,
+        sttProvider: resolveSttProvider(settings.sttProvider),
+        transcribeRegion: String(settings.transcribeRegion || '').trim() || null,
+        transcribeLanguage: resolveTranscribeLanguage(settings.transcribeLanguage),
+        transcribeVocabularyName: String(settings.transcribeVocabularyName || '').trim() || null,
         providerFallback: nextProviderFallback,
         ollamaBaseUrl: nextOllamaBaseUrl,
         ollamaModel: nextOllamaModel,

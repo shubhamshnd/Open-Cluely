@@ -295,18 +295,7 @@
             </div>
             <datalist id="bedrock-model-options"></datalist>
           </div>
-          <div class="settings-group">
-            <label class="settings-label">AWS Access Key ID (optional)</label>
-            <input type="text" id="setting-bedrock-access-key" class="settings-input" autocomplete="off" />
-          </div>
-          <div class="settings-group">
-            <label class="settings-label">AWS Secret Access Key (optional)</label>
-            <div class="settings-input-row">
-              <input type="password" id="setting-bedrock-secret" class="settings-input" autocomplete="off" />
-              <button type="button" id="toggle-bedrock-secret-visibility" class="settings-input-toggle" aria-label="Show AWS secret access key" aria-pressed="false">Show</button>
-            </div>
-            <div class="settings-helper-text">Leave both blank to use the AWS credential chain (AWS_PROFILE, environment, or ~/.aws).</div>
-          </div>
+          <div class="settings-helper-text">Bedrock signs in with the shared AWS credentials below.</div>
         </div>
         <div id="ollama-settings-group" class="hidden">
           <div class="settings-group">
@@ -324,6 +313,59 @@
             </div>
             <div class="settings-helper-text">Enter a model name or click Fetch to list installed models.</div>
             <select id="setting-ollama-model-select" class="settings-input hidden"></select>
+          </div>
+        </div>
+        <div id="aws-credentials-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">AWS Auth Method</label>
+            <select id="setting-aws-auth-mode" class="settings-input">
+              <option value="default">Default (AWS credential chain)</option>
+              <option value="profile">AWS profile</option>
+              <option value="keys">Access key + secret (+ optional session token)</option>
+              <option value="apiKey">Bedrock API key</option>
+            </select>
+            <div class="settings-helper-text">Shared by Amazon Bedrock and Amazon Transcribe.</div>
+          </div>
+          <div id="aws-profile-group" class="settings-group hidden">
+            <label class="settings-label">AWS Profile</label>
+            <div class="settings-input-row">
+              <select id="setting-aws-profile-select" class="settings-input"></select>
+              <button type="button" id="refresh-aws-profiles" class="settings-input-toggle" aria-label="Refresh AWS profile list">Refresh</button>
+            </div>
+            <input type="text" id="setting-aws-profile" class="settings-input" placeholder="Or type a profile name..." autocomplete="off" />
+            <div class="settings-helper-text">Profile names are read from ~/.aws/config and ~/.aws/credentials. Only names are listed, never credentials.</div>
+          </div>
+          <div id="aws-keys-group" class="hidden">
+            <div class="settings-group">
+              <label class="settings-label">AWS Access Key ID</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-aws-access-key" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-aws-access-key-visibility" class="settings-input-toggle" aria-label="Show AWS access key ID" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">AWS Secret Access Key</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-aws-secret" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-aws-secret-visibility" class="settings-input-toggle" aria-label="Show AWS secret access key" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">AWS Session Token (optional)</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-aws-session-token" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-aws-session-token-visibility" class="settings-input-toggle" aria-label="Show AWS session token" aria-pressed="false">Show</button>
+              </div>
+              <div class="settings-helper-text">Only for temporary credentials (STS). Leave blank for long-lived keys.</div>
+            </div>
+          </div>
+          <div id="aws-api-key-group" class="settings-group hidden">
+            <label class="settings-label">Bedrock API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-bedrock-api-key" class="settings-input" autocomplete="off" />
+              <button type="button" id="toggle-bedrock-api-key-visibility" class="settings-input-toggle" aria-label="Show Bedrock API key" aria-pressed="false">Show</button>
+            </div>
+            <div class="settings-helper-text">Bedrock only; Amazon Transcribe can't use it.</div>
           </div>
         </div>
         <div class="settings-group">

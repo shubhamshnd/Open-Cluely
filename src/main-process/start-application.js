@@ -165,8 +165,12 @@ async function startApplication() {
     });
     geminiRuntime.setProviderSettings('bedrock', {
       region: appState.bedrockRegion,
-      accessKeyId: appState.bedrockAccessKeyId,
-      secretAccessKey: appState.bedrockSecretAccessKey,
+      authMode: appState.awsAuthMode,
+      profile: appState.awsProfile,
+      accessKeyId: appState.awsAccessKeyId,
+      secretAccessKey: appState.awsSecretAccessKey,
+      sessionToken: appState.awsSessionToken,
+      apiKey: appState.bedrockApiKey,
       modelId: appState.bedrockModelId
     });
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);

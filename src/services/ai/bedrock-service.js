@@ -5,11 +5,11 @@
 // API, so one client covers Claude, Llama, Nova, and other Bedrock models
 // without per-model body formats.
 //
-// Credentials: an access key + secret from app state when both are set; when
-// both are empty the SDK's default AWS credential chain applies (AWS_PROFILE,
-// environment variables, ~/.aws, instance role) so no long-lived keys have to
-// be pasted on a developer box. Setting exactly one key is a misconfiguration
-// and makes ready() false.
+// Credentials come from the shared AWS auth resolver (../aws/credentials.js):
+// the Settings-chosen auth mode — default credential chain, named profile,
+// access key + secret (+ optional session token), or a Bedrock API key sent
+// as `Authorization: Bearer`. For backwards compatibility an unset auth mode
+// with both legacy key fields still behaves as mode 'keys'.
 //
 // Implements the shared provider contract via BaseProviderService; every
 // prompt comes from the shared builders in ./prompts.js.
@@ -23,6 +23,7 @@ const {
 } = require('@aws-sdk/client-bedrock-runtime');
 const { BedrockClient, ListFoundationModelsCommand } = require('@aws-sdk/client-bedrock');
 const BaseProviderService = require('./base-provider-service');
+const { resolveAwsAuth, isAwsAuthReady, normalizeAwsAuthMode } = require('../aws/credentials');
 const {
   bedrockModelSupportsImages,
   resolveBedrockModel,
@@ -38,17 +39,34 @@ const MIME_TO_CONVERSE_FORMAT = {
   'image/webp': 'webp'
 };
 
-function buildClientConfig({ region, accessKeyId, secretAccessKey }) {
+// An unset auth mode keeps the pre-auth-modes behavior: any key material
+// means static-keys mode (exactly one key stays the misconfiguration it
+// always was and is not ready); none means the default AWS credential chain.
+function resolveAuthMode(options) {
+  const explicit = normalizeAwsAuthMode(options.authMode);
+  if (explicit) {
+    return explicit;
+  }
+  const hasKey = String(options.accessKeyId || '').trim().length > 0;
+  const hasSecret = String(options.secretAccessKey || '').trim().length > 0;
+  return hasKey || hasSecret ? 'keys' : 'default';
+}
+
+function buildClientConfig({ region, auth }) {
   // Bound connect/idle time so a hung call surfaces as a timeout (and can
   // trigger provider fallback) instead of hanging with no limit.
   const config = {
     region,
     requestHandler: { connectionTimeout: 10_000, requestTimeout: 60_000 }
   };
-  // Only attach static credentials when BOTH parts are present; otherwise let
-  // the default AWS credential chain resolve (env, profile, instance role).
-  if (accessKeyId && secretAccessKey) {
-    config.credentials = { accessKeyId, secretAccessKey };
+  if (auth?.credentials) {
+    config.credentials = auth.credentials;
+  }
+  if (auth?.token) {
+    // Bedrock API key: bearer auth instead of SigV4 (verified with a custom
+    // requestHandler — the SDK sends `Authorization: Bearer <key>`).
+    config.token = auth.token;
+    config.authSchemePreference = auth.authSchemePreference;
   }
   return config;
 }
@@ -57,8 +75,12 @@ class BedrockService extends BaseProviderService {
   constructor(options = {}) {
     super(options);
     this.region = resolveBedrockRegion(options.region);
+    this.authMode = resolveAuthMode(options);
+    this.profile = String(options.profile || '').trim();
     this.accessKeyId = String(options.accessKeyId || '').trim();
     this.secretAccessKey = String(options.secretAccessKey || '').trim();
+    this.sessionToken = String(options.sessionToken || '').trim();
+    this.apiKey = String(options.apiKey || '').trim();
     this.modelId = resolveBedrockModel(options.modelId ?? options.modelName);
 
     const clientConfig = this._clientConfig();
@@ -66,44 +88,67 @@ class BedrockService extends BaseProviderService {
     this.runtimeClient = options.runtimeClient || new BedrockRuntimeClient(clientConfig);
     this.bedrockClient = options.bedrockClient || new BedrockClient(clientConfig);
 
-    console.log('BedrockService initialized:', this.modelId, 'in', this.region);
+    console.log('BedrockService initialized:', this.modelId, 'in', this.region, '| auth:', this.authMode);
+  }
+
+  _awsAuthState() {
+    return {
+      awsAuthMode: this.authMode,
+      awsProfile: this.profile,
+      awsAccessKeyId: this.accessKeyId,
+      awsSecretAccessKey: this.secretAccessKey,
+      awsSessionToken: this.sessionToken,
+      bedrockApiKey: this.apiKey
+    };
   }
 
   _clientConfig() {
-    return buildClientConfig(this);
+    const auth = resolveAwsAuth(this._awsAuthState(), { purpose: 'bedrock' });
+    return buildClientConfig({ region: this.region, auth });
   }
 
   get supportsImages() {
     return bedrockModelSupportsImages(this.modelId);
   }
 
-  // Ready when a region is set and credentials are either fully configured
-  // (key + secret) or fully delegated to the default AWS credential chain.
+  // Ready when a region is set and the selected auth mode has everything it
+  // needs (profile name, both keys, or the API key). The default chain needs
+  // nothing configured.
   ready() {
     if (!this.region) {
       return false;
     }
-    const hasKey = this.accessKeyId.length > 0;
-    const hasSecret = this.secretAccessKey.length > 0;
-    return hasKey === hasSecret;
+    return isAwsAuthReady(this._awsAuthState(), { purpose: 'bedrock' });
   }
 
   updateConfiguration(options = {}) {
     const previousProgrammingLanguage = this.programmingLanguage;
     const nextRegion = resolveBedrockRegion(options.region ?? this.region);
+    const nextAuthMode = options.authMode !== undefined ? resolveAuthMode(options) : this.authMode;
+    const nextProfile = String(options.profile ?? this.profile ?? '').trim();
     const nextAccessKeyId = String(options.accessKeyId ?? this.accessKeyId ?? '').trim();
     const nextSecretAccessKey = String(options.secretAccessKey ?? this.secretAccessKey ?? '').trim();
+    const nextSessionToken = String(options.sessionToken ?? this.sessionToken ?? '').trim();
+    const nextApiKey = String(options.apiKey ?? this.apiKey ?? '').trim();
     const nextModelId = resolveBedrockModel(options.modelId ?? options.modelName ?? this.modelId);
 
     const credentialsChanged =
       nextRegion !== this.region ||
+      nextAuthMode !== this.authMode ||
+      nextProfile !== this.profile ||
       nextAccessKeyId !== this.accessKeyId ||
-      nextSecretAccessKey !== this.secretAccessKey;
+      nextSecretAccessKey !== this.secretAccessKey ||
+      nextSessionToken !== this.sessionToken ||
+      nextApiKey !== this.apiKey;
     const modelChanged = nextModelId !== this.modelId;
 
     this.region = nextRegion;
+    this.authMode = nextAuthMode;
+    this.profile = nextProfile;
     this.accessKeyId = nextAccessKeyId;
     this.secretAccessKey = nextSecretAccessKey;
+    this.sessionToken = nextSessionToken;
+    this.apiKey = nextApiKey;
     this.modelId = nextModelId;
     this.programmingLanguage = resolveProgrammingLanguage(
       options.programmingLanguage ?? this.programmingLanguage
@@ -203,8 +248,15 @@ class BedrockService extends BaseProviderService {
   }
 
   // List foundation models available in the configured region (settings panel
-  // "Fetch" button, Task D3). Returns plain model id strings.
+  // "Fetch" button, Task D3). Returns plain model id strings. Bedrock API
+  // keys are bearer credentials for the runtime API; the control-plane list
+  // call needs SigV4, so apiKey mode gets a clear message instead of a call.
   async listModels() {
+    if (this.authMode === 'apiKey') {
+      throw new Error(
+        'Model listing needs SigV4 AWS credentials and is not available with a Bedrock API key. Use Default, AWS profile, or access keys to fetch models.'
+      );
+    }
     const response = await this.bedrockClient.send(new ListFoundationModelsCommand({}));
     const summaries = Array.isArray(response.modelSummaries) ? response.modelSummaries : [];
     return summaries
