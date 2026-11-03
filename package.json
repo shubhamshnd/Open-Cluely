@@ -1,7 +1,7 @@
 {
-  "name": "stealth-meeting-assistant",
+  "name": "open-cluely",
   "version": "1.0.0",
-  "description": "Invisible AI assistant for meetings - undetectable during screen share",
+  "description": "Desktop AI copilot for meetings and interview practice",
   "main": "src/main.js",
   "scripts": {
     "start": "node scripts/run-electron.js",
@@ -26,8 +26,8 @@
     "esbuild": "^0.25.6"
   },
   "build": {
-    "appId": "com.google.chrome",
-    "productName": "Google Chrome (2)",
+    "appId": "com.opencluely.app",
+    "productName": "Open Cluely",
     "directories": {
       "output": "dist"
     },
@@ -44,7 +44,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "assets/chrome.icns"
+      "icon": "assets/icon.icns"
     },
     "win": {
       "target": [
@@ -55,18 +55,19 @@
           ]
         }
       ],
-      "icon": "assets/chrome.ico",
+      "icon": "assets/icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "verifyUpdateCodeSignature": false,
-      "publisherName": "Google LLC",
       "fileAssociations": []
     },
     "portable": {
-      "artifactName": "GoogleChrome.exe"
+      "artifactName": "OpenCluely.exe"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/chrome.png"
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "maintainer": "Open Cluely"
     }
   },
   "author": "Shubham",
