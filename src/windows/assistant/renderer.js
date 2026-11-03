@@ -782,15 +782,12 @@ async function askAiWithSessionContext() {
         try {
             setAnalyzing(true);
             showLoadingOverlay('Analyzing full session context...');
-            stream.start('**Best Next Answer:**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.askAiWithSessionContext(payload);
 
             if (result?.success && result?.text) {
-                const heading = result.usedScreenshots
-                    ? '**Best Next Answer (Transcript + Screen):**'
-                    : '**Best Next Answer (Transcript):**';
-                stream.finalize(`${heading}\n\n${result.text}`);
+                stream.finalize(result.text);
                 showFeedback('Ask AI ready', 'success');
             } else {
                 throw new Error(result?.error || 'Ask AI failed');
@@ -927,7 +924,7 @@ async function getResponseSuggestions() {
                 return;
             }
 
-            stream.start('\u{1F4A1} **What should I say?**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.suggestResponse({
                 context: bundle.sessionSummary || 'Current meeting conversation',
@@ -935,7 +932,7 @@ async function getResponseSuggestions() {
             });
 
             if (result.success && result.suggestions) {
-                stream.finalize(`\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
+                stream.finalize(result.suggestions);
                 showFeedback('Suggestions generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to generate suggestions');
@@ -972,14 +969,14 @@ async function generateMeetingNotes() {
                 return;
             }
 
-            stream.start('\u{1F4DD} **Meeting Notes**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.generateMeetingNotes({
                 contextString: bundle.contextString
             });
 
             if (result.success && result.notes) {
-                stream.finalize(`\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
+                stream.finalize(result.notes);
                 showFeedback('Meeting notes generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to generate notes');
@@ -1017,14 +1014,14 @@ async function getConversationInsights() {
                 return;
             }
 
-            stream.start('\u{1F4CA} **Conversation Insights**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.getConversationInsights({
                 contextString: bundle.contextString
             });
 
             if (result.success && result.insights) {
-                stream.finalize(`\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
+                stream.finalize(result.insights);
                 showFeedback('Insights generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to get insights');
