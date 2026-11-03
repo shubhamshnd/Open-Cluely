@@ -87,3 +87,22 @@ test('splitImageParts separates text and normalizes inline images', () => {
   assert.equal(images[0].bytes.toString('base64'), png1x1);
   assert.equal(images[1].mimeType, 'image/jpeg');
 });
+
+test('classifyProviderError handles real SDK connection and credential errors', () => {
+  const OpenAI = require('openai');
+  const Anthropic = require('@anthropic-ai/sdk');
+  const refused = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), { code: 'ECONNREFUSED' });
+
+  // Real SDK errors: name 'Error', message 'Connection error.', code only on cause.
+  assert.equal(classifyProviderError(new OpenAI.APIConnectionError({ cause: refused })), 'connection');
+  assert.equal(classifyProviderError(new Anthropic.APIConnectionError({ cause: refused })), 'connection');
+  assert.equal(classifyProviderError(new OpenAI.APIConnectionTimeoutError()), 'timeout');
+
+  const noCreds = Object.assign(new Error('Could not load credentials from any providers'), {
+    name: 'CredentialsProviderError'
+  });
+  assert.equal(classifyProviderError(noCreds), 'auth');
+
+  // A plain bad request must stay ineligible for fallback.
+  assert.equal(classifyProviderError(Object.assign(new Error('bad input'), { status: 400 })), null);
+});

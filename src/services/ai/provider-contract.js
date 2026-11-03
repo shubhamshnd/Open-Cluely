@@ -81,7 +81,9 @@ const AUTH_ERROR_NAMES = new Set([
   'InvalidSignatureException',
   'AccessDeniedException',
   'AuthenticationError',
-  'PermissionDeniedError'
+  'PermissionDeniedError',
+  // AWS SDK: no usable credentials anywhere in the default chain.
+  'CredentialsProviderError'
 ]);
 
 const QUOTA_ERROR_NAMES = new Set([
@@ -123,7 +125,10 @@ function classifyProviderError(error) {
     error.response?.status
   );
   const name = String(error.name || '');
-  const code = String(error.code || '');
+  // The OpenAI and Anthropic SDKs throw APIConnectionError with
+  // name 'Error' and message 'Connection error.'; the socket code
+  // (ECONNREFUSED, ...) is only on error.cause.
+  const code = String(error.code || error.cause?.code || '');
   const message = String(error.message || '').toLowerCase();
 
   if (
@@ -167,6 +172,7 @@ function classifyProviderError(error) {
     CONNECTION_ERROR_CODES.has(code) ||
     CONNECTION_ERROR_NAMES.has(name) ||
     message.includes('fetch failed') ||
+    message.includes('connection error') ||
     message.includes('econnrefused') ||
     message.includes('enotfound') ||
     message.includes('socket hang up') ||
