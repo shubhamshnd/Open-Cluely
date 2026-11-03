@@ -390,8 +390,11 @@ test('theme toggle keeps its title in sync with the dynamic label', () => {
 });
 
 test('frame controls keep margin from the window edges', () => {
-  const handle = rules.find((r) => r.selectors.includes('.drag-handle') && r.decls.padding && r.decls.padding.includes('14px'));
+  const handle = [...rules].reverse().find((r) => r.selectors.includes('.drag-handle') && r.decls.padding && /px/.test(r.decls.padding));
   assert.ok(handle, 'drag-handle must pad the close button off the top-right corner');
+  const parts = handle.decls.padding.split(/\s+/).map((p) => parseFloat(p));
+  const [padTop, padRight] = parts.length > 1 ? parts : [parts[0], parts[0]];
+  assert.ok(padTop >= 7 && padRight >= 14, `close button padding too tight: ${handle.decls.padding}`);
   const corner = [...rules].reverse().find((r) => r.selectors.includes('.resize-handle-ne') && r.decls.top);
   assert.ok(corner, 'resize-handle-ne inset rule missing');
   assert.ok(parseFloat(corner.decls.top) >= 3 && parseFloat(corner.decls.right) >= 3, 'corner accent must be inset from the frame');

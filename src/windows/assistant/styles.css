@@ -2913,7 +2913,7 @@ body:not(.theme-dark) .chat-manual-input:focus {
 }
 
 body:not(.theme-dark) .chat-manual-input::placeholder {
-  color: #475569;
+  color: #334155;
 }
 
 body:not(.theme-dark) .chat-manual-send {
@@ -3648,7 +3648,7 @@ body.theme-dark .save-settings-btn {
 /* Close button: centered in a 30px handle it sat 5-6px from the top frame
    edge and crowded the corner accent. Give it real air. */
 .drag-handle {
-  padding: 7px 14px 0 0;
+  padding: 9px 16px 0 0;
   align-items: flex-start;
 }
 
@@ -3689,5 +3689,90 @@ body.theme-dark .save-settings-btn {
 
 /* Add button: lift the composer off the bottom frame edge. */
 .chat-composer {
-  padding-bottom: 9px;
+  padding-bottom: 10px;
+}
+
+/* ---------- STRENGTHEN the items the vision pass still flagged ---------- */
+/* Light-theme mode buttons: same hue family, one shade darker text. */
+body:not(.theme-dark) .action-btn.screen-ai-btn {
+  color: #082f49;
+}
+
+body:not(.theme-dark) .action-btn.suggest-btn {
+  color: #451a03;
+}
+
+body:not(.theme-dark) .action-btn.notes-btn {
+  color: #2e1065;
+}
+
+body:not(.theme-dark) .action-btn.insights-btn {
+  color: #500724;
+}
+
+/* Model label: full-strength text at 12px in the chat header. */
+body:not(.theme-dark) .chat-provider-model {
+  color: #0f172a;
+}
+
+body.theme-dark .chat-provider-model {
+  color: #e2e8f0;
+}
+
+.chat-provider-model {
+  font-size: 12px;
+}
+
+/* Dim grays move one step darker/lighter for small-size rendering. */
+body:not(.theme-dark) .message-time,
+body:not(.theme-dark) .settings-helper-text,
+body:not(.theme-dark) .settings-shortcut-description,
+body:not(.theme-dark) .settings-shortcuts-empty {
+  color: #334155;
+}
+
+body.theme-dark .message-time,
+body.theme-dark .settings-helper-text,
+body.theme-dark .settings-shortcut-description,
+body.theme-dark .settings-shortcuts-empty {
+  color: #cbd5e1;
+}
+
+/* Composer text and placeholder at 12px. */
+.chat-manual-input {
+  font-size: 12px;
+}
+
+/* Cap the line length of chat messages: at the default width a full-width
+   line runs ~130 characters, well past the comfortable reading range. */
+.message-content {
+  max-width: 78ch;
+}
+
+/* Monitor live text and log lines have room for 12px; the panel scrolls. */
+.monitor-live-text,
+.monitor-log-entry {
+  font-size: 12px;
+}
+
+.monitor-log-list {
+  max-height: 62px;
+}
+
+/* Corner accents: keep them subtle so they don't fight the close/Add
+   buttons for attention (hover still brightens them). */
+.resize-handle-ne {
+  background: linear-gradient(225deg, transparent 50%, rgba(59, 130, 246, 0.3) 50%);
+}
+
+.resize-handle-se {
+  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.3) 50%);
+}
+
+.resize-handle-sw {
+  background: linear-gradient(225deg, rgba(59, 130, 246, 0.3) 50%, transparent 50%);
+}
+
+.resize-handle-nw {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 50%, transparent 50%);
 }
