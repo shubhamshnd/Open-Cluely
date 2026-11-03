@@ -42,12 +42,6 @@
     "asarUnpack": [
       "node_modules/screenshot-desktop/**/*"
     ],
-    "extraResources": [
-      {
-        "from": ".env",
-        "to": ".env"
-      }
-    ],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/chrome.icns"

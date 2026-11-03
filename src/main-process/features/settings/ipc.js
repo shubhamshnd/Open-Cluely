@@ -2,11 +2,9 @@ function registerSettingsIpc({
   ipcMain,
   app,
   getAppEnvironment,
-  setAppEnvironment,
   getAppState,
   setAppState,
   getAppStatePath,
-  saveApplicationEnvironment,
   saveAppState,
   geminiRuntime,
   windowController,
@@ -84,16 +82,10 @@ function registerSettingsIpc({
       const nextProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(settings.programmingLanguage);
       const nextWindowOpacityLevel = windowController.setWindowOpacityLevel(settings.windowOpacityLevel);
 
-      const updatedEnvironment = saveApplicationEnvironment(app, {
-        hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
-        startHidden: appEnvironment.startHidden,
-        maxScreenshots: appEnvironment.maxScreenshots,
-        screenshotDelay: appEnvironment.screenshotDelay,
-        nodeEnv: appEnvironment.nodeEnv,
-        nodeOptions: appEnvironment.nodeOptions
-      });
-
       const keyState = geminiRuntime.setKeys(nextGeminiApiKey, 0);
+      // Capture/startup toggles persist in app state — never in a bundled
+      // .env (packaged builds mount process.resourcesPath read-only, so
+      // writing .env there fails on AppImage and would ship keys if bundled).
       const updatedAppState = saveAppState(app, {
         aiProvider: nextAiProvider,
         geminiApiKey: nextGeminiApiKey,
@@ -104,14 +96,16 @@ function registerSettingsIpc({
         ollamaModel: nextOllamaModel,
         assemblyAiSpeechModel: nextAssemblyModel,
         programmingLanguage: nextProgrammingLanguage,
-        windowOpacityLevel: nextWindowOpacityLevel
+        windowOpacityLevel: nextWindowOpacityLevel,
+        hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+        startHidden: appEnvironment.startHidden,
+        maxScreenshots: appEnvironment.maxScreenshots,
+        screenshotDelay: appEnvironment.screenshotDelay
       });
 
-      setAppEnvironment(updatedEnvironment);
       setAppState(updatedAppState);
 
       console.log('Saved app state to:', getAppStatePath(app));
-      console.log('Settings saved to:', updatedEnvironment.envPath);
       console.log('Applied AI provider:', nextAiProvider);
       console.log('Applied programming language:', nextProgrammingLanguage);
       console.log(`Applied window opacity level: ${nextWindowOpacityLevel}/10`);

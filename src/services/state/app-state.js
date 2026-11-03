@@ -16,7 +16,14 @@ function getDefaultAppState() {
     assemblyAiSpeechModel: null,
     programmingLanguage: null,
     windowOpacityLevel: 10,
-    themePreference: null
+    themePreference: null,
+    // Capture/startup toggles. `null` = "not migrated yet": on launch the
+    // value is seeded once from .env/built-in defaults, then owned by app
+    // state (packaged builds cannot write into process.resourcesPath).
+    hideFromScreenCapture: null,
+    startHidden: null,
+    maxScreenshots: null,
+    screenshotDelay: null
   };
 }
 
@@ -72,6 +79,24 @@ function sanitizeAppState(state) {
     const themePreference = String(state.themePreference ?? '').trim().toLowerCase();
     if (themePreference === 'dark' || themePreference === 'light') {
       nextState.themePreference = themePreference;
+    }
+
+    if (typeof state.hideFromScreenCapture === 'boolean') {
+      nextState.hideFromScreenCapture = state.hideFromScreenCapture;
+    }
+
+    if (typeof state.startHidden === 'boolean') {
+      nextState.startHidden = state.startHidden;
+    }
+
+    const maxScreenshots = Number.parseInt(String(state.maxScreenshots ?? ''), 10);
+    if (Number.isFinite(maxScreenshots) && maxScreenshots > 0) {
+      nextState.maxScreenshots = maxScreenshots;
+    }
+
+    const screenshotDelay = Number.parseInt(String(state.screenshotDelay ?? ''), 10);
+    if (Number.isFinite(screenshotDelay) && screenshotDelay >= 0) {
+      nextState.screenshotDelay = screenshotDelay;
     }
   }
 

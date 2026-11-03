@@ -10,8 +10,7 @@ const WebSocket = require('ws');
 
 const {
   loadApplicationEnvironment,
-  normalizeGeminiApiKeys,
-  saveApplicationEnvironment
+  normalizeGeminiApiKeys
 } = require('../bootstrap/environment');
 const {
   getAssemblyAiSpeechModels,
@@ -159,8 +158,40 @@ async function startApplication() {
       });
     }
 
+    // Capture/startup toggles: on first run seed app state from .env /
+    // built-in defaults, then let app state own the values. Packaged builds
+    // cannot write into process.resourcesPath, so .env is dev-only from here on.
+    const captureStartupSeed = {};
+    for (const key of ['hideFromScreenCapture', 'startHidden', 'maxScreenshots', 'screenshotDelay']) {
+      if (appState[key] == null) {
+        captureStartupSeed[key] = appEnvironment[key];
+      }
+    }
+    if (Object.keys(captureStartupSeed).length > 0) {
+      appState = saveAppState(app, captureStartupSeed);
+      console.log('Migrated capture/startup settings from environment into app state:', Object.keys(captureStartupSeed).join(', '));
+    }
+
+    appEnvironment = {
+      ...appEnvironment,
+      hideFromScreenCapture: appState.hideFromScreenCapture,
+      startHidden: appState.startHidden,
+      maxScreenshots: appState.maxScreenshots,
+      screenshotDelay: appState.screenshotDelay
+    };
+    process.env.HIDE_FROM_SCREEN_CAPTURE = String(appEnvironment.hideFromScreenCapture);
+    process.env.START_HIDDEN = String(appEnvironment.startHidden);
+    process.env.MAX_SCREENSHOTS = String(appEnvironment.maxScreenshots);
+    process.env.SCREENSHOT_DELAY = String(appEnvironment.screenshotDelay);
+
     console.log('Loaded app state from:', getAppStatePath(app));
     console.log('Restored AI provider from app state:', activeAiProvider);
+    console.log('Restored capture/startup settings from app state:', {
+      hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+      startHidden: appEnvironment.startHidden,
+      maxScreenshots: appEnvironment.maxScreenshots,
+      screenshotDelay: appEnvironment.screenshotDelay
+    });
     console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
     console.log('Restored Gemini model from app state:', activeGeminiModel);
     console.log('Restored Ollama config from app state:', activeOllamaModel, 'at', activeOllamaBaseUrl);
@@ -216,15 +247,11 @@ async function startApplication() {
     ipcMain,
     app,
     getAppEnvironment: () => appEnvironment,
-    setAppEnvironment: (nextEnvironment) => {
-      appEnvironment = nextEnvironment;
-    },
     getAppState: () => appState,
     setAppState: (nextAppState) => {
       appState = nextAppState;
     },
     getAppStatePath,
-    saveApplicationEnvironment,
     saveAppState,
     geminiRuntime,
     windowController,

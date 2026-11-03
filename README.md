@@ -167,6 +167,8 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-pack
 | `NODE_ENV` | No | Defaults to `production`. `development` opens DevTools automatically. |
 | `NODE_OPTIONS` | No | Defaults to `--max-old-space-size=4096`. |
 
+On packaged builds (Windows portable, Linux AppImage, macOS), the capture/startup toggles above are controlled from the in-app Settings panel and persisted in `cache/app-state.json` under the user-data directory — `.env` only applies when running from source (`npm start`), so edit it before launching and treat it as a dev-only file.
+
 ### Source-Of-Truth Config
 
 [`src/config.js`](./src/config.js) defines the app's configurable lists and defaults:
@@ -322,7 +324,7 @@ dist/GoogleChrome.exe
 Notes:
 
 - This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
-- `.env` is bundled as an extra resource during packaging.
+- `.env` is **not** bundled during packaging; packaged builds read settings from `cache/app-state.json` in the user-data directory (edit them from the in-app Settings panel).
 - The current Windows build is configured as a portable `x64` target with:
   - Product name: `Google Chrome (2)`
   - Executable name: `GoogleChrome.exe`
