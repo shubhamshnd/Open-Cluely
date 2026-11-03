@@ -2400,7 +2400,12 @@ body:not(.theme-dark) .settings-shortcut-row {
 .action-btn:disabled,
 .chat-manual-send:disabled,
 .source-toggle:disabled {
-  opacity: 0.6;
+  /* Mute by desaturating instead of lowering opacity: saturate() keeps the
+     luminance of both the label and the fill, so the contrast ratio (and so
+     readability) survives the disabled state instead of washing the whole
+     button out over whatever surface is behind it. */
+  opacity: 1;
+  filter: saturate(0.45);
 }
 
 .chat-autoscroll-toggle.off {
@@ -3577,4 +3582,18 @@ body.theme-dark .save-settings-btn {
 
 .monitor-log-list {
   max-height: 40px;
+}
+
+/* ==========================================================================
+   READABILITY POLISH (round 2): mode buttons, placeholder, secondary text,
+   icons, edges
+   ========================================================================== */
+/* Mode-button labels: 10px is below the readable floor for a label this
+   small; 11px keeps the top bar intact and reads clearly. */
+.action-btn.analyze-btn,
+.action-btn.screen-ai-btn,
+.action-btn.suggest-btn,
+.action-btn.notes-btn,
+.action-btn.insights-btn {
+  font-size: 11px;
 }
