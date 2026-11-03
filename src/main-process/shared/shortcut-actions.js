@@ -10,6 +10,7 @@ const {
   getActionSocketPath,
   getGnomeShortcutScriptPath
 } = require('./action-socket');
+const { scrubSecretEnvVars } = require('./child-process-env');
 
 const MEDIA_KEYS_SCHEMA = 'org.gnome.settings-daemon.plugins.media-keys';
 const CUSTOM_KEYBINDINGS_KEY = 'custom-keybindings';
@@ -295,10 +296,14 @@ function createGnomeShortcutInstaller({
   removeScriptImpl
 } = {}) {
   const execveEnviron = procEnviron || (platform === 'linux' ? readSessionEnviron() : {});
-  const runGsettings = typeof execFileImpl === 'function'
+  // gsettings must not inherit API keys through the app's process.env. When
+  // the caller passes no env of its own, fall back to the live process env
+  // (minus secrets) so the child still gets PATH, DBUS, etc.
+  const gsettingsEnv = scrubSecretEnvVars(Object.keys(env || {}).length > 0 ? env : process.env);
+  const execGsettings = typeof execFileImpl === 'function'
     ? execFileImpl
-    : (file, args) => new Promise((resolve, reject) => {
-      execFile(file, args, { encoding: 'utf8' }, (error, stdout, stderr) => {
+    : (file, args, options) => new Promise((resolve, reject) => {
+      execFile(file, args, options, (error, stdout, stderr) => {
         if (error) {
           error.stderr = stderr;
           reject(error);
@@ -307,6 +312,8 @@ function createGnomeShortcutInstaller({
         }
       });
     });
+  const runGsettings = (file, args) =>
+    execGsettings(file, args, { encoding: 'utf8', env: gsettingsEnv });
 
   // Fast path: GNOME runs a tiny script that writes the action id to the
   // running app's private Unix socket (~ms) instead of starting a second
