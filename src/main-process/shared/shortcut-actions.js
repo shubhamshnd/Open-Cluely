@@ -173,24 +173,45 @@ function quoteGnomeCommandArg(arg) {
   return `"${String(arg).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-// Packaged AppImage launches `"$APPIMAGE" --action=<id>`; running from source
-// needs `"<electron>" "<app path>" --no-sandbox --action=<id>` (--no-sandbox
-// because of the AppArmor restriction on unprivileged Electron sandboxes).
-function buildShortcutActionCommand({ actionId, appImagePath, execPath, appPath }) {
+// The argv (without --action) that starts the app, per install type:
+//   AppImage (packaged, $APPIMAGE set)  -> [APPIMAGE]
+//   other packaged installs (.deb, ...) -> [execPath] — the .deb ships a SUID
+//     chrome-sandbox, so no forced --no-sandbox, and the app path is baked in.
+//   running from source                 -> [execPath, appPath, '--no-sandbox']
+//     (--no-sandbox because of the AppArmor restriction on unprivileged
+//     Electron sandboxes when the SUID helper is absent).
+function buildFallbackArgv({ env = {}, execPath, appPath, isPackaged = false } = {}) {
+  if (env && env.APPIMAGE) {
+    return [env.APPIMAGE];
+  }
+  if (isPackaged) {
+    if (!execPath) {
+      throw new Error('execPath is required to build the fallback argv.');
+    }
+    return [execPath];
+  }
+  if (!execPath || !appPath) {
+    throw new Error('execPath and appPath are required when not running packaged.');
+  }
+  return [execPath, appPath, '--no-sandbox'];
+}
+
+function buildShortcutActionCommand({ actionId, appImagePath, execPath, appPath, isPackaged = false }) {
   const id = String(actionId || '').trim();
   if (!id) {
     throw new Error('actionId is required to build a shortcut action command.');
   }
 
-  if (appImagePath) {
-    return `${quoteGnomeCommandArg(appImagePath)} --action=${id}`;
-  }
-
-  if (!execPath || !appPath) {
-    throw new Error('execPath and appPath are required when not running packaged.');
-  }
-
-  return `${quoteGnomeCommandArg(execPath)} ${quoteGnomeCommandArg(appPath)} --no-sandbox --action=${id}`;
+  const argv = buildFallbackArgv({
+    env: { APPIMAGE: appImagePath || undefined },
+    execPath,
+    appPath,
+    isPackaged
+  });
+  // Paths are quoted for g_shell_parse_argv; flags stay raw (they never
+  // contain spaces, and the historical command shape keeps them unquoted).
+  const rendered = argv.map((arg) => (arg.startsWith('-') ? arg : quoteGnomeCommandArg(arg)));
+  return `${rendered.join(' ')} --action=${id}`;
 }
 
 // --- environment probe ------------------------------------------------------
@@ -288,6 +309,7 @@ function createGnomeShortcutInstaller({
   procEnviron,
   execPath,
   appPath,
+  isPackaged = false,
   shortcuts = [],
   execFileImpl,
   userDataPath = '',
@@ -312,7 +334,7 @@ function createGnomeShortcutInstaller({
   // running app's private Unix socket (~ms) instead of starting a second
   // Electron process per keypress (~0.8 s). See action-socket.js.
   const scriptPath = userDataPath ? getGnomeShortcutScriptPath(userDataPath) : '';
-  const fallbackArgv = env.APPIMAGE ? [env.APPIMAGE] : [execPath, appPath, '--no-sandbox'];
+  const fallbackArgv = buildFallbackArgv({ env, execPath, appPath, isPackaged });
   const writeScript = typeof writeScriptImpl === 'function'
     ? writeScriptImpl
     : (file, content) => fs.writeFileSync(file, content, { mode: 0o700 });
@@ -331,7 +353,8 @@ function createGnomeShortcutInstaller({
         actionId: shortcut.id,
         appImagePath: env.APPIMAGE || '',
         execPath,
-        appPath
+        appPath,
+        isPackaged
       })
   }));
   const ourPaths = entries.map((entry) => entry.path);
@@ -454,6 +477,7 @@ module.exports = {
   acceleratorToGnomeBinding,
   buildCustomKeybindingPath,
   buildCustomKeybindingPaths,
+  buildFallbackArgv,
   buildShortcutActionCommand,
   createGnomeShortcutInstaller,
   formatGsettingsPathList,

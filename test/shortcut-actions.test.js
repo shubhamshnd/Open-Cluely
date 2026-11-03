@@ -9,6 +9,7 @@ const {
   MEDIA_KEYS_SCHEMA,
   acceleratorToGnomeBinding,
   buildCustomKeybindingPath,
+  buildFallbackArgv,
   buildShortcutActionCommand,
   createGnomeShortcutInstaller,
   formatGsettingsPathList,
@@ -149,6 +150,68 @@ test('buildShortcutActionCommand from source quotes electron and app path, adds 
   assert.throws(() => buildShortcutActionCommand({ actionId: '' }), /actionId is required/);
   assert.throws(
     () => buildShortcutActionCommand({ actionId: 'x', appImagePath: '', execPath: '', appPath: '/a' }),
+    /execPath and appPath are required/
+  );
+});
+
+test('buildShortcutActionCommand for a packaged .deb quotes execPath alone, without --no-sandbox', () => {
+  const command = buildShortcutActionCommand({
+    actionId: 'toggleStealth',
+    appImagePath: '',
+    execPath: '/opt/Open Cluely/open-cluely',
+    appPath: '/opt/Open Cluely/resources/app.asar',
+    isPackaged: true
+  });
+  assert.equal(command, '"/opt/Open Cluely/open-cluely" --action=toggleStealth');
+  assert.ok(!command.includes('--no-sandbox'), 'a SUID-sandboxed .deb install must not force --no-sandbox');
+  assert.ok(!command.includes('app.asar'), 'packaged installs must not pass the app path');
+});
+
+// --- buildFallbackArgv: one argv per install type -----------------------------
+
+test('buildFallbackArgv uses $APPIMAGE alone when packaged as an AppImage', () => {
+  assert.deepEqual(
+    buildFallbackArgv({
+      env: { APPIMAGE: '/home/me/Apps/Open Cluely-1.0.0.AppImage' },
+      execPath: '/tmp/.mount_OpenC123/open-cluely',
+      appPath: '/tmp/.mount_OpenC123/resources/app.asar',
+      isPackaged: true
+    }),
+    ['/home/me/Apps/Open Cluely-1.0.0.AppImage']
+  );
+});
+
+test('buildFallbackArgv for a packaged .deb is [execPath] only — no appPath, no forced --no-sandbox', () => {
+  assert.deepEqual(
+    buildFallbackArgv({
+      env: {},
+      execPath: '/opt/Open Cluely/open-cluely',
+      appPath: '/opt/Open Cluely/resources/app.asar',
+      isPackaged: true
+    }),
+    ['/opt/Open Cluely/open-cluely']
+  );
+});
+
+test('buildFallbackArgv from source is [execPath, appPath, --no-sandbox]', () => {
+  assert.deepEqual(
+    buildFallbackArgv({
+      env: {},
+      execPath: '/home/me/app/node_modules/electron/dist/electron',
+      appPath: '/home/me/open-cluely',
+      isPackaged: false
+    }),
+    ['/home/me/app/node_modules/electron/dist/electron', '/home/me/open-cluely', '--no-sandbox']
+  );
+});
+
+test('buildFallbackArgv validates required paths per install type', () => {
+  assert.throws(
+    () => buildFallbackArgv({ env: {}, execPath: '', appPath: '/a', isPackaged: true }),
+    /execPath is required/
+  );
+  assert.throws(
+    () => buildFallbackArgv({ env: {}, execPath: '/x/electron', appPath: '', isPackaged: false }),
     /execPath and appPath are required/
   );
 });
@@ -314,6 +377,24 @@ test('install uses $APPIMAGE in the command when packaged', async () => {
   await installer.install();
   const entry = store.entries[buildCustomKeybindingPath('toggleStealth')];
   assert.equal(entry.command, `'"/opt/Open Cluely.AppImage" --action=toggleStealth'`);
+});
+
+test('install from a packaged .deb uses execPath alone — no appPath, no --no-sandbox', async () => {
+  const { store, execFileImpl } = createFakeGsettings([CUSTOM0]);
+  const installer = createGnomeShortcutInstaller({
+    platform: 'linux',
+    env: GNOME_ENV,
+    procEnviron: {},
+    execPath: '/opt/Open Cluely/open-cluely',
+    appPath: '/opt/Open Cluely/resources/app.asar',
+    isPackaged: true,
+    shortcuts: TEST_SHORTCUTS,
+    execFileImpl
+  });
+  await installer.install();
+  const entry = store.entries[buildCustomKeybindingPath('toggleStealth')];
+  assert.equal(entry.command, `'"/opt/Open Cluely/open-cluely" --action=toggleStealth'`);
+  assert.ok(!entry.command.includes('--no-sandbox'));
 });
 
 test('installer reports gsettings missing and refuses off-GNOME', async () => {
