@@ -24,6 +24,14 @@ const OPENAI_MODELS = [
   { id: 'gpt-4o-mini', supportsImages: true }
 ];
 
+// Anthropic model configuration (curated — the Anthropic API has no public
+// list-models call, so the settings panel uses this list as-is).
+// The first model in this list is treated as the default model everywhere.
+const ANTHROPIC_MODELS = [
+  { id: 'claude-sonnet-4-5', supportsImages: true },
+  { id: 'claude-haiku-4-5', supportsImages: true }
+];
+
 // AssemblyAI speech model configuration.
 // The first model in this list is treated as the default model everywhere.
 const ASSEMBLY_AI_SPEECH_MODELS = [
@@ -241,6 +249,38 @@ function openAIModelSupportsImages(modelName) {
   );
 }
 
+// Anthropic model configuration functions
+function getAnthropicModels() {
+  if (!Array.isArray(ANTHROPIC_MODELS) || ANTHROPIC_MODELS.length === 0) {
+    throw new Error('Anthropic models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return ANTHROPIC_MODELS.map((entry) => ({ ...entry }));
+}
+
+function getDefaultAnthropicModel() {
+  return getAnthropicModels()[0].id;
+}
+
+function isConfiguredAnthropicModel(modelName) {
+  return getAnthropicModels().some((entry) => entry.id === modelName);
+}
+
+function resolveAnthropicModel(modelName) {
+  const normalized = String(modelName || '').trim();
+  return isConfiguredAnthropicModel(normalized) ? normalized : getDefaultAnthropicModel();
+}
+
+// Every Claude 3+ model accepts image input; curated flags win when present.
+function anthropicModelSupportsImages(modelName) {
+  const configured = getAnthropicModels().find((entry) => entry.id === modelName);
+  if (configured) {
+    return configured.supportsImages === true;
+  }
+
+  return /^claude-(3|4|5|sonnet|haiku|opus)/i.test(String(modelName || ''));
+}
+
 // Programming language configuration functions
 function getProgrammingLanguages() {
   if (!Array.isArray(PROGRAMMING_LANGUAGES) || PROGRAMMING_LANGUAGES.length === 0) {
@@ -341,6 +381,11 @@ module.exports = {
   getKeyboardShortcuts,
   getDefaultProgrammingLanguage,
   getProgrammingLanguages,
+  anthropicModelSupportsImages,
+  getAnthropicModels,
+  getDefaultAnthropicModel,
+  resolveAnthropicModel,
+  isConfiguredAnthropicModel,
   isConfiguredAssemblyAiSpeechModel,
   isConfiguredGeminiModel,
   isConfiguredOpenAIModel,
