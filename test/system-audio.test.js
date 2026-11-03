@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
+
+const { createAssemblyAiService } = require('../src/services/assembly-ai/service.js');
 
 const ERRORS_MODULE_URL = '../src/windows/assistant/renderer/features/assembly-ai/system-audio-errors.js';
 const PIPELINE_MODULE_URL = '../src/windows/assistant/renderer/features/assembly-ai/audio-pipeline.js';
@@ -388,6 +391,7 @@ function buildHostHarness({ managerModule, platform = 'linux', gates = {}, nativ
   const selectedSources = { system: true, mic: false };
   const events = [];
   let nativeCounter = 0;
+  let backendSessionCounter = 0;
 
   globalThis.document = { createElement: () => ({ className: '', textContent: '', style: {} }) };
   globalThis.AudioContext = class {
@@ -413,7 +417,8 @@ function buildHostHarness({ managerModule, platform = 'linux', gates = {}, nativ
       startVoiceRecognition: async (source) => {
         events.push(`startVoiceRecognition:${source}`);
         if (gates.startVoice) await gates.startVoice.promise;
-        return {};
+        backendSessionCounter += 1;
+        return { sessionId: backendSessionCounter };
       },
       stopVoiceRecognition: async (source) => {
         events.push(`stopVoiceRecognition:${source}`);
@@ -725,19 +730,19 @@ test('REGRESSION: backend stopped acknowledgement while the native acquisition i
   assert.equal(sourceStatuses.system, 'off');
 });
 
-test('REGRESSION: a stale stopped acknowledgement from an explicitly stopped session must not tear down the new session', async (t) => {
+test('REGRESSION: a stopped event carrying a superseded session id must not tear down the new session', async (t) => {
   const { manager: managerModule } = await loadModules();
   afterHostTest(t);
   const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({ managerModule });
 
-  await transcriptionManager.toggleMasterTranscription(); // session 1 active
-  await transcriptionManager.toggleMasterTranscription(); // explicit Stop (backend ack is pending)
+  await transcriptionManager.toggleMasterTranscription(); // backend session 1 active
+  await transcriptionManager.toggleMasterTranscription(); // explicit Stop
   assert.ok(events.includes('nativeStop:1'));
 
-  await transcriptionManager.toggleMasterTranscription(); // session 2 active
+  await transcriptionManager.toggleMasterTranscription(); // backend session 2 active
   assert.ok(events.includes('nativeStart:2'));
 
-  transcriptionManager.handleVoskStopped({ source: 'system' }); // late ack for session 1
+  transcriptionManager.handleVoskStopped({ source: 'system', sessionId: 1 }); // late ack for session 1
   await flush();
 
   assert.ok(!events.includes('nativeStop:2'), 'stale ack must not stop the live capture');
@@ -746,26 +751,264 @@ test('REGRESSION: a stale stopped acknowledgement from an explicitly stopped ses
   assert.deepEqual(systemActivations[systemActivations.length - 1], ['system', true], 'session 2 stays active');
   assert.ok(!recorded.feedback.some(([message]) => /Stopped/.test(message)), 'stale ack must not surface to the user');
 
-  await transcriptionManager.toggleMasterTranscription(); // real Stop still works
-  assert.ok(events.includes('nativeStop:2'));
+  // The live session's own stopped event still tears it down.
+  transcriptionManager.handleVoskStopped({ source: 'system', sessionId: 2 });
+  await flush();
+  assert.ok(events.includes('nativeStop:2'), 'the live session stop event releases the capture');
+  assert.equal(sourceStatuses.system, 'off');
 });
 
-test('REGRESSION: a stale error from an explicitly stopped session must not tear down the new session', async (t) => {
+test('REGRESSION: an error carrying a superseded session id must not tear down the new session', async (t) => {
   const { manager: managerModule } = await loadModules();
   afterHostTest(t);
   const { transcriptionManager, recorded, sourceStatuses, events } = buildHostHarness({ managerModule });
 
-  await transcriptionManager.toggleMasterTranscription(); // session 1 active
+  await transcriptionManager.toggleMasterTranscription(); // backend session 1 active
   await transcriptionManager.toggleMasterTranscription(); // explicit Stop
 
-  await transcriptionManager.toggleMasterTranscription(); // session 2 active
-  transcriptionManager.handleVoskError({ source: 'system', error: 'Old session socket error' });
+  await transcriptionManager.toggleMasterTranscription(); // backend session 2 active
+  transcriptionManager.handleVoskError({ source: 'system', sessionId: 1, error: 'Old session socket error' });
   await flush();
 
   assert.ok(!events.includes('nativeStop:2'), 'stale error must not stop the live capture');
   assert.equal(sourceStatuses.system, 'connecting');
   assert.ok(!recorded.feedback.some(([message]) => /Old session socket error/.test(message)));
 
-  await transcriptionManager.toggleMasterTranscription();
-  assert.ok(events.includes('nativeStop:2'));
+  // The live session's own error still tears it down.
+  transcriptionManager.handleVoskError({ source: 'system', sessionId: 2, error: 'Live connection lost' });
+  await flush();
+  assert.ok(events.includes('nativeStop:2'), 'the live session error releases the capture');
+  assert.equal(sourceStatuses.system, 'error');
+});
+
+test('REGRESSION: a native capture error is correlated to the owning capture by token', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const { transcriptionManager, sourceStatuses, events } = buildHostHarness({ managerModule });
+
+  await transcriptionManager.toggleMasterTranscription(); // capture tok-1
+  await transcriptionManager.toggleMasterTranscription(); // explicit Stop
+  await transcriptionManager.toggleMasterTranscription(); // capture tok-2
+
+  // A late error from the dead first capture must not touch the live one.
+  transcriptionManager.handleVoskError({
+    source: 'system',
+    error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)',
+    captureToken: 'tok-1'
+  });
+  await flush();
+  assert.ok(!events.includes('nativeStop:2'), 'a stale capture error must not stop the live capture');
+  assert.equal(sourceStatuses.system, 'connecting');
+
+  // The error of the live capture itself tears the session down.
+  transcriptionManager.handleVoskError({
+    source: 'system',
+    error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)',
+    captureToken: 'tok-2'
+  });
+  await flush();
+  assert.ok(events.includes('nativeStop:2'), 'the live capture error releases the session');
+  assert.equal(sourceStatuses.system, 'error');
+});
+
+// ---------------------------------------------------------------------------
+// Cross-layer: the REAL AssemblyAI service wired to the REAL transcription
+// manager through the same electronAPI bridge shape the preload exposes.
+// Session correlation must survive stop/restart in both directions: obsolete
+// events are suppressed at the service (or ignored by id at the manager), and
+// the live session's own terminal events always apply.
+// ---------------------------------------------------------------------------
+
+function buildServiceBackedHostHarness({ managerModule, platform = 'linux', apiKey = 'test-key', delivery = 'direct' } = {}) {
+  const h = buildHostHarness({ managerModule, platform });
+  const sockets = [];
+  const delivered = [];
+  const queue = [];
+  let currentApiKey = apiKey;
+
+  class FakeWebSocket extends EventEmitter {
+    static OPEN = 1;
+
+    constructor(url) {
+      super();
+      this.url = url;
+      this.readyState = FakeWebSocket.OPEN;
+      this.sent = [];
+      sockets.push(this);
+    }
+
+    send(data) {
+      this.sent.push(data);
+    }
+
+    terminate() {
+      this.readyState = 3;
+    }
+  }
+
+  const dispatch = (channel, data) => {
+    if (channel === 'vosk-error') h.transcriptionManager.handleVoskError(data);
+    else if (channel === 'vosk-stopped') h.transcriptionManager.handleVoskStopped(data);
+    else if (channel === 'vosk-status') h.transcriptionManager.handleVoskStatus(data);
+    else if (channel === 'vosk-final') h.transcriptionManager.handleVoskFinal(data);
+    else if (channel === 'vosk-partial') h.transcriptionManager.handleVoskPartial(data);
+  };
+
+  const service = createAssemblyAiService({
+    WebSocket: FakeWebSocket,
+    desktopCapturer: { getSources: async () => [] },
+    getAssemblyApiKey: () => currentApiKey,
+    getSpeechModel: () => 'test-model',
+    getGeminiService: () => null,
+    sendToRenderer: (channel, data) => {
+      delivered.push(channel);
+      if (delivery === 'queued') queue.push(() => dispatch(channel, data));
+      else dispatch(channel, data);
+    }
+  });
+
+  window.electronAPI.startVoiceRecognition = async (source) => {
+    h.events.push(`startVoiceRecognition:${source}`);
+    const socketCount = sockets.length;
+    const result = service.startAssemblyAiStream(source);
+    if (result && result.success && sockets.length > socketCount) {
+      sockets[sockets.length - 1].emit('open'); // the connection completes
+    }
+    return result;
+  };
+  window.electronAPI.stopVoiceRecognition = async (source) => {
+    h.events.push(`stopVoiceRecognition:${source}`);
+    return service.stopVoiceRecognition({ source });
+  };
+
+  return {
+    ...h,
+    service,
+    sockets,
+    delivered,
+    flushQueued: () => queue.splice(0).forEach((fn) => fn()),
+    setApiKey: (key) => {
+      currentApiKey = key;
+    }
+  };
+}
+
+const terminationFrame = () => JSON.stringify({ type: 'Termination', audio_duration_seconds: 1 });
+const lastSystemActive = (recorded) => {
+  const entries = recorded.active.filter(([source]) => source === 'system');
+  return entries[entries.length - 1];
+};
+
+for (const terminal of ['error', 'termination', 'native-error']) {
+  test(`REGRESSION cross-layer: stop/restart then a live ${terminal} must release the new session capture`, async (t) => {
+    const { manager: managerModule } = await loadModules();
+    afterHostTest(t);
+    const h = buildServiceBackedHostHarness({ managerModule });
+    const m = h.transcriptionManager;
+
+    await m.toggleMasterTranscription(); // session A (backend session 1)
+    await m.toggleMasterTranscription(); // Stop A
+    await m.toggleMasterTranscription(); // session B (backend session 2)
+    assert.ok(h.events.includes('nativeStart:2'));
+    assert.equal(h.sockets.length, 2);
+
+    h.sockets[0].emit('message', terminationFrame()); // stale A termination arrives late
+    if (terminal === 'error') {
+      h.sockets[1].emit('error', new Error('live connection lost'));
+    } else if (terminal === 'termination') {
+      h.sockets[1].emit('message', terminationFrame());
+    } else {
+      m.handleVoskError({ source: 'system', error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)' });
+    }
+    await flush();
+
+    assert.ok(h.events.includes('nativeStop:2'), `the live ${terminal} must release the restarted capture`);
+    assert.deepEqual(lastSystemActive(h.recorded), ['system', false]);
+    assert.equal(h.sourceStatuses.system, terminal === 'termination' ? 'off' : 'error');
+  });
+}
+
+test('REGRESSION cross-layer: a failed start whose cleanup stop is a backend no-op must not swallow the next session', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const h = buildServiceBackedHostHarness({ managerModule, platform: 'win32' });
+  const m = h.transcriptionManager;
+
+  // The first start fails before any backend session exists (no desktop
+  // sources), so its cleanup stop hits a backend with no socket: a pure
+  // no-op that never produces a terminal event.
+  window.electronAPI.getDesktopSources = async () => [];
+  await m.toggleMasterTranscription();
+  assert.equal(h.sourceStatuses.system, 'error');
+  assert.deepEqual(h.sockets.length, 0);
+
+  // The second start succeeds and must still react to its own terminal event.
+  window.electronAPI.getDesktopSources = async () => [{ id: 'screen:0', name: 'Entire Screen' }];
+  await m.toggleMasterTranscription();
+  assert.ok(everActivated(h.recorded));
+  assert.equal(h.sockets.length, 1);
+
+  h.sockets[0].emit('message', terminationFrame());
+  await flush();
+
+  assert.ok(h.events.includes('streamStopped'), 'the live termination must release the desktop stream');
+  assert.equal(h.sourceStatuses.system, 'off');
+  assert.deepEqual(lastSystemActive(h.recorded), ['system', false]);
+});
+
+test('REGRESSION cross-layer: a missing-API-key failure is surfaced once and the next start is unaffected', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const h = buildServiceBackedHostHarness({ managerModule, apiKey: null });
+  const m = h.transcriptionManager;
+
+  await m.toggleMasterTranscription(); // fails: no key configured
+  assert.equal(h.sourceStatuses.system, 'error');
+  assert.ok(h.recorded.feedback.some(([message]) => /API key/i.test(message)));
+  assert.ok(!h.events.some((e) => e.startsWith('nativeStart')), 'no capture without a backend session');
+  assert.deepEqual(h.sockets.length, 0);
+  assert.equal(
+    h.recorded.feedback.filter(([message]) => /API key/i.test(message)).length,
+    1,
+    'the failure is surfaced exactly once'
+  );
+
+  h.setApiKey('test-key');
+  await m.toggleMasterTranscription(); // works now
+  assert.ok(h.events.includes('nativeStart:1'));
+  assert.ok(everActivated(h.recorded));
+
+  h.sockets[0].emit('message', terminationFrame());
+  await flush();
+  assert.ok(h.events.includes('nativeStop:1'), 'the live session reacts to its own termination');
+  assert.equal(h.sourceStatuses.system, 'off');
+});
+
+test('REGRESSION cross-layer: a stop acknowledgement arriving before the stop RPC resolves is handled once, then the next session works', async (t) => {
+  const { manager: managerModule } = await loadModules();
+  afterHostTest(t);
+  const h = buildServiceBackedHostHarness({ managerModule });
+  const m = h.transcriptionManager;
+
+  await m.toggleMasterTranscription(); // session A (socket 0)
+  assert.ok(h.events.includes('nativeStart:1'));
+
+  // The backend answers the Terminate frame before the stop RPC resolves.
+  window.electronAPI.stopVoiceRecognition = async (source) => {
+    h.events.push(`stopVoiceRecognition:${source}`);
+    const result = h.service.stopVoiceRecognition({ source });
+    h.sockets[0].emit('message', terminationFrame());
+    return result;
+  };
+  await m.toggleMasterTranscription(); // Stop
+  assert.equal(h.events.filter((e) => e === 'nativeStop:1').length, 1, 'capture released exactly once');
+  assert.equal(h.sourceStatuses.system, 'off');
+
+  await m.toggleMasterTranscription(); // session B (socket 1)
+  assert.ok(h.events.includes('nativeStart:2'));
+
+  h.sockets[1].emit('message', terminationFrame());
+  await flush();
+  assert.ok(h.events.includes('nativeStop:2'), 'the next session termination is not swallowed by the early ack');
+  assert.equal(h.sourceStatuses.system, 'off');
 });

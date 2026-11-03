@@ -39,13 +39,14 @@ function createIpcHarness({ captureOverrides = {} } = {}) {
     getDesktopSources: async () => [],
     transcribeAudio: async () => ({})
   };
+  const sent = [];
   registerAssemblyAiIpc({
     ipcMain,
     assemblyAiService: service,
     linuxMonitorCapture: capture,
-    sendToRenderer: () => {}
+    sendToRenderer: (channel, data) => sent.push([channel, data])
   });
-  return { handlers, stops };
+  return { handlers, stops, sent };
 }
 
 const invoke = (handlers, channel, sender, payload) => handlers.get(channel)({ sender }, payload);
@@ -168,4 +169,60 @@ test('ipc: a stale token stop cannot release ownership of the live capture', asy
   await invoke(handlers, 'stop-linux-monitor-capture', sender, { token: 'stale' });
   sender.emit('destroyed');
   assert.deepEqual(stops, [{ token: 'stale' }, { token: 'tok-1' }], 'ownership survived the stale stop');
+});
+
+test('ipc: an unexpected end of the owned capture reports a token-correlated vosk-error and releases ownership', async () => {
+  let ended;
+  const { handlers, sent, stops } = createIpcHarness({
+    captureOverrides: {
+      start: async ({ onEnded }) => {
+        ended = onEnded;
+        return { success: true, token: 'tok-1' };
+      }
+    }
+  });
+  const sender = createSender();
+
+  await invoke(handlers, 'start-linux-monitor-capture', sender);
+  ended({ code: 1 });
+
+  assert.deepEqual(sent, [
+    [
+      'vosk-error',
+      {
+        source: 'system',
+        error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)',
+        captureToken: 'tok-1'
+      }
+    ]
+  ]);
+
+  // Ownership was released: a later navigation must not stop the dead capture again.
+  sender.emit('did-start-navigation', {}, 'https://app.local/', false, true);
+  assert.equal(stops.length, 0);
+});
+
+test('ipc: a superseded owner capture end is not reported to the live session', async () => {
+  const endings = [];
+  const { handlers, sent } = createIpcHarness({
+    captureOverrides: {
+      start: async ({ onEnded }) => {
+        endings.push(onEnded);
+        return { success: true, token: `tok-${endings.length}` };
+      }
+    }
+  });
+  const first = createSender();
+  const second = createSender();
+
+  await invoke(handlers, 'start-linux-monitor-capture', first); // tok-1
+  await invoke(handlers, 'start-linux-monitor-capture', second); // tok-2 supersedes
+
+  endings[0]({ code: 1 }); // the old capture dies late
+  assert.deepEqual(sent, [], 'a superseded capture end must not error the live session');
+
+  endings[1]({ code: 1 }); // the live capture's end is reported with its own token
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], 'vosk-error');
+  assert.equal(sent[0][1].captureToken, 'tok-2');
 });

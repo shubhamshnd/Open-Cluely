@@ -51,13 +51,19 @@
     const result = await linuxMonitorCapture.start({
       onChunk: (data) => assemblyAiService.handleAudioChunk({ source: 'system', data }),
       onEnded: ({ code }) => {
-        if (monitorOwner === owner) {
-          monitorOwner = null;
+        // Only the owning (current) capture's unexpected end is the live
+        // session's error; a superseded capture's end must not tear down the
+        // replacement. The captureToken lets the renderer correlate this error
+        // to the capture it came from.
+        if (monitorOwner !== owner) {
+          return;
         }
+        monitorOwner = null;
         if (typeof sendToRenderer === 'function') {
           sendToRenderer('vosk-error', {
             source: 'system',
-            error: `Host audio capture stopped unexpectedly (pw-record exit code ${code})`
+            error: `Host audio capture stopped unexpectedly (pw-record exit code ${code})`,
+            captureToken: owner.token
           });
         }
       }

@@ -19,6 +19,21 @@ function createAssemblyAiService({
   let isStreamingMic = false;
   let isStreamingSystem = false;
 
+  // Session correlation: every start of a source gets a monotonically
+  // increasing session id, returned by the start RPC and stamped on every
+  // renderer event emitted for that session's socket. The renderer correlates
+  // terminal events to the session they belong to by id instead of guessing
+  // from ordering, so an obsolete event can never be mistaken for the live
+  // session's and vice versa. Events emitted synchronously inside an RPC (the
+  // pre-socket 'loading' status, the missing-key error) carry no id: they are
+  // definitionally about the in-flight call.
+  const sessionCounters = { mic: 0, system: 0 };
+  const currentSessionIds = { mic: 0, system: 0 };
+  // Sockets an explicit stop was issued for. A stopped socket that finishes
+  // connecting late must not mark the source streaming or resurrect its
+  // session.
+  const stoppedSockets = new WeakSet();
+
   const sttChunkCounters = { mic: 0, system: 0 };
   const sttDroppedChunkCounters = { mic: 0, system: 0 };
 
@@ -138,7 +153,8 @@ function createAssemblyAiService({
       });
       return {
         success: true,
-        message: resolvedSource === 'system' ? 'System audio already streaming' : 'Mic already streaming'
+        message: resolvedSource === 'system' ? 'System audio already streaming' : 'Mic already streaming',
+        sessionId: currentSessionIds[resolvedSource]
       };
     }
 
@@ -173,12 +189,24 @@ function createAssemblyAiService({
         headers: { Authorization: apiKey }
       });
 
+      // A socket replaced by this start belonged to a stopped or superseded
+      // session: cancel it (whether it is still connecting or already open) so
+      // its late events die with it instead of racing the live session.
+      const previousSocket = getSourceSocket(resolvedSource);
       setSourceSocket(resolvedSource, ws);
+      if (previousSocket) {
+        cleanupAssemblyWs(previousSocket);
+      }
 
-      // Session correlation: a new start for the same source replaces this
-      // socket. Events arriving later on the superseded socket (its delayed
-      // Termination/close, an error, buffered turns) must not emit renderer
-      // events or reset state that now belongs to the live session.
+      sessionCounters[resolvedSource] += 1;
+      const sessionId = sessionCounters[resolvedSource];
+      currentSessionIds[resolvedSource] = sessionId;
+
+      // Socket identity: events arriving later on a superseded socket (its
+      // delayed open/Termination/close, an error, buffered turns) must not
+      // emit renderer events or reset state that now belongs to the live
+      // session. The sessionId stamps the events this socket is allowed to
+      // emit so the renderer can correlate them too.
       const isCurrentSocket = () => getSourceSocket(resolvedSource) === ws;
       const logStaleSocketEvent = (kind) => {
         emitSttDebug({
@@ -189,6 +217,14 @@ function createAssemblyAiService({
       };
 
       ws.on('open', () => {
+        if (!isCurrentSocket() || stoppedSockets.has(ws)) {
+          // Superseded while connecting, or explicitly stopped while the
+          // connection was still being established: the late open must not
+          // mark the source streaming or resurrect the stopped session.
+          logStaleSocketEvent('an open');
+          cleanupAssemblyWs(ws);
+          return;
+        }
         console.log(`AssemblyAI WebSocket connected [${resolvedSource}]`);
         setSourceStreaming(resolvedSource, true);
         emitSttDebug({
@@ -218,7 +254,8 @@ function createAssemblyAiService({
               sendToRenderer('vosk-status', {
                 source: resolvedSource,
                 status: 'listening',
-                message: `Listening (${resolvedSource === 'system' ? 'Host' : 'You'})...`
+                message: `Listening (${resolvedSource === 'system' ? 'Host' : 'You'})...`,
+                sessionId
               });
               break;
 
@@ -234,13 +271,15 @@ function createAssemblyAiService({
                   });
                   sendToRenderer('vosk-final', {
                     source: resolvedSource,
-                    text: msg.transcript
+                    text: msg.transcript,
+                    sessionId
                   });
                   sttHistoryManager.queueSttHistorySegment(resolvedSource, msg.transcript);
                 } else {
                   sendToRenderer('vosk-partial', {
                     source: resolvedSource,
-                    text: msg.transcript
+                    text: msg.transcript,
+                    sessionId
                   });
                 }
               }
@@ -260,7 +299,7 @@ function createAssemblyAiService({
               });
               sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'termination');
               resetSourceState(resolvedSource);
-              sendToRenderer('vosk-stopped', { source: resolvedSource });
+              sendToRenderer('vosk-stopped', { source: resolvedSource, sessionId });
               break;
 
             default:
@@ -294,7 +333,8 @@ function createAssemblyAiService({
         sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'ws-error');
         sendToRenderer('vosk-error', {
           source: resolvedSource,
-          error: `Connection error (${resolvedSource}): ${error.message}`
+          error: `Connection error (${resolvedSource}): ${error.message}`,
+          sessionId
         });
         resetSourceState(resolvedSource);
       });
@@ -315,11 +355,11 @@ function createAssemblyAiService({
         if (isSourceStreaming(resolvedSource)) {
           sttHistoryManager.flushSttHistoryBuffer(resolvedSource, 'ws-close');
           resetSourceState(resolvedSource);
-          sendToRenderer('vosk-stopped', { source: resolvedSource });
+          sendToRenderer('vosk-stopped', { source: resolvedSource, sessionId });
         }
       });
 
-      return { success: true };
+      return { success: true, sessionId };
     } catch (error) {
       console.error(`Error starting AssemblyAI stream [${resolvedSource}]:`, error.message);
       emitSttDebug({
@@ -393,6 +433,10 @@ function createAssemblyAiService({
         return;
       }
 
+      // Mark before any I/O: even if this socket is still connecting, its late
+      // open must not mark the source streaming again.
+      stoppedSockets.add(ws);
+
       try {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'Terminate' }));
@@ -411,7 +455,8 @@ function createAssemblyAiService({
       sendToRenderer('vosk-status', {
         source: resolvedSource,
         status: 'stopped',
-        message: 'Stopped'
+        message: 'Stopped',
+        sessionId: currentSessionIds[resolvedSource]
       });
 
       setSourceStreaming(resolvedSource, false);

@@ -99,3 +99,66 @@ test('service: an error on the live socket is reported once and later close does
   assert.equal(voskEvents(events, 'vosk-error').length, 1);
   assert.deepEqual(voskEvents(events, 'vosk-stopped'), [], 'error already terminated the session');
 });
+
+test('service: backend events carry the session id of their owning session', () => {
+  const { service, events, sockets } = createHarness();
+
+  const first = service.startAssemblyAiStream('system');
+  assert.equal(first.sessionId, 1);
+  sockets[0].emit('open');
+  sockets[0].emit('message', JSON.stringify({ type: 'Begin', id: 's1' }));
+  const listening = voskEvents(events, 'vosk-status').find(([, payload]) => payload.status === 'listening');
+  assert.equal(listening[1].sessionId, 1, 'the listening status belongs to session 1');
+
+  sockets[0].emit('message', terminationFrame());
+  assert.equal(voskEvents(events, 'vosk-stopped')[0][1].sessionId, 1);
+
+  const second = service.startAssemblyAiStream('system');
+  assert.equal(second.sessionId, 2, 'each start is a new session');
+  sockets[1].emit('open');
+
+  // An already-streaming start reports the live session id and opens no socket.
+  const skipped = service.startAssemblyAiStream('system');
+  assert.equal(skipped.sessionId, 2);
+  assert.equal(sockets.length, 2);
+
+  sockets[1].emit('error', new Error('boom'));
+  assert.equal(voskEvents(events, 'vosk-error')[0][1].sessionId, 2);
+});
+
+test('service: the stopped status carries the id of the session being stopped', () => {
+  const { service, events, sockets } = createHarness();
+
+  service.startAssemblyAiStream('system');
+  sockets[0].emit('open');
+  service.stopVoiceRecognition({ source: 'system' });
+
+  const stopped = voskEvents(events, 'vosk-status').find(([, payload]) => payload.status === 'stopped');
+  assert.equal(stopped[1].sessionId, 1);
+});
+
+test('service: a superseded socket open cannot mark the replacement streaming or block the next start', () => {
+  const { service, sockets } = createHarness();
+
+  service.startAssemblyAiStream('system');
+  service.stopVoiceRecognition({ source: 'system' });
+  service.startAssemblyAiStream('system');
+  service.stopVoiceRecognition({ source: 'system' });
+
+  sockets[0].emit('open'); // the original connection completes after its replacement was stopped
+  service.startAssemblyAiStream('system');
+  assert.equal(sockets.length, 3, 'a superseded open must not make a new start skip');
+});
+
+test('service: a stopped socket late open does not resurrect streaming', () => {
+  const { service, sockets } = createHarness();
+
+  service.startAssemblyAiStream('system');
+  service.stopVoiceRecognition({ source: 'system' });
+
+  sockets[0].emit('open'); // stopped while connecting; the connection completes late
+  assert.equal(sockets[0].readyState, 3, 'the late-opened stopped socket is terminated');
+
+  service.startAssemblyAiStream('system');
+  assert.equal(sockets.length, 2, 'a stopped open must not make a new start skip');
+});

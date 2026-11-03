@@ -34,15 +34,19 @@ export function createTranscriptionManager({
     let isSystemActive = false;
     let systemNativeCapture = null;
     let systemStartGeneration = 0;
-    // Backend terminal events (vosk-error/vosk-stopped) carry no session id, so
-    // they are correlated by count: every stop we request is answered by exactly
-    // one terminal event for the session it ended (the renderer's stop request
-    // reaches the backend before any session started afterwards, and events
-    // arrive in emission order, so an outstanding acknowledgment always belongs
-    // to an older session than any terminal event of a newer session). If a
-    // backend ever drops its acknowledgment (socket lost without close), one
-    // later event could be misclassified; accepted as best-effort correlation.
-    let pendingSystemStopAcks = 0;
+    // Session correlation. The backend stamps every socket-originated event
+    // with the session id returned by that session's start RPC, and the main
+    // process stamps a native capture error with the capture's token. An event
+    // whose session id or token does not match the live session belongs to a
+    // superseded session and is ignored; events without correlation data can
+    // only come from paths that are inherently about the live session (a
+    // synchronous start failure such as a missing API key, or the main process
+    // reporting that the current capture died), so they always apply. No
+    // speculative counting: a stop that produces no terminal event (a backend
+    // no-op, or an obsolete event the backend suppressed) cannot swallow the
+    // next session's events.
+    let systemBackendSessionId = null;
+    let systemNativeCaptureToken = null;
 
     let micPartialText = '';
     let micPartialDiv = null;
@@ -383,6 +387,20 @@ export function createTranscriptionManager({
         showFeedback('Mic off', 'info');
     }
 
+    // Is this backend/native event obsolete — emitted by a session or capture
+    // that is not the live one? Correlation data that is present is checked;
+    // absent data means the event is inherently about the live session.
+    function isStaleSystemEvent(data) {
+        if (!data || typeof data !== 'object') return false;
+        if (Number.isInteger(data.sessionId) && data.sessionId > 0) {
+            return data.sessionId !== systemBackendSessionId;
+        }
+        if (typeof data.captureToken === 'string' && data.captureToken) {
+            return data.captureToken !== systemNativeCaptureToken;
+        }
+        return false;
+    }
+
     // Releases everything the Host source owns: renderer stream/context (non-Linux)
     // and the main-process pw-record capture (Linux). Safe to call repeatedly.
     function releaseSystemResources({ cancelPendingStart = false } = {}) {
@@ -392,6 +410,7 @@ export function createTranscriptionManager({
         systemScriptProcessor = null;
         const nativeCapture = systemNativeCapture;
         systemNativeCapture = null;
+        systemNativeCaptureToken = null;
         // No handle yet means a Linux start may still be pending in the main
         // process; a token-less stop cancels it there (the attempt's own
         // generation check then drops any handle that arrives late).
@@ -461,6 +480,10 @@ export function createTranscriptionManager({
             const result = await window.electronAPI.startVoiceRecognition('system');
             if (!isCurrent()) return;
             if (result && result.error) throw new Error(result.error);
+            // The backend session this attempt owns. Its terminal events are
+            // correlated to this id, so obsolete events of older sessions are
+            // ignored and this session's own events always apply.
+            systemBackendSessionId = Number.isInteger(result?.sessionId) ? result.sessionId : null;
 
             if (isLinuxHost) {
                 nativeCapture = await audioPipeline.startNativeMonitorCapture();
@@ -499,6 +522,7 @@ export function createTranscriptionManager({
             }
 
             systemNativeCapture = nativeCapture;
+            systemNativeCaptureToken = nativeCapture?.token ?? null;
             systemMediaStream = stream;
             systemAudioContext = context;
             systemScriptProcessor = processor;
@@ -534,9 +558,6 @@ export function createTranscriptionManager({
             setSourceStatus('system', 'error', unsupportedMessage || `Host error: ${error.message}`);
             try {
                 await window.electronAPI.stopVoiceRecognition('system');
-                // The backend answers this stop with one terminal event for the
-                // session just ended; it must not tear down a newer session.
-                pendingSystemStopAcks += 1;
             } catch (_) {}
         }
 
@@ -557,12 +578,14 @@ export function createTranscriptionManager({
         systemPartialText = '';
         try {
             await window.electronAPI.stopVoiceRecognition('system');
-            // The backend answers this stop with one terminal event for the
-            // session just ended; it must not tear down a newer session.
-            pendingSystemStopAcks += 1;
         } catch (error) {
             addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
         }
+        // The stopped session is over: its terminal event (if the backend ever
+        // sends one) is now obsolete and must not be applied to a newer
+        // session. An ack that already arrived while the stop was in flight
+        // matched the live session and was handled then.
+        systemBackendSessionId = null;
         await releasing;
         setSystemActive(false);
         resetSourceSampleQueue('system');
@@ -650,6 +673,10 @@ export function createTranscriptionManager({
         const source = normalizeSource(data?.source);
         const status = data?.status;
         const message = data?.message || '';
+        if (source === 'system' && isStaleSystemEvent(data)) {
+            // A superseded session's status must not rewrite the live badge.
+            return;
+        }
         console.log(`STT status [${source}]:`, status, message);
 
         if (status === 'loading') {
@@ -670,10 +697,9 @@ export function createTranscriptionManager({
     function handleVoskError(data) {
         const source = normalizeSource(data?.source);
         const error = data?.error || 'Unknown transcription error';
-        if (source === 'system' && pendingSystemStopAcks > 0) {
-            // A terminal event was still expected for a session we explicitly
-            // stopped: this is its stale acknowledgment, not the live session.
-            pendingSystemStopAcks -= 1;
+        if (source === 'system' && isStaleSystemEvent(data)) {
+            // Obsolete event of a superseded session or capture, not the live
+            // session: it must not tear anything down.
             addMonitorLog('info', 'stale-event-ignored', `Ignored a stale backend error from a previous session: ${error}`, source);
             return;
         }
@@ -688,6 +714,7 @@ export function createTranscriptionManager({
             // step so a late capture is released at once and can never
             // reactivate the session, and cancel a pending main-process start.
             systemStartGeneration += 1;
+            systemBackendSessionId = null;
             releaseSystemResources({ cancelPendingStart: true });
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
@@ -718,10 +745,9 @@ export function createTranscriptionManager({
 
     function handleVoskStopped(data) {
         const source = normalizeSource(data?.source);
-        if (source === 'system' && pendingSystemStopAcks > 0) {
-            // The acknowledgment of a stop we requested for a previous session;
-            // it must not tear down the session that is live now.
-            pendingSystemStopAcks -= 1;
+        if (source === 'system' && isStaleSystemEvent(data)) {
+            // The acknowledgment of a superseded session's stop; it must not
+            // tear down the session that is live now.
             addMonitorLog('info', 'stale-event-ignored', 'Ignored a stale stop acknowledgment from a previous session', source);
             return;
         }
@@ -731,6 +757,7 @@ export function createTranscriptionManager({
             // Same contract as handleVoskError: cancel a pending start and
             // release anything that arrives late.
             systemStartGeneration += 1;
+            systemBackendSessionId = null;
             releaseSystemResources({ cancelPendingStart: true });
             if (systemPartialDiv) {
                 systemPartialDiv.remove();

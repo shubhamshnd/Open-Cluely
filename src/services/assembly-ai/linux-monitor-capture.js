@@ -4,9 +4,11 @@
 // Electron does not expose PipeWire sink monitors as audio inputs, so the main
 // process runs the installed `pw-record` with `stream.capture.sink=true`. That
 // property makes PipeWire link the stream to the monitor of the *default
-// playback sink* (it follows default-sink changes) without touching the default
-// microphone/output, persistent routing, or any other app's stream. It is
-// audio-only: no xdg-desktop-portal screencast session and no video.
+// playback sink* as resolved when the stream connects (whether PipeWire
+// re-links the stream if the default sink changes mid-capture is unverified),
+// without touching the default microphone/output, persistent routing, or any
+// other app's stream. It is audio-only: no xdg-desktop-portal screencast
+// session and no video.
 //
 // Ownership: at most one live capture child at any moment. start() takes
 // ownership synchronously and supersedes any previous capture; a replacement
