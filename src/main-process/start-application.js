@@ -288,6 +288,13 @@ async function startApplication() {
       defaultProgrammingLanguage: geminiRuntime.getDefaultProgrammingLanguage()
     });
 
+    // Electron only implements setContentProtection on Windows and macOS;
+    // on Linux the assistant window stays visible in screen shares and
+    // recordings even when HIDE_FROM_SCREEN_CAPTURE is enabled.
+    if (process.platform === 'linux') {
+      console.warn('[Stealth] setContentProtection has no effect on Linux — this window WILL be visible in screen shares/recordings.');
+    }
+
     geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
       if (!appState || appState.geminiApiKeyIndex === nextIndex) {
         return;
