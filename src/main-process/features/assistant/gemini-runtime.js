@@ -1,5 +1,6 @@
 const GeminiService = require('../../../services/ai/gemini-service');
 const { createProviderRegistry } = require('../../../services/ai/provider-registry');
+const { runWithFallback } = require('../../../services/ai/provider-fallback');
 const {
   resolveAiProvider,
   getAiProviders,
@@ -46,6 +47,7 @@ function createGeminiRuntime() {
     anthropic: { apiKey: '', modelName: '' },
     bedrock: { region: '', accessKeyId: '', secretAccessKey: '', modelId: '' }
   };
+  let providerFallbackOrder = [];
   let activeAiProvider = getDefaultAiProvider();
   let activeGeminiModel = getDefaultGeminiModel();
   let activeProgrammingLanguage = getDefaultProgrammingLanguage();
@@ -298,18 +300,49 @@ function createGeminiRuntime() {
     );
   }
 
-  async function executeWithKeyFailover(operation) {
+  // Optional fallback list (app state `providerFallback`). Empty = none.
+  function setProviderFallback(list) {
+    providerFallbackOrder = (Array.isArray(list) ? list : [])
+      .map((name) => String(name || '').trim().toLowerCase())
+      .filter((name, index, all) => getAiProviders().includes(name) && all.indexOf(name) === index);
+    return [...providerFallbackOrder];
+  }
+
+  function getProviderFallback() {
+    return [...providerFallbackOrder];
+  }
+
+  // Runs `operation` on the active provider. When a fallback list is set and
+  // the active provider fails with an auth, quota, timeout, or connection
+  // error, tries the next READY provider and reports the switch through
+  // options.onProviderSwitch({ from, to, reason, notice }).
+  async function executeWithKeyFailover(operation, options = {}) {
     if (typeof operation !== 'function') {
       throw new Error('AI failover operation must be a function.');
     }
 
+    const order = [activeAiProvider, ...providerFallbackOrder];
+    if (order.length === 1) {
+      return executeOnProvider(activeAiProvider, operation);
+    }
+
+    return runWithFallback({
+      order,
+      isReady: (name) => isReady(name),
+      run: (name) => executeOnProvider(name, operation),
+      onSwitch: options.onProviderSwitch
+    });
+  }
+
+  async function executeOnProvider(providerName, operation) {
     // Non-Gemini providers have no key rotation — resolve via the registry.
-    if (activeAiProvider !== 'gemini') {
-      const service = providerRegistry.getService(activeAiProvider, buildRegistrySettings());
+    if (providerName !== 'gemini') {
+      const service = providerRegistry.getService(providerName, buildRegistrySettings());
       if (!service) {
-        throw new Error(`${activeAiProvider} is not configured. Add its credentials in Settings.`);
+        throw new Error(`${providerName} is not configured. Add its credentials in Settings.`);
       }
       return await operation(service, {
+        provider: providerName,
         activeApiKeyIndex: 0,
         activeApiKey: '',
         attempt: 1,
@@ -338,6 +371,7 @@ function createGeminiRuntime() {
 
       try {
         return await operation(geminiService, {
+          provider: 'gemini',
           activeApiKeyIndex,
           activeApiKey,
           attempt: attemptedKeys + 1,
@@ -476,6 +510,8 @@ function createGeminiRuntime() {
     getApiKeys,
     hasApiKeys,
     isReady,
+    setProviderFallback,
+    getProviderFallback,
     setProviderSettings,
     getProviderSettings,
     getActiveModelName,

@@ -132,6 +132,7 @@ async function startApplication() {
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
     const activeOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(appState.ollamaBaseUrl);
     const activeOllamaModel = geminiRuntime.setActiveOllamaModel(appState.ollamaModel);
+    geminiRuntime.setProviderFallback(appState.providerFallback);
     geminiRuntime.setProviderSettings('openai', {
       apiKey: appState.openaiApiKey,
       modelName: appState.openaiModel

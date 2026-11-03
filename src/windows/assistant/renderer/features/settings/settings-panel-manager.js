@@ -314,6 +314,19 @@ export function createSettingsPanelManager({
                 if (byId('setting-bedrock-access-key')) byId('setting-bedrock-access-key').value = settings.bedrockAccessKeyId || '';
                 if (byId('setting-bedrock-secret')) byId('setting-bedrock-secret').value = settings.bedrockSecretAccessKey || '';
 
+                // Fallback provider (first entry of the saved fallback list)
+                const fallbackSelect = byId('setting-provider-fallback');
+                if (fallbackSelect) {
+                    fallbackSelect.innerHTML = '<option value="">None</option>';
+                    (settings.aiProviders || []).forEach((name) => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = settings.aiProviderLabels?.[name] || name;
+                        fallbackSelect.appendChild(option);
+                    });
+                    fallbackSelect.value = settings.providerFallback?.[0] || '';
+                }
+
                 // Ollama settings
                 if (settingOllamaBaseUrl) settingOllamaBaseUrl.value = settings.ollamaBaseUrl || 'http://localhost:11434';
                 if (settingOllamaModel) settingOllamaModel.value = settings.ollamaModel || 'llama3.2';
@@ -375,6 +388,8 @@ export function createSettingsPanelManager({
                 geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
                 assemblyAiApiKey: settingAssemblyKey ? settingAssemblyKey.value.trim() : '',
                 geminiModel: settingGeminiModel ? settingGeminiModel.value : '',
+                providerFallback: [byId('setting-provider-fallback')?.value]
+                    .filter((name) => name && name !== aiProvider),
                 openaiApiKey: byId('setting-openai-key')?.value.trim() || '',
                 openaiModel: byId('setting-openai-model')?.value || '',
                 anthropicApiKey: byId('setting-anthropic-key')?.value.trim() || '',

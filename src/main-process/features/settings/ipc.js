@@ -122,6 +122,7 @@ function registerSettingsIpc({
       const nextProviderFallback = (Array.isArray(settings.providerFallback) ? settings.providerFallback : [])
         .map((name) => String(name || '').trim().toLowerCase())
         .filter((name, index, list) => geminiRuntime.getAiProviders().includes(name) && list.indexOf(name) === index);
+      geminiRuntime.setProviderFallback(nextProviderFallback);
       const nextAssemblyModel = setAssemblyAiSpeechModel(settings.assemblyAiSpeechModel);
       const nextProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(settings.programmingLanguage);
       const nextWindowOpacityLevel = windowController.setWindowOpacityLevel(settings.windowOpacityLevel);

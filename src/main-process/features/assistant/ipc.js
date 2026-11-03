@@ -20,6 +20,27 @@ function registerAssistantIpc({
   const TEXT_ONLY_NOTICE = 'This model cannot see images, so I am reading the text extracted from your screenshot instead.\n\n';
   const TEXT_ONLY_NO_TEXT_ERROR = 'This model cannot see images and no text could be extracted from the screenshot. Switch to a vision model in Settings or retake the screenshot.';
 
+  // Runs an AI action through the runtime's optional provider fallback. On a
+  // switch the chat gets a line naming the provider that took over; for
+  // Screen AI and Ask AI, whose text is shown verbatim, the line also leads
+  // the final text so it survives a stream-to-final replacement.
+  async function runWithFallback(actionId, operation) {
+    const prefixResult = actionId === 'screenAi' || actionId === 'askAi';
+    const notices = [];
+    const result = await geminiRuntime.executeWithKeyFailover(operation, {
+      onProviderSwitch: ({ notice }) => {
+        notices.push(notice);
+        if (actionId) {
+          sendToRenderer('ai-stream-chunk', { actionId, text: `${notice}\n\n`, index: 0 });
+        }
+      }
+    });
+    if (prefixResult && notices.length > 0 && typeof result === 'string') {
+      return `${notices.join('\n')}\n\n${result}`;
+    }
+    return result;
+  }
+
   function getAllKeysUnavailableMessage() {
     return 'All configured Gemini API keys are currently unavailable (quota exhausted or invalid). Please wait and try again later.';
   }
@@ -137,7 +158,7 @@ function registerAssistantIpc({
         onChunk({ text: TEXT_ONLY_NOTICE, index: 0 });
       }
 
-      const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+      const answer = await runWithFallback('screenAi', (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('AI model not initialized. Please check your API key.');
         }
@@ -278,7 +299,7 @@ function registerAssistantIpc({
               screenshotNotice = TEXT_ONLY_NOTICE;
               onChunk({ text: screenshotNotice, index: 0 });
             }
-            text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+            text = await runWithFallback('askAi', (geminiService) => {
               if (!geminiService || !geminiService.ready()) {
                 throw new Error('AI model not initialized. Please check your API key.');
               }
@@ -297,7 +318,7 @@ function registerAssistantIpc({
       }
 
       if (!text) {
-        text = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+        text = await runWithFallback('askAi', (geminiService) => {
           if (!geminiService || !geminiService.ready()) {
             throw new Error('AI model not initialized. Please check your API key.');
           }
@@ -380,7 +401,7 @@ function registerAssistantIpc({
       };
       sendToRenderer('ai-stream-start', { actionId: 'suggest' });
 
-      const suggestions = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+      const suggestions = await runWithFallback('suggest', (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('Gemini service not initialized');
         }
@@ -416,7 +437,7 @@ function registerAssistantIpc({
       };
       sendToRenderer('ai-stream-start', { actionId: 'notes' });
 
-      const notes = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+      const notes = await runWithFallback('notes', (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('Gemini service not initialized');
         }
@@ -443,7 +464,7 @@ function registerAssistantIpc({
         throw new Error(getNotConfiguredMessage());
       }
 
-      const email = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+      const email = await runWithFallback(null, (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('Gemini service not initialized');
         }
@@ -465,7 +486,7 @@ function registerAssistantIpc({
         throw new Error(getNotConfiguredMessage());
       }
 
-      const answer = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+      const answer = await runWithFallback(null, (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('Gemini service not initialized');
         }
@@ -496,7 +517,7 @@ function registerAssistantIpc({
       };
       sendToRenderer('ai-stream-start', { actionId: 'insights' });
 
-      const insights = await geminiRuntime.executeWithKeyFailover((geminiService) => {
+      const insights = await runWithFallback('insights', (geminiService) => {
         if (!geminiService || !geminiService.ready()) {
           throw new Error('Gemini service not initialized');
         }
