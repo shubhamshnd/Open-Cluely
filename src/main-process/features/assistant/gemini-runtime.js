@@ -436,6 +436,20 @@ function createGeminiRuntime() {
     return activeGeminiModel;
   }
 
+  // True when the active model accepts image input. Unknown/unready services
+  // are treated as vision-capable so the normal "not configured" error wins.
+  function activeSupportsImages() {
+    let service = getService();
+    if (!service) {
+      try {
+        service = initializeAiService();
+      } catch (_error) {
+        service = null;
+      }
+    }
+    return service ? service.supportsImages !== false : true;
+  }
+
   function getActiveProgrammingLanguage() {
     return activeProgrammingLanguage;
   }
@@ -472,6 +486,7 @@ function createGeminiRuntime() {
     isAllKeysUnavailableError,
     setActiveKeyIndexChangeHandler,
     getService,
+    activeSupportsImages,
     getAiProviders,
     getDefaultAiProvider,
     getActiveAiProvider,
