@@ -9,6 +9,7 @@
   STEALTH_WINDOW_OPACITY
 } = require('./window-constants');
 const { getKeyboardShortcutAccelerator } = require('../../../config');
+const { setWindowOpacity } = require('../../shared/window-opacity');
 
 function createWindowController({
   app,
@@ -74,7 +75,7 @@ function createWindowController({
       return;
     }
 
-    mainWindow.setOpacity(getCurrentWindowOpacity());
+    setWindowOpacity(mainWindow, getCurrentWindowOpacity());
   }
 
   function recoverMainWindowVisibility(reason, { reload = false } = {}) {
@@ -98,7 +99,7 @@ function createWindowController({
       }
 
       isVisible = true;
-      mainWindow.setOpacity(getVisibleWindowOpacity());
+      setWindowOpacity(mainWindow, getVisibleWindowOpacity());
       if (!mainWindow.isVisible()) {
         mainWindow.show();
       }
@@ -274,7 +275,7 @@ function createWindowController({
       return;
     }
 
-    mainWindow.setOpacity(0.01);
+    setWindowOpacity(mainWindow, 0.01);
     sendToRenderer('emergency-clear');
 
     autoHideTimer = setTimeout(() => {

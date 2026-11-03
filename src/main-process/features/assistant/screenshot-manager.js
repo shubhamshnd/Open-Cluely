@@ -1,6 +1,7 @@
 ﻿const fs = require('fs');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
+const { setWindowOpacity, getWindowOpacity } = require('../../shared/window-opacity');
 
 // screenshot-desktop's Linux backend never wires its internal listDisplays()
 // (xrandr) rejection into the returned promise, so when xrandr or the capture
@@ -180,10 +181,10 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
     screenshotInProgress = true;
     try {
       console.log('Taking stealth screenshot...');
-      const currentOpacity = mainWindow.getOpacity();
+      const currentOpacity = getWindowOpacity(mainWindow);
       const screenshotDelay = appEnvironment?.screenshotDelay || 300;
 
-      mainWindow.setOpacity(0.01);
+      setWindowOpacity(mainWindow, 0.01);
       await new Promise((resolve) => setTimeout(resolve, screenshotDelay));
 
       const screenshotsDir = ensureScreenshotsDir();
@@ -202,7 +203,7 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
         cleanupScreenshotFile(screenshots.shift());
       }
 
-      mainWindow.setOpacity(currentOpacity);
+      setWindowOpacity(mainWindow, currentOpacity);
 
       console.log(`Screenshot saved: ${screenshotPath}`);
       console.log(`Total screenshots: ${screenshots.length}`);
@@ -216,7 +217,7 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
       return screenshotPath;
     } catch (error) {
       try {
-        mainWindow.setOpacity(1.0);
+        setWindowOpacity(mainWindow, 1.0);
       } catch (_) {
         // no-op
       }
