@@ -290,6 +290,20 @@ const settingsPanelManager = createSettingsPanelManager({
     showFeedback: (message, type) => showFeedback(message, type),
     onSettingsSaved: () => {
         refreshProviderStatus();
+    },
+    // Lazy closures: transcriptionManager is constructed right after this.
+    isTranscriptionActive: () => {
+        const statuses = transcriptionManager.sourceStatuses;
+        return ['connecting', 'listening'].includes(statuses.system) ||
+            ['connecting', 'listening'].includes(statuses.mic);
+    },
+    stopTranscription: async () => {
+        const statuses = transcriptionManager.sourceStatuses;
+        const anyActive = ['connecting', 'listening'].includes(statuses.system) ||
+            ['connecting', 'listening'].includes(statuses.mic);
+        if (anyActive) {
+            await transcriptionManager.toggleMasterTranscription();
+        }
     }
 });
 const transcriptionManager = createTranscriptionManager({

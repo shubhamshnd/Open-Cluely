@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { getAiProviders, getAwsAuthModes } = require('../src/config');
+const { getAiProviders, getAwsAuthModes, getSttProviders } = require('../src/config');
 
 const html = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/renderer.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '../src/windows/assistant/styles.css'), 'utf8');
@@ -81,6 +81,22 @@ test('shared AWS credentials block: one option per auth mode, sub-groups hidden'
   }
   // The Bedrock API key helper must say Transcribe cannot use it.
   assert.match(html, /Bedrock only; Amazon Transcribe can't use it/);
+});
+
+test('speech-to-text provider select offers every configured STT provider', () => {
+  const select = html.match(/<select id="setting-stt-provider"[\s\S]*?<\/select>/)[0];
+  const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(values, getSttProviders());
+  assert.ok(manager.includes('setting-stt-provider'), 'STT select not wired in settings-panel-manager');
+
+  // AssemblyAI fields stay in their own visible-by-default group; the
+  // Transcribe group starts hidden with its region and language fields.
+  assert.match(html, /<div id="assemblyai-stt-group">/);
+  assert.match(html, /<div id="transcribe-stt-group" class="hidden">/);
+  assert.match(html, /id="setting-transcribe-region"/);
+  assert.match(html, /id="setting-transcribe-language"/);
+  // The lock hint for switching provider while transcription runs.
+  assert.match(html, /<div id="stt-provider-locked-hint" class="settings-helper-text hidden">/);
 });
 
 test('stylesheet has a bare .hidden rule with display: none (provider groups rely on it)', () => {

@@ -15,10 +15,13 @@ function byId(id) {
 }
 
 // The shared AWS credentials block is visible when the AI provider is Bedrock
-// OR the speech-to-text provider is Amazon Transcribe (Part 2 adds the STT
-// select; until then the STT provider stays 'assemblyai' here).
+// OR the speech-to-text provider is Amazon Transcribe.
 let currentSttProvider = 'assemblyai';
 let currentAwsAuthMode = 'default';
+// Snapshot of the STT provider when the panel was opened + the vocabulary
+// name reported by the main process (carried back unchanged on save).
+let openedSttProvider = 'assemblyai';
+let currentTranscribeVocabularyName = '';
 
 export function createSettingsPanelManager({
     settingsPanel,
@@ -40,7 +43,12 @@ export function createSettingsPanelManager({
     settingWindowOpacityValue,
     applySettingsShortcutConfig,
     showFeedback,
-    onSettingsSaved
+    onSettingsSaved,
+    // Renderer-owned transcription state hooks (Part 2): the STT provider
+    // select is locked while transcription runs; a provider change queued in
+    // the panel stops the live attempt before it is saved.
+    isTranscriptionActive,
+    stopTranscription
 }) {
     function normalizeWindowOpacityLevel(value) {
         const parsedValue = Number.parseInt(String(value ?? ''), 10);
@@ -185,6 +193,55 @@ export function createSettingsPanelManager({
         });
         byId('refresh-aws-profiles')?.addEventListener('click', () => {
             refreshAwsProfileList();
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Speech-to-text provider (AssemblyAI | Amazon Transcribe)
+    // ------------------------------------------------------------------
+
+    // Only the chosen provider's fields show. The shared AWS credentials
+    // block re-evaluates too: it must be visible for Transcribe even when the
+    // AI provider is not Bedrock.
+    function updateSttProviderVisibility(provider) {
+        currentSttProvider = provider === 'transcribe' ? 'transcribe' : 'assemblyai';
+        byId('assemblyai-stt-group')?.classList.toggle('hidden', currentSttProvider !== 'assemblyai');
+        byId('transcribe-stt-group')?.classList.toggle('hidden', currentSttProvider !== 'transcribe');
+        updateAwsCredentialsVisibility(settingAiProvider?.value || 'gemini');
+    }
+
+    // The provider select is disabled while transcription is running: a live
+    // attempt belongs to one backend and must end before the router can send
+    // audio to another (the renderer owns the attempt lifecycle, so the
+    // renderer enforces this).
+    function updateSttProviderLock() {
+        const locked = typeof isTranscriptionActive === 'function' && isTranscriptionActive() === true;
+        const select = byId('setting-stt-provider');
+        if (select) {
+            select.disabled = locked;
+        }
+        byId('stt-provider-locked-hint')?.classList.toggle('hidden', !locked);
+    }
+
+    function populateTranscribeLanguageOptions(languages, selectedLanguage) {
+        const select = byId('setting-transcribe-language');
+        if (!select) {
+            return;
+        }
+        const configured = Array.isArray(languages) && languages.length > 0 ? languages : ['en-US'];
+        select.innerHTML = '';
+        configured.forEach((language) => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            select.appendChild(option);
+        });
+        select.value = configured.includes(selectedLanguage) ? selectedLanguage : configured[0];
+    }
+
+    function bindSttProviderControls() {
+        byId('setting-stt-provider')?.addEventListener('change', (event) => {
+            updateSttProviderVisibility(event.target.value);
         });
     }
 
@@ -557,6 +614,18 @@ export function createSettingsPanelManager({
                     settings.assemblyAiSpeechModels,
                     settings.assemblyAiSpeechModel || settings.defaultAssemblyAiSpeechModel
                 );
+
+                // Speech-to-text provider + Amazon Transcribe settings
+                const sttProvider = settings.sttProvider || 'assemblyai';
+                openedSttProvider = sttProvider;
+                currentTranscribeVocabularyName = settings.transcribeVocabularyName || '';
+                if (byId('setting-stt-provider')) byId('setting-stt-provider').value = sttProvider;
+                updateSttProviderVisibility(sttProvider);
+                updateSttProviderLock();
+                if (byId('setting-transcribe-region')) {
+                    byId('setting-transcribe-region').value = settings.transcribeRegion || settings.defaultTranscribeRegion || 'us-east-1';
+                }
+                populateTranscribeLanguageOptions(settings.transcribeLanguages, settings.transcribeLanguage);
                 if (settingWindowOpacity) {
                     settingWindowOpacity.value = normalizeWindowOpacityLevel(settings.windowOpacityLevel);
                 }
@@ -600,6 +669,20 @@ export function createSettingsPanelManager({
                 throw new Error('AssemblyAI speech models are not configured.');
             }
 
+            const nextSttProvider = byId('setting-stt-provider')?.value || 'assemblyai';
+            // Safety net: the select is disabled while transcription runs, but
+            // a run can have started (e.g. via shortcut) after the panel opened
+            // with a pending change. A live attempt belongs to the old backend,
+            // so stop it cleanly before the router switches providers.
+            if (
+                nextSttProvider !== openedSttProvider &&
+                typeof isTranscriptionActive === 'function' &&
+                isTranscriptionActive() === true &&
+                typeof stopTranscription === 'function'
+            ) {
+                await stopTranscription();
+            }
+
             const settings = {
                 aiProvider,
                 geminiApiKey: settingGeminiKey ? settingGeminiKey.value.trim() : '',
@@ -623,6 +706,10 @@ export function createSettingsPanelManager({
                 ollamaModel: settingOllamaModel ? settingOllamaModel.value.trim() : '',
                 programmingLanguage: settingProgrammingLanguage.value,
                 assemblyAiSpeechModel: settingAssemblyModel.value,
+                sttProvider: nextSttProvider,
+                transcribeRegion: byId('setting-transcribe-region')?.value.trim() || '',
+                transcribeLanguage: byId('setting-transcribe-language')?.value || 'en-US',
+                transcribeVocabularyName: currentTranscribeVocabularyName,
                 windowOpacityLevel: normalizeWindowOpacityLevel(settingWindowOpacity?.value)
             };
 
@@ -654,6 +741,7 @@ export function createSettingsPanelManager({
     bindApiKeyVisibilityToggle(byId('setting-bedrock-api-key'), byId('toggle-bedrock-api-key-visibility'), 'Bedrock API');
     bindProviderToggle();
     bindAwsAuthControls();
+    bindSttProviderControls();
     bindFetchOllamaModels();
     bindFetchProviderModels();
     bindGnomeShortcutButtons();

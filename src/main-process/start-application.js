@@ -29,6 +29,8 @@ const { createGeminiRuntime } = require('./features/assistant/gemini-runtime');
 const { createScreenshotManager } = require('./features/assistant/screenshot-manager');
 const { registerAssistantIpc } = require('./features/assistant/ipc');
 const { createAssemblyAiService } = require('../services/assembly-ai/service');
+const { createAwsTranscribeService } = require('../services/stt/aws-transcribe-service');
+const { createSttRouter } = require('../services/stt/stt-router');
 const { createOcrService } = require('../services/ocr/service');
 const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
 const { createLinuxMonitorCapture } = require('../services/assembly-ai/linux-monitor-capture');
@@ -111,13 +113,40 @@ async function startApplication() {
     sendToRenderer
   });
 
+  // Amazon Transcribe: the second STT provider. Reads its region/language/
+  // vocabulary and the shared AWS auth state from app state at start time.
+  const awsTranscribeService = createAwsTranscribeService({
+    getTranscribeSettings: () => ({
+      region: appState?.transcribeRegion,
+      language: appState?.transcribeLanguage,
+      vocabularyName: appState?.transcribeVocabularyName,
+      awsAuth: {
+        awsAuthMode: appState?.awsAuthMode,
+        awsProfile: appState?.awsProfile,
+        awsAccessKeyId: appState?.awsAccessKeyId,
+        awsSecretAccessKey: appState?.awsSecretAccessKey,
+        awsSessionToken: appState?.awsSessionToken,
+        bedrockApiKey: appState?.bedrockApiKey
+      }
+    }),
+    getGeminiService: () => geminiRuntime.getService(),
+    sendToRenderer
+  });
+
+  // The IPC layer talks to this router; the Settings STT provider decides
+  // which backend each call lands on.
+  const sttService = createSttRouter({
+    getSttProvider: () => appState?.sttProvider,
+    services: { assemblyai: assemblyAiService, transcribe: awsTranscribeService }
+  });
+
   windowController = createWindowController({
     app,
     screen,
     globalShortcut,
     createAssistantWindow,
     getAppEnvironment: () => appEnvironment,
-    emitSttDebug: assemblyAiService.emitSttDebug,
+    emitSttDebug: (payload) => sttService.emitSttDebug(payload),
     sendToRenderer,
     onTakeStealthScreenshot: async () => {
       if (screenshotManager) {
@@ -246,7 +275,8 @@ async function startApplication() {
     // (SIGTERM escalated to SIGKILL after its grace period), so quit can wait
     // for it instead of exiting under a child that ignored SIGTERM.
     const captureDisposed = Promise.resolve(linuxMonitorCapture.dispose());
-    assemblyAiService.dispose();
+    // Disposes BOTH STT providers (AssemblyAI and Amazon Transcribe).
+    sttService.dispose();
     screenshotManager.cleanupTransientResources();
     ocrService.dispose().catch((error) => {
       console.error('Failed to dispose OCR worker:', error);
@@ -284,14 +314,15 @@ async function startApplication() {
     ocrService,
     windowController,
     geminiRuntime,
-    assemblyAiService,
+    // The router's flush/reset covers both providers' transcript history.
+    assemblyAiService: sttService,
     sendToRenderer,
     quitApplication
   });
 
   registerAssemblyAiIpc({
     ipcMain,
-    assemblyAiService,
+    sttService,
     linuxMonitorCapture,
     sendToRenderer
   });
