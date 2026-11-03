@@ -6,12 +6,12 @@
 npm ci
 npm run build:win     # Windows: dist/OpenCluely.exe (portable, x64)
 npm run build:mac     # macOS:   dist/Open Cluely-<version>.dmg
-npm run build:linux   # Linux:   dist/Open Cluely-<version>.AppImage
+npm run build:linux   # Linux:   dist/Open Cluely-<version>.AppImage + dist/open-cluely_<version>_amd64.deb
 ```
 
 `npm run build` auto-detects the current OS and builds that target.
 
-Each OS target must be built on that OS (or a matching CI runner). The Windows and macOS targets were not built on the Linux development machine, so verify them on their own platforms.
+Each OS target must be built on that OS (or a matching CI runner). The Windows and macOS targets were not built on the Linux development machine, so verify them on their own platforms. Only the Linux targets (AppImage + .deb) have been built and inspected here.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ Icons live in `assets/` and are wired into `package.json`:
 
 - `assets/icon.ico` - Windows
 - `assets/icon.icns` - macOS
-- `assets/icon.png` - Linux
+- `build/icons/<size>x<size>.png` - Linux (regenerated from `assets/icon.png`; the size-named set is required — a single PNG installs into a bogus `hicolor/0x0/apps` directory in the .deb)
 
 See `assets/README.md` for how to replace them.
 
@@ -36,14 +36,16 @@ The app identity is set in the `build` section of `package.json`:
 - Product name: `Open Cluely`
 - App ID: `com.opencluely.app`
 - Windows artifact: `OpenCluely.exe` (portable)
-- Linux target: AppImage
+- Linux targets: AppImage + deb (the deb declares its GTK/NSS/etc. `depends`, installs to `/opt/Open Cluely/`, and its postinst sets `chrome-sandbox` to mode 4755)
+- macOS: hardened runtime with `build/entitlements.mac.plist` (JIT + microphone); microphone/screen-recording consent strings via `extendInfo`
 
 `.env` is **not** bundled. Packaged builds read settings and API keys from `cache/app-state.json` in the user-data directory; edit them from the in-app Settings panel.
 
 ## Running the built app
 
 - Windows: run `dist/OpenCluely.exe`. Add `--start-hidden` to launch in the background.
-- Linux: `chmod +x "dist/Open Cluely-<version>.AppImage"` then run it.
+- Linux AppImage: `chmod +x "dist/Open Cluely-<version>.AppImage"` then run it.
+- Linux .deb: `sudo apt install ./dist/open-cluely_<version>_amd64.deb`, then run `open-cluely` or pick "Open Cluely" from the app menu. Uninstall with `sudo apt remove open-cluely` (keeps `~/.config/open-cluely/` settings).
 - macOS: open the app from the `.dmg`.
 
 ## Troubleshooting

@@ -108,6 +108,11 @@ function isAwsAuthReady(state = {}, { purpose = 'bedrock' } = {}) {
 // ~/.aws/config ([default], [profile x]) and ~/.aws/credentials ([x]);
 // credential values are never parsed, returned, or logged. Paths and fs are
 // injectable so tests run against fixtures, never the real ~/.aws.
+//
+// The default paths follow the AWS SDK: AWS_CONFIG_FILE and
+// AWS_SHARED_CREDENTIALS_FILE override ~/.aws/config and ~/.aws/credentials
+// (on every OS — the SDK honors them on Windows too), so the dropdown lists
+// the same profiles the SDK's fromIni would actually resolve.
 // ---------------------------------------------------------------------------
 function parseAwsProfileNames(fileContent, { configFormat }) {
   const names = [];
@@ -138,13 +143,20 @@ function listAwsProfiles({
   fsImpl = require('fs'),
   osImpl = require('os'),
   pathImpl = require('path'),
+  env = process.env,
   configPath,
   credentialsPath
 } = {}) {
   const awsDir = pathImpl.join(osImpl.homedir(), '.aws');
   const files = [
-    { filePath: configPath || pathImpl.join(awsDir, 'config'), configFormat: true },
-    { filePath: credentialsPath || pathImpl.join(awsDir, 'credentials'), configFormat: false }
+    {
+      filePath: configPath || env.AWS_CONFIG_FILE || pathImpl.join(awsDir, 'config'),
+      configFormat: true
+    },
+    {
+      filePath: credentialsPath || env.AWS_SHARED_CREDENTIALS_FILE || pathImpl.join(awsDir, 'credentials'),
+      configFormat: false
+    }
   ];
 
   const profiles = [];

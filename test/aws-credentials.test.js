@@ -180,6 +180,38 @@ test('listAwsProfiles merges names from fixture files and never returns values',
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('listAwsProfiles honors AWS_CONFIG_FILE / AWS_SHARED_CREDENTIALS_FILE like the SDK', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aws-env-fixture-'));
+  const envConfig = path.join(dir, 'custom-config');
+  const envCredentials = path.join(dir, 'custom-credentials');
+  fs.writeFileSync(envConfig, '[profile env-only]\nregion = ap-south-1\n');
+  fs.writeFileSync(envCredentials, '[env-creds]\naws_access_key_id = SHOULD_NOT_APPEAR\n');
+
+  // With the env vars set, the default ~/.aws paths must not be consulted at
+  // all — os.homedir() would find nothing usable in this fixture setup.
+  const result = listAwsProfiles({
+    env: { AWS_CONFIG_FILE: envConfig, AWS_SHARED_CREDENTIALS_FILE: envCredentials },
+    osImpl: { homedir: () => path.join(dir, 'no-such-home') }
+  });
+  assert.equal(result.success, true);
+  assert.deepEqual(result.profiles, ['env-only', 'env-creds']);
+
+  // An explicit path argument still wins over the environment.
+  const explicitConfig = path.join(dir, 'explicit-config');
+  fs.writeFileSync(explicitConfig, '[profile explicit]\n');
+  const overridden = listAwsProfiles({
+    env: { AWS_CONFIG_FILE: envConfig, AWS_SHARED_CREDENTIALS_FILE: envCredentials },
+    configPath: explicitConfig
+  });
+  assert.deepEqual(overridden.profiles, ['explicit', 'env-creds']);
+
+  // Without the env vars the homedir-based defaults apply (here: missing files).
+  const defaults = listAwsProfiles({ env: {}, osImpl: { homedir: () => path.join(dir, 'no-such-home') } });
+  assert.deepEqual(defaults.profiles, []);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 // The Bedrock API key must reach the wire as `Authorization: Bearer <key>`.
 // A capturing requestHandler intercepts the request before any network I/O;
 // deserialization then fails on the empty fake body, which is fine — the

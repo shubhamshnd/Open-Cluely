@@ -140,6 +140,29 @@ test('installer writes the script, points GNOME at it, and removes it', async ()
   assert.equal(list, "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']");
 });
 
+test('installer from a packaged .deb writes a script whose fallback is execPath alone', async () => {
+  const writes = [];
+  const installer = createGnomeShortcutInstaller({
+    platform: 'linux',
+    env: {},
+    procEnviron: { XDG_CURRENT_DESKTOP: 'GNOME' },
+    execPath: '/opt/Open Cluely/open-cluely',
+    appPath: '/opt/Open Cluely/resources/app.asar',
+    isPackaged: true,
+    userDataPath: '/home/u/.config/open-cluely',
+    shortcuts: [{ id: 'toggleStealth', name: 'Open Cluely: Toggle', accelerator: 'Alt+Shift+H' }],
+    writeScriptImpl: (file, content) => writes.push({ file, content }),
+    execFileImpl: async (_file, args) => (args[0] === 'get' ? '@as []' : '')
+  });
+
+  const added = await installer.install();
+  assert.equal(added.success, true);
+  assert.equal(writes.length, 1);
+  assert.match(writes[0].content, /exec '\/opt\/Open Cluely\/open-cluely' --action="\$ACTION"/);
+  assert.ok(!writes[0].content.includes('--no-sandbox'), 'a SUID-sandboxed .deb must not force --no-sandbox');
+  assert.ok(!writes[0].content.includes('app.asar'), 'packaged installs must not pass the app path');
+});
+
 test('the SystemIdleProcess process-title disguise is gone', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main-process', 'start-application.js'), 'utf8');
   assert.doesNotMatch(src, /SystemIdleProcess|process\.title\s*=/);
