@@ -154,7 +154,9 @@ function registerSettingsIpc({
     const saved = geminiRuntime.getProviderSettings(provider) || {};
     const appState = typeof getAppState === 'function' ? getAppState() : null;
     return fetchProviderModels(provider, {
-      apiKey: resolveSecretOnSave(payload?.apiKey, saved.apiKey),
+      // Fetch historically falls back on a blank key (Save, unlike Fetch,
+      // treats explicit blanks as removal).
+      apiKey: resolveSecretOnSave(payload?.apiKey || undefined, saved.apiKey),
       region: payload?.region || saved.region,
       authMode: payload?.authMode ?? appState?.awsAuthMode ?? saved.authMode,
       profile: payload?.profile ?? appState?.awsProfile ?? saved.profile,

@@ -16,7 +16,16 @@ const {
   resolveSecretOnSave,
   resolveSecretListOnSave
 } = require('../src/services/state/secret-masking.js');
+// Stub only model-list transport, retaining the real IPC credential resolution.
+const modelLists = require('../src/services/ai/model-lists.js');
+const originalFetchProviderModels = modelLists.fetchProviderModels;
+const modelFetchCalls = [];
+modelLists.fetchProviderModels = async (provider, options) => {
+  modelFetchCalls.push({ provider, options });
+  return { success: true, models: [] };
+};
 const { registerSettingsIpc } = require('../src/main-process/features/settings/ipc.js');
+modelLists.fetchProviderModels = originalFetchProviderModels;
 
 const FAKE_GEMINI_KEY_1 = 'FAKE-GEMINI-KEY-0001abcd';
 const FAKE_GEMINI_KEY_2 = 'FAKE-GEMINI-KEY-0002efgh';
@@ -222,6 +231,14 @@ test('get-settings with no stored secrets returns empty fields, not bullets', as
   assert.equal(settings.awsAccessKeyId, '');
   assert.equal(settings.hasGeminiApiKeys, false);
   assert.equal(settings.hasAssemblyAiApiKey, false);
+});
+
+test('model Fetch preserves the original blank-key fallback and resolves masked credentials', async () => {
+  const { handlers } = createSettingsHarness({ appState: { ...FULL_STATE } });
+  for (const input of ['', undefined, maskSecretValue(FAKE_OPENAI_KEY)]) {
+    await handlers.get('list-provider-models')({}, { provider: 'openai', apiKey: input });
+    assert.equal(modelFetchCalls.at(-1).options.apiKey, FAKE_OPENAI_KEY);
+  }
 });
 
 function baseSavePayload(overrides = {}) {
