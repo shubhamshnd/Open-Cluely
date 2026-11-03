@@ -1,17 +1,21 @@
 /* COMPACT GLASS OVERLAY - CLUELY STYLE WITH CHAT INTERFACE */
 
 :root {
-  --glass-shell-bg: rgba(255, 255, 255, 0.05);
-  --glass-shell-border: rgba(255, 255, 255, 0.3);
-  --glass-panel-bg: rgba(255, 255, 255, 0.05);
-  --glass-panel-border: rgba(255, 255, 255, 0.3);
-  --glass-header-bg: rgba(255, 255, 255, 0.08);
-  --glass-control-bg: rgba(255, 255, 255, 0.1);
-  --glass-control-border: rgba(255, 255, 255, 0.3);
-  --glass-input-bg: rgba(255, 255, 255, 0.1);
-  --glass-input-focus-bg: rgba(255, 255, 255, 0.15);
-  --glass-message-bg: rgba(255, 255, 255, 0.05);
-  --glass-settings-bg: rgba(255, 255, 255, 0.92);
+  /* Light theme surfaces. Linux Electron cannot blur what is behind a
+     transparent window, so every surface that holds text is near-opaque
+     (>= 0.92). The glass look comes from borders, shadows and radius. The
+     user's window-opacity setting still fades the whole page. */
+  --glass-shell-bg: rgba(241, 245, 249, 0.96);
+  --glass-shell-border: rgba(100, 116, 139, 0.55);
+  --glass-panel-bg: rgba(255, 255, 255, 0.95);
+  --glass-panel-border: rgba(100, 116, 139, 0.45);
+  --glass-header-bg: rgba(226, 232, 240, 0.97);
+  --glass-control-bg: rgba(226, 232, 240, 0.97);
+  --glass-control-border: rgba(100, 116, 139, 0.5);
+  --glass-input-bg: rgba(255, 255, 255, 0.98);
+  --glass-input-focus-bg: rgba(255, 255, 255, 1);
+  --glass-message-bg: rgba(248, 250, 252, 0.96);
+  --glass-settings-bg: rgba(255, 255, 255, 0.98);
 }
 
 * {
@@ -1943,17 +1947,17 @@ select.settings-input {
 
 /* THEME: DARK MODE */
 body.theme-dark {
-  --glass-shell-bg: rgba(8, 14, 28, 0.08);
-  --glass-shell-border: rgba(148, 163, 184, 0.3);
-  --glass-panel-bg: rgba(15, 23, 42, 0.08);
-  --glass-panel-border: rgba(148, 163, 184, 0.24);
-  --glass-header-bg: rgba(30, 41, 59, 0.1);
-  --glass-control-bg: rgba(30, 41, 59, 0.15);
-  --glass-control-border: rgba(148, 163, 184, 0.3);
-  --glass-input-bg: rgba(15, 23, 42, 0.15);
-  --glass-input-focus-bg: rgba(30, 41, 59, 0.2);
-  --glass-message-bg: rgba(15, 23, 42, 0.08);
-  --glass-settings-bg: rgba(2, 6, 23, 0.94);
+  --glass-shell-bg: rgba(8, 14, 28, 0.96);
+  --glass-shell-border: rgba(148, 163, 184, 0.4);
+  --glass-panel-bg: rgba(15, 23, 42, 0.95);
+  --glass-panel-border: rgba(148, 163, 184, 0.32);
+  --glass-header-bg: rgba(30, 41, 59, 0.96);
+  --glass-control-bg: rgba(30, 41, 59, 0.96);
+  --glass-control-border: rgba(148, 163, 184, 0.4);
+  --glass-input-bg: rgba(15, 23, 42, 0.97);
+  --glass-input-focus-bg: rgba(30, 41, 59, 0.98);
+  --glass-message-bg: rgba(15, 23, 42, 0.94);
+  --glass-settings-bg: rgba(2, 6, 23, 0.98);
   color: rgba(226, 232, 240, 0.94);
 }
 
@@ -2329,4 +2333,1248 @@ body:not(.theme-dark) .settings-input-toggle {
 body:not(.theme-dark) .settings-shortcut-row {
   background: rgba(241, 245, 249, 0.9);
   border-color: rgba(148, 163, 184, 0.4);
+}
+
+
+/* ==========================================================================
+   READABILITY LAYER
+   Every surface that carries text is near-opaque in BOTH themes, and every
+   text color reaches WCAG AA (4.5:1) on its surface. Light theme gets an
+   explicit equivalent for each dark-theme override. Keep this block last so
+   it wins the cascade over the older glass rules above.
+   ========================================================================== */
+
+/* Status/badge colors are identical in both themes (white on a saturated,
+   solid background). The old 0.9-alpha green/blue/red gave 2.3-3.8:1. */
+.monitor-master-state,
+.monitor-status-badge,
+.monitor-status-badge.off {
+  background: #475569;
+  color: #ffffff;
+}
+
+.monitor-master-state.active,
+.monitor-status-badge.listening {
+  background: #15803d;
+}
+
+.monitor-master-state.connecting,
+.monitor-status-badge.connecting {
+  background: #1d4ed8;
+}
+
+.monitor-status-badge.error {
+  background: #b91c1c;
+}
+
+.screenshot-count {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.close-app-btn {
+  background: #dc2626;
+  color: #ffffff;
+  opacity: 0.85;
+}
+
+.close-app-btn:hover {
+  background: #b91c1c;
+  opacity: 1;
+}
+
+.action-btn.analyze-btn,
+.save-settings-btn,
+.chat-manual-send {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+
+.action-btn.analyze-btn:hover,
+.save-settings-btn:hover,
+.chat-manual-send:hover {
+  background: #1e40af;
+}
+
+.action-btn:disabled,
+.chat-manual-send:disabled,
+.source-toggle:disabled {
+  opacity: 0.6;
+}
+
+.chat-autoscroll-toggle.off {
+  opacity: 0.75;
+}
+
+.mobile-server-pill.off {
+  opacity: 0.85;
+}
+
+/* ---------- LAYOUT: no clipping, wrap instead of overflow ---------- */
+.glass-container {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.main-interface {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.content-section {
+  min-width: 0;
+}
+
+.action-buttons {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.action-btn,
+.source-toggle,
+.mobile-server-pill {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.utility-buttons {
+  flex: 0 0 auto;
+}
+
+.chat-header {
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chat-provider-model {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  margin-left: 0;
+  text-align: right;
+  opacity: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-live-text {
+  font-size: 10px;
+}
+
+.monitor-log-entry {
+  font-size: 10px;
+}
+
+.monitor-log-list {
+  max-height: 48px;
+}
+
+.message-content {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+  text-shadow: none;
+}
+
+.message-content.ai-response {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.message-time,
+.message-label {
+  font-size: 10px;
+}
+
+.settings-helper-text {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* ---------- ERROR / FEEDBACK BANNER ---------- */
+.status-text {
+  top: 44px;
+  max-width: min(86%, 640px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+  padding: 8px 12px 8px 30px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #f8fafc;
+  backdrop-filter: none;
+  -webkit-user-select: text;
+  user-select: text;
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.35);
+}
+
+.status-text.show {
+  pointer-events: auto;
+}
+
+.status-text::before {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  content: '\2139';
+}
+
+.status-text.error {
+  background: #7f1d1d;
+  border-color: #fca5a5;
+  color: #ffffff;
+}
+
+.status-text.error::before {
+  content: '\26A0';
+}
+
+.status-text.success {
+  background: #14532d;
+  border-color: #86efac;
+  color: #ffffff;
+}
+
+.status-text.success::before {
+  content: '\2713';
+}
+
+.monitor-log-entry.error {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+  font-weight: 600;
+  position: relative;
+  padding-left: 18px;
+}
+
+.monitor-log-entry.error::before {
+  content: '\26A0';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+}
+
+.monitor-log-entry {
+  -webkit-user-select: text;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.monitor-live-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ---------- SETTINGS: sticky Save, readable controls, focus rings ---------- */
+.settings-panel {
+  min-height: 0;
+}
+
+.settings-body {
+  min-height: 0;
+  padding-bottom: 0;
+  gap: 12px;
+}
+
+.settings-group {
+  gap: 4px;
+}
+
+.settings-body .save-settings-btn {
+  position: sticky;
+  bottom: 6px;
+  z-index: 3;
+  margin: 8px 0 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  min-height: 36px;
+  /* Solid band around the sticky button so scrolled fields never show
+     through or get cut mid-line behind it. */
+  box-shadow: 0 0 0 14px var(--glass-settings-bg), 0 -14px 0 14px var(--glass-settings-bg);
+}
+
+.settings-label {
+  font-size: 11px;
+}
+
+.settings-input {
+  font-size: 12px;
+  min-height: 28px;
+  min-width: 0;
+}
+
+.settings-input-toggle {
+  min-height: 28px;
+  font-size: 11px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.settings-input:focus-visible,
+.settings-input-toggle:focus-visible,
+.save-settings-btn:focus-visible,
+.action-btn:focus-visible,
+.source-toggle:focus-visible,
+.chat-manual-input:focus-visible,
+.chat-manual-send:focus-visible,
+.chat-autoscroll-toggle:focus-visible,
+.message-copy-btn:focus-visible,
+.ai-include-toggle:focus-visible,
+.close-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+body.theme-dark .settings-input:focus-visible,
+body.theme-dark .settings-input-toggle:focus-visible,
+body.theme-dark .save-settings-btn:focus-visible,
+body.theme-dark .action-btn:focus-visible,
+body.theme-dark .source-toggle:focus-visible,
+body.theme-dark .chat-manual-input:focus-visible,
+body.theme-dark .chat-manual-send:focus-visible,
+body.theme-dark .chat-autoscroll-toggle:focus-visible,
+body.theme-dark .message-copy-btn:focus-visible,
+body.theme-dark .ai-include-toggle:focus-visible,
+body.theme-dark .close-btn:focus-visible {
+  outline-color: #93c5fd;
+}
+
+select.settings-input option {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+body.theme-dark select.settings-input option {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+/* ==========================================================================
+   LIGHT THEME (explicit equivalent for every dark-theme override)
+   ========================================================================== */
+body:not(.theme-dark) {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .glass-container {
+  box-shadow:
+    0 14px 38px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body:not(.theme-dark) .status-section,
+body:not(.theme-dark) .chat-composer,
+body:not(.theme-dark) .close-confirmation-card {
+  border-color: rgba(100, 116, 139, 0.5);
+}
+
+body:not(.theme-dark) .timer,
+body:not(.theme-dark) .monitor-title,
+body:not(.theme-dark) .monitor-source-label,
+body:not(.theme-dark) .chat-title,
+body:not(.theme-dark) .result-text,
+body:not(.theme-dark) .results-title,
+body:not(.theme-dark) .close-confirmation-title,
+body:not(.theme-dark) .message-content,
+body:not(.theme-dark) .result-text li,
+body:not(.theme-dark) .message-content li {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .monitor-live-text,
+body:not(.theme-dark) .close-confirmation-text,
+body:not(.theme-dark) .partial-text {
+  color: #334155;
+}
+
+body:not(.theme-dark) .message-time {
+  color: #475569;
+}
+
+body:not(.theme-dark) .chat-provider-model {
+  color: #334155;
+}
+
+body:not(.theme-dark) .status-text {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+body:not(.theme-dark) .status-text.error {
+  background: #7f1d1d;
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .status-text.success {
+  background: #14532d;
+  color: #ffffff;
+}
+
+/* Top-bar controls */
+body:not(.theme-dark) .action-btn {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .action-btn:hover {
+  background: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+
+body:not(.theme-dark) .action-btn.analyze-btn,
+body:not(.theme-dark) .action-btn.transcription-btn.active,
+body:not(.theme-dark) .action-btn.transcription-btn.listening,
+body:not(.theme-dark) .action-btn.transcription-btn.connecting {
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .action-btn.analyze-btn {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body:not(.theme-dark) .action-btn.analyze-btn:hover {
+  background: #1e40af;
+}
+
+body:not(.theme-dark) .action-btn.transcription-btn {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+}
+
+body:not(.theme-dark) .action-btn.transcription-btn.active,
+body:not(.theme-dark) .action-btn.transcription-btn.listening {
+  background: #15803d;
+  border-color: #166534;
+}
+
+body:not(.theme-dark) .action-btn.transcription-btn.connecting {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body:not(.theme-dark) .action-btn.screen-ai-btn {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #0c4a6e;
+}
+
+body:not(.theme-dark) .action-btn.screen-ai-btn:hover {
+  background: #bae6fd;
+}
+
+body:not(.theme-dark) .action-btn.suggest-btn {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #78350f;
+}
+
+body:not(.theme-dark) .action-btn.notes-btn {
+  background: #ede9fe;
+  border-color: #7c3aed;
+  color: #4c1d95;
+}
+
+body:not(.theme-dark) .action-btn.insights-btn {
+  background: #fce7f3;
+  border-color: #db2777;
+  color: #831843;
+}
+
+body:not(.theme-dark) .action-btn.theme-toggle-btn {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  color: #312e81;
+}
+
+body:not(.theme-dark) .action-btn.settings-btn {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .transcription-control {
+  border-color: #16a34a;
+  background: #dcfce7;
+}
+
+body:not(.theme-dark) .source-toggle {
+  border-color: #64748b;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .source-toggle:hover {
+  background: #e2e8f0;
+}
+
+body:not(.theme-dark) .source-toggle.selected {
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .source-toggle.source-system.selected {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body:not(.theme-dark) .source-toggle.source-mic.selected {
+  background: #b91c1c;
+  border-color: #991b1b;
+}
+
+body:not(.theme-dark) .source-toggle.running {
+  box-shadow: 0 0 0 2px rgba(30, 64, 175, 0.5);
+}
+
+body:not(.theme-dark) .mobile-server-pill {
+  background: #f1f5f9;
+  border-color: #64748b;
+  color: #334155;
+}
+
+body:not(.theme-dark) .mobile-server-pill:hover {
+  background: #e2e8f0;
+}
+
+body:not(.theme-dark) .mobile-server-pill.idle {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #78350f;
+}
+
+body:not(.theme-dark) .mobile-server-pill.connected {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+}
+
+/* Transcription monitor */
+body:not(.theme-dark) .transcription-monitor {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+body:not(.theme-dark) .monitor-source-row {
+  background: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .monitor-log-entry {
+  background: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .monitor-log-entry.error {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #7f1d1d;
+}
+
+/* Chat */
+body:not(.theme-dark) .chat-composer {
+  background: #f1f5f9;
+  border-top-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .chat-manual-input {
+  background: #ffffff;
+  border-color: #64748b;
+  color: #0f172a;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+body:not(.theme-dark) .chat-manual-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+body:not(.theme-dark) .chat-manual-input::placeholder {
+  color: #64748b;
+}
+
+body:not(.theme-dark) .chat-manual-send {
+  border-color: #1e40af;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .chat-manual-send:hover {
+  background: #1e40af;
+}
+
+body:not(.theme-dark) .chat-autoscroll-toggle {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .chat-message {
+  background: #f8fafc;
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .chat-message.voice-message {
+  background: #ecfdf5;
+  border-color: rgba(22, 163, 74, 0.5);
+  border-left-color: #16a34a;
+}
+
+body:not(.theme-dark) .chat-message.screenshot-message {
+  background: #eff6ff;
+  border-color: rgba(37, 99, 235, 0.45);
+  border-left-color: #2563eb;
+}
+
+body:not(.theme-dark) .chat-message.ai-response-message {
+  background: #f5f3ff;
+  border-color: rgba(124, 58, 237, 0.45);
+  border-left-color: #7c3aed;
+}
+
+body:not(.theme-dark) .chat-message.system-message {
+  background: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.5);
+  border-left-color: #64748b;
+}
+
+body:not(.theme-dark) .chat-message.interim {
+  background: #fffbeb;
+  border-left-color: #d97706;
+}
+
+body:not(.theme-dark) .chat-message.partial {
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+}
+
+body:not(.theme-dark) .partial-indicator {
+  color: #166534;
+  background: #dcfce7;
+}
+
+body:not(.theme-dark) .message-label {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .message-content {
+  background: #ffffff;
+  text-shadow: none;
+}
+
+body:not(.theme-dark) .message-content.system-message {
+  color: #475569;
+  background: #ffffff;
+}
+
+body:not(.theme-dark) .message-content.ai-response {
+  color: #0f172a;
+  background: #ffffff;
+}
+
+body:not(.theme-dark) .result-text .key-points,
+body:not(.theme-dark) .message-content .key-points {
+  background: #fef9c3;
+  border-left-color: #ca8a04;
+}
+
+body:not(.theme-dark) .result-text strong,
+body:not(.theme-dark) .message-content strong {
+  color: #0f172a;
+  background: #fef08a;
+  box-shadow: none;
+}
+
+body:not(.theme-dark) .result-text h1,
+body:not(.theme-dark) .message-content h1,
+body:not(.theme-dark) .result-text h2,
+body:not(.theme-dark) .message-content h2,
+body:not(.theme-dark) .result-text h3,
+body:not(.theme-dark) .message-content h3 {
+  color: #0f172a;
+  background: #dbeafe;
+}
+
+body:not(.theme-dark) .result-text .logic-section,
+body:not(.theme-dark) .message-content .logic-section {
+  background: #eff6ff;
+}
+
+body:not(.theme-dark) .ai-include-toggle {
+  border-color: #059669;
+  background: #d1fae5;
+  color: #064e3b;
+}
+
+body:not(.theme-dark) .ai-include-toggle.excluded {
+  border-color: #e11d48;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+body:not(.theme-dark) .message-copy-btn {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+body:not(.theme-dark) .message-copy-btn:hover {
+  background: #bfdbfe;
+}
+
+body:not(.theme-dark) .ai-excluded-note {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+
+body:not(.theme-dark) .loading-overlay {
+  background: rgba(241, 245, 249, 0.92);
+}
+
+body:not(.theme-dark) .loading-text {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .loading-text small {
+  color: #475569;
+}
+
+body:not(.theme-dark) .results-panel,
+body:not(.theme-dark) .chat-container {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+body:not(.theme-dark) .close-btn {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .close-confirmation {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+body:not(.theme-dark) .close-confirmation-card {
+  background: #ffffff;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.3);
+}
+
+body:not(.theme-dark) .close-confirmation-btn-secondary {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .close-confirmation-btn-secondary:hover {
+  background: #cbd5e1;
+}
+
+body:not(.theme-dark) .close-confirmation-btn-danger {
+  background: #b91c1c;
+  border-color: #991b1b;
+  color: #ffffff;
+}
+
+/* Settings (the rest of the light Settings rules sit just above) */
+body:not(.theme-dark) .settings-title,
+body:not(.theme-dark) .settings-label {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .settings-helper-text,
+body:not(.theme-dark) .settings-shortcut-description,
+body:not(.theme-dark) .settings-shortcuts-empty {
+  color: #475569;
+}
+
+body:not(.theme-dark) .settings-shortcut-icon {
+  color: #1e3a8a;
+}
+
+body:not(.theme-dark) .settings-shortcut-key {
+  color: #1e3a8a;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+body:not(.theme-dark) .settings-value-chip,
+body:not(.theme-dark) .settings-input-toggle {
+  color: #1e3a8a;
+  background: #dbeafe;
+  border-color: #60a5fa;
+}
+
+body:not(.theme-dark) .settings-input-toggle:hover {
+  background: #bfdbfe;
+}
+
+body:not(.theme-dark) .settings-input {
+  background-color: #ffffff;
+  border-color: #64748b;
+}
+
+body:not(.theme-dark) .settings-shortcut-row {
+  background: #f1f5f9;
+}
+
+body:not(.theme-dark) .settings-helper-text code {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+body:not(.theme-dark) .save-settings-btn {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .chat-messages::-webkit-scrollbar-track,
+body:not(.theme-dark) .results-content::-webkit-scrollbar-track,
+body:not(.theme-dark) .monitor-log-list::-webkit-scrollbar-track,
+body:not(.theme-dark) .settings-body::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+body:not(.theme-dark) .chat-messages::-webkit-scrollbar-thumb,
+body:not(.theme-dark) .results-content::-webkit-scrollbar-thumb,
+body:not(.theme-dark) .monitor-log-list::-webkit-scrollbar-thumb,
+body:not(.theme-dark) .settings-body::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+}
+
+body:not(.theme-dark) .chat-messages::-webkit-scrollbar-thumb:hover,
+body:not(.theme-dark) .results-content::-webkit-scrollbar-thumb:hover,
+body:not(.theme-dark) .monitor-log-list::-webkit-scrollbar-thumb:hover,
+body:not(.theme-dark) .settings-body::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* ==========================================================================
+   DARK THEME: solid surfaces + AA text (wins over the older dark rules above)
+   ========================================================================== */
+body.theme-dark .timer,
+body.theme-dark .monitor-title,
+body.theme-dark .monitor-source-label,
+body.theme-dark .chat-title,
+body.theme-dark .result-text,
+body.theme-dark .results-title,
+body.theme-dark .close-confirmation-title,
+body.theme-dark .message-content,
+body.theme-dark .result-text li,
+body.theme-dark .message-content li {
+  color: #f1f5f9;
+}
+
+body.theme-dark .monitor-live-text,
+body.theme-dark .close-confirmation-text,
+body.theme-dark .partial-text {
+  color: #cbd5e1;
+}
+
+body.theme-dark .message-time,
+body.theme-dark .settings-helper-text,
+body.theme-dark .settings-shortcut-description,
+body.theme-dark .settings-shortcuts-empty {
+  color: #a8b6ca;
+}
+
+body.theme-dark .chat-provider-model {
+  color: #cbd5e1;
+}
+
+body.theme-dark .action-btn {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .action-btn:hover {
+  background: #334155;
+}
+
+body.theme-dark .action-btn.analyze-btn {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+body.theme-dark .action-btn.analyze-btn:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .action-btn.transcription-btn {
+  background: #14532d;
+  border-color: #22c55e;
+  color: #f0fdf4;
+}
+
+body.theme-dark .action-btn.transcription-btn.active,
+body.theme-dark .action-btn.transcription-btn.listening {
+  background: #15803d;
+  border-color: #4ade80;
+  color: #ffffff;
+}
+
+body.theme-dark .action-btn.transcription-btn.connecting {
+  background: #1d4ed8;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+body.theme-dark .action-btn.screen-ai-btn {
+  background: #0c4a6e;
+  border-color: #38bdf8;
+  color: #f0f9ff;
+}
+
+body.theme-dark .action-btn.screen-ai-btn:hover {
+  background: #075985;
+}
+
+body.theme-dark .action-btn.suggest-btn {
+  background: #78350f;
+  border-color: #fbbf24;
+  color: #fffbeb;
+}
+
+body.theme-dark .action-btn.notes-btn {
+  background: #4c1d95;
+  border-color: #a78bfa;
+  color: #f5f3ff;
+}
+
+body.theme-dark .action-btn.insights-btn {
+  background: #831843;
+  border-color: #f472b6;
+  color: #fdf2f8;
+}
+
+body.theme-dark .action-btn.theme-toggle-btn {
+  background: #3730a3;
+  border-color: #a5b4fc;
+  color: #eef2ff;
+}
+
+body.theme-dark .action-btn.settings-btn {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .transcription-control {
+  border-color: #22c55e;
+  background: #0f2f22;
+}
+
+body.theme-dark .source-toggle {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .source-toggle:hover {
+  background: #334155;
+}
+
+body.theme-dark .source-toggle.selected {
+  color: #ffffff;
+}
+
+body.theme-dark .source-toggle.source-system.selected {
+  background: #1d4ed8;
+  border-color: #60a5fa;
+}
+
+body.theme-dark .source-toggle.source-mic.selected {
+  background: #b91c1c;
+  border-color: #f87171;
+}
+
+body.theme-dark .mobile-server-pill {
+  background: #0f172a;
+  border-color: #64748b;
+  color: #e2e8f0;
+}
+
+body.theme-dark .mobile-server-pill:hover {
+  background: #1e293b;
+}
+
+body.theme-dark .mobile-server-pill.idle {
+  background: #451a03;
+  border-color: #d97706;
+  color: #fde68a;
+}
+
+body.theme-dark .mobile-server-pill.connected {
+  background: #14532d;
+  border-color: #22c55e;
+  color: #dcfce7;
+}
+
+body.theme-dark .transcription-monitor {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+body.theme-dark .monitor-source-row {
+  background: #111c33;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+body.theme-dark .monitor-log-entry {
+  background: #111c33;
+  border-color: rgba(148, 163, 184, 0.38);
+  color: #e2e8f0;
+}
+
+body.theme-dark .monitor-log-entry.error {
+  background: #450a0a;
+  border-color: #f87171;
+  color: #fecaca;
+}
+
+body.theme-dark .chat-composer {
+  background: #0f172a;
+}
+
+body.theme-dark .chat-manual-input {
+  background: #0b1220;
+  color: #f1f5f9;
+}
+
+body.theme-dark .chat-manual-input::placeholder {
+  color: #94a3b8;
+}
+
+body.theme-dark .chat-manual-send {
+  background: #2563eb;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+body.theme-dark .chat-manual-send:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .chat-autoscroll-toggle {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .chat-message {
+  background: #111c33;
+  border-color: rgba(148, 163, 184, 0.38);
+}
+
+body.theme-dark .chat-message.voice-message {
+  background: #052e22;
+  border-color: rgba(34, 197, 94, 0.5);
+  border-left-color: #22c55e;
+}
+
+body.theme-dark .chat-message.screenshot-message {
+  background: #0b1e3f;
+  border-color: rgba(96, 165, 250, 0.5);
+  border-left-color: #60a5fa;
+}
+
+body.theme-dark .chat-message.ai-response-message {
+  background: #1e1538;
+  border-color: rgba(167, 139, 250, 0.5);
+  border-left-color: #a78bfa;
+}
+
+body.theme-dark .chat-message.system-message {
+  background: #1e293b;
+  border-color: rgba(148, 163, 184, 0.45);
+  border-left-color: #94a3b8;
+}
+
+body.theme-dark .chat-message.interim {
+  background: #2a2108;
+  border-left-color: #f59e0b;
+}
+
+body.theme-dark .chat-message.partial {
+  background: #052e22;
+  border-left-color: #22c55e;
+}
+
+body.theme-dark .partial-indicator {
+  color: #bbf7d0;
+  background: #14532d;
+}
+
+body.theme-dark .message-label {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+body.theme-dark .message-content {
+  background: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-dark .message-content.system-message {
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-dark .message-content.ai-response {
+  color: #f8fafc;
+  background: #1e293b;
+}
+
+body.theme-dark .result-text .key-points,
+body.theme-dark .message-content .key-points {
+  background: #3a3210;
+  border-left-color: #facc15;
+}
+
+body.theme-dark .result-text strong,
+body.theme-dark .message-content strong {
+  color: #ffffff;
+  background: #4d3f0a;
+}
+
+body.theme-dark .result-text h1,
+body.theme-dark .message-content h1,
+body.theme-dark .result-text h2,
+body.theme-dark .message-content h2,
+body.theme-dark .result-text h3,
+body.theme-dark .message-content h3 {
+  color: #f1f5f9;
+  background: #1e3a5f;
+}
+
+body.theme-dark .result-text .logic-section,
+body.theme-dark .message-content .logic-section {
+  background: #0f2744;
+}
+
+body.theme-dark .ai-include-toggle {
+  border-color: #34d399;
+  background: #064e3b;
+  color: #ecfdf5;
+}
+
+body.theme-dark .ai-include-toggle.excluded {
+  border-color: #fb7185;
+  background: #4c0519;
+  color: #fecdd3;
+}
+
+body.theme-dark .message-copy-btn {
+  border-color: #60a5fa;
+  background: #1e3a8a;
+  color: #f1f5f9;
+}
+
+body.theme-dark .message-copy-btn:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .ai-excluded-note {
+  color: #fecdd3;
+  background: #4c0519;
+}
+
+body.theme-dark .loading-overlay {
+  background: rgba(2, 6, 23, 0.9);
+}
+
+body.theme-dark .results-panel,
+body.theme-dark .chat-container {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+body.theme-dark .close-confirmation-card {
+  background: #0f172a;
+}
+
+body.theme-dark .close-confirmation-btn-secondary {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+body.theme-dark .close-confirmation-btn-secondary:hover {
+  background: #475569;
+}
+
+body.theme-dark .close-confirmation-btn-danger {
+  background: #b91c1c;
+  border-color: #f87171;
+  color: #ffffff;
+}
+
+body.theme-dark .settings-title,
+body.theme-dark .settings-label {
+  color: #f1f5f9;
+}
+
+body.theme-dark .settings-value-chip,
+body.theme-dark .settings-input-toggle {
+  color: #f1f5f9;
+  background: #1e3a8a;
+  border-color: #60a5fa;
+}
+
+body.theme-dark .settings-input-toggle:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .settings-shortcut-row {
+  background: #111c33;
+}
+
+body.theme-dark .settings-shortcut-key {
+  color: #f1f5f9;
+  background: #1e3a8a;
+  border-color: #60a5fa;
+}
+
+body.theme-dark .settings-shortcut-button {
+  color: #e2e8f0;
+}
+
+body.theme-dark .settings-input {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+body.theme-dark .settings-input::placeholder {
+  color: #94a3b8;
+}
+
+body.theme-dark .save-settings-btn {
+  background: #2563eb;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+/* Let the chat panel shrink instead of overflowing the window at its
+   600x380 minimum (the wrapped top bar needs the extra rows). */
+.chat-container {
+  min-height: 120px;
+}
+
+.monitor-log-list {
+  max-height: 40px;
 }
