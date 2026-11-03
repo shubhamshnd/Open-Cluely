@@ -432,7 +432,12 @@ export function createSettingsPanelManager({
                 return;
             }
             applyModels(result.models);
-            showFeedback?.(`Found ${result.models.length} models.`, 'success');
+            // A partial list (e.g. inference profiles denied) says so in plain
+            // language instead of silently looking complete.
+            showFeedback?.(
+                `Found ${result.models.length} models.${result.note ? ` ${result.note}` : ''}`,
+                result.note ? 'info' : 'success'
+            );
         } catch (error) {
             console.error(`Failed to fetch ${provider} models:`, error);
             showFeedback?.('Could not fetch models.', 'error');

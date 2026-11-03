@@ -36,6 +36,24 @@ test('fetchProviderModels returns models from the matching service', async () =>
   assert.equal(seen[1].region, 'eu-west-1');
 });
 
+test('object-shaped listModels results pass models and the readable note through', async () => {
+  const factories = {
+    bedrock: () => ({
+      ready: () => true,
+      listModels: async () => ({
+        models: [{ id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', supportsImages: true }],
+        note: 'Inference profiles could not be listed (AccessDeniedException).'
+      })
+    })
+  };
+  const result = await fetchProviderModels('bedrock', { region: 'us-east-1' }, factories);
+  assert.deepEqual(result, {
+    success: true,
+    models: [{ id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', supportsImages: true }],
+    note: 'Inference profiles could not be listed (AccessDeniedException).'
+  });
+});
+
 test('Anthropic and unknown providers are not fetchable', async () => {
   const result = await fetchProviderModels('anthropic', { apiKey: 'k' });
   assert.equal(result.success, false);

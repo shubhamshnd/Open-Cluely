@@ -54,11 +54,18 @@ async function fetchProviderModels(provider, params = {}, factories = defaultFac
       };
     }
 
-    const models = await service.listModels();
-    if (!Array.isArray(models) || models.length === 0) {
+    const listed = await service.listModels();
+    // Services return either a plain array (OpenAI) or { models, note }
+    // (Bedrock: note carries a readable reason when a list call was denied
+    // and the result is only a partial fallback).
+    const models = Array.isArray(listed) ? listed : (Array.isArray(listed?.models) ? listed.models : []);
+    const note = !Array.isArray(listed) && typeof listed?.note === 'string' && listed.note
+      ? listed.note
+      : null;
+    if (models.length === 0) {
       return { success: false, error: 'No models were returned for this account.' };
     }
-    return { success: true, models };
+    return note ? { success: true, models, note } : { success: true, models };
   } catch (error) {
     return { success: false, error: safeMessage(error) };
   }
