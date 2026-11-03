@@ -36,6 +36,7 @@ const {
   normalizeSttSource
 } = require('../assembly-ai/stt-history');
 const { resolveAwsAuth } = require('../aws/credentials');
+const { safeEventStreamPayloadHandlerProvider } = require('./safe-eventstream-handler');
 const {
   resolveTranscribeRegion,
   resolveTranscribeLanguage
@@ -405,7 +406,7 @@ function createAwsTranscribeService({
         message: `Connecting (${resolvedSource})...`
       }));
 
-      const clientConfig = { region };
+      const clientConfig = { region, eventStreamPayloadHandlerProvider: safeEventStreamPayloadHandlerProvider };
       if (auth.credentials) {
         clientConfig.credentials = auth.credentials;
       }
