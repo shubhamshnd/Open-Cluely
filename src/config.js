@@ -15,6 +15,15 @@ const GEMINI_MODELS = [
   'gemini-3.1-pro-preview'
 ];
 
+// OpenAI model configuration.
+// The first model in this list is treated as the default model everywhere.
+// supportsImages marks models that accept image_url content blocks.
+const OPENAI_MODELS = [
+  { id: 'gpt-4.1-mini', supportsImages: true },
+  { id: 'gpt-4.1', supportsImages: true },
+  { id: 'gpt-4o-mini', supportsImages: true }
+];
+
 // AssemblyAI speech model configuration.
 // The first model in this list is treated as the default model everywhere.
 const ASSEMBLY_AI_SPEECH_MODELS = [
@@ -195,6 +204,43 @@ function resolveGeminiModel(modelName) {
   return isConfiguredGeminiModel(modelName) ? modelName : getDefaultGeminiModel();
 }
 
+// OpenAI model configuration functions
+function getOpenAIModels() {
+  if (!Array.isArray(OPENAI_MODELS) || OPENAI_MODELS.length === 0) {
+    throw new Error('OpenAI models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return OPENAI_MODELS.map((entry) => ({ ...entry }));
+}
+
+function getDefaultOpenAIModel() {
+  return getOpenAIModels()[0].id;
+}
+
+function isConfiguredOpenAIModel(modelName) {
+  return getOpenAIModels().some((entry) => entry.id === modelName);
+}
+
+// The settings panel can list models fetched from the OpenAI API that are not
+// in the curated list; those still resolve as valid selections.
+function resolveOpenAIModel(modelName) {
+  const normalized = String(modelName || '').trim();
+  return normalized || getDefaultOpenAIModel();
+}
+
+// Vision support for curated models comes from the flag; fetched models fall
+// back to a conservative id heuristic. Unknown ids are treated as text-only.
+function openAIModelSupportsImages(modelName) {
+  const configured = getOpenAIModels().find((entry) => entry.id === modelName);
+  if (configured) {
+    return configured.supportsImages === true;
+  }
+
+  return /^(chatgpt-4o|gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-4-vision|gpt-5|o1|o3|o4)/i.test(
+    String(modelName || '')
+  );
+}
+
 // Programming language configuration functions
 function getProgrammingLanguages() {
   if (!Array.isArray(PROGRAMMING_LANGUAGES) || PROGRAMMING_LANGUAGES.length === 0) {
@@ -297,7 +343,12 @@ module.exports = {
   getProgrammingLanguages,
   isConfiguredAssemblyAiSpeechModel,
   isConfiguredGeminiModel,
+  isConfiguredOpenAIModel,
   isConfiguredProgrammingLanguage,
+  openAIModelSupportsImages,
+  getOpenAIModels,
+  getDefaultOpenAIModel,
+  resolveOpenAIModel,
   resolveAssemblyAiSpeechModel,
   resolveGeminiModel,
   resolveProgrammingLanguage
