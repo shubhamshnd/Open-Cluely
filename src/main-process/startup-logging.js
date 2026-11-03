@@ -36,6 +36,22 @@ function logStartupConfiguration({
   console.log(`  Programming languages: ${programmingLanguages.join(', ')}`);
 }
 
+// Electron implements setContentProtection only on Windows and macOS; on
+// Linux the assistant window stays visible in screen shares/recordings.
+// Startup and window creation both call this, so the guard keeps it to one
+// line per process.
+let linuxContentProtectionWarned = false;
+
+function warnLinuxContentProtectionOnce(platform = process.platform, logger = console) {
+  if (platform !== 'linux' || linuxContentProtectionWarned) {
+    return false;
+  }
+  linuxContentProtectionWarned = true;
+  logger.warn('[Stealth] setContentProtection has no effect on Linux — this window WILL be visible in screen shares/recordings.');
+  return true;
+}
+
 module.exports = {
+  warnLinuxContentProtectionOnce,
   logStartupConfiguration
 };

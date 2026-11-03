@@ -34,7 +34,7 @@ const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
-const { logStartupConfiguration } = require('./startup-logging');
+const { logStartupConfiguration, warnLinuxContentProtectionOnce } = require('./startup-logging');
 const { createMobileServer } = require('./features/mobile-server/server');
 
 function resolveStartupOptions(argv = process.argv) {
@@ -306,9 +306,7 @@ async function startApplication() {
     // Electron only implements setContentProtection on Windows and macOS;
     // on Linux the assistant window stays visible in screen shares and
     // recordings even when HIDE_FROM_SCREEN_CAPTURE is enabled.
-    if (process.platform === 'linux') {
-      console.warn('[Stealth] setContentProtection has no effect on Linux — this window WILL be visible in screen shares/recordings.');
-    }
+    warnLinuxContentProtectionOnce();
 
     geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
       if (!appState || appState.geminiApiKeyIndex === nextIndex) {

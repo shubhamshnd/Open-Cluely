@@ -3,8 +3,8 @@ const { BrowserWindow } = require('electron');
 
 // Electron implements setContentProtection (hiding the window from screen
 // capture/sharing) only on Windows and macOS; on Linux the call is a no-op.
-// Warn once instead of silently overclaiming stealth.
-let linuxContentProtectionWarned = false;
+// Warn once per process instead of silently overclaiming stealth.
+const { warnLinuxContentProtectionOnce } = require('../../main-process/startup-logging');
 
 function createAssistantWindow({
   app,
@@ -115,9 +115,9 @@ function createAssistantWindow({
     `Content protection ${hideFromScreenCapture ? 'enabled' : 'disabled'} (HIDE_FROM_SCREEN_CAPTURE=${hideFromScreenCapture})`
   );
 
-  if (process.platform === 'linux' && hideFromScreenCapture && !linuxContentProtectionWarned) {
-    linuxContentProtectionWarned = true;
-    console.warn('[Stealth] setContentProtection has no effect on Linux — this window WILL be visible in screen shares/recordings.');
+  if (hideFromScreenCapture) {
+    // Shared once-guard with the startup warning: one line per process.
+    warnLinuxContentProtectionOnce();
   }
 
   mainWindow.setIgnoreMouseEvents(false);
