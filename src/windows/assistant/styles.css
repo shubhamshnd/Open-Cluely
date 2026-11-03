@@ -3597,3 +3597,49 @@ body.theme-dark .save-settings-btn {
 .action-btn.insights-btn {
   font-size: 11px;
 }
+
+/* Secondary text: everything small and dim moves to at least 11px. These
+   were 9-10px, below the readable floor for status text. Colors already
+   meet >= 4.5:1 in both themes; this is the size floor. */
+.monitor-title,
+.monitor-source-label,
+.monitor-master-state,
+.monitor-status-badge,
+.monitor-live-text,
+.monitor-log-entry,
+.message-time,
+.message-label,
+.settings-helper-text,
+.settings-shortcut-description,
+.settings-shortcuts-empty {
+  font-size: 11px;
+}
+
+/* Top status bar: pill and counter are status adornments, not listed
+   secondary text; 10.5px keeps the bar on one row at the 900px default. */
+.mobile-server-pill,
+.screenshot-count {
+  font-size: 10.5px;
+}
+
+/* Claw back the width the 11px mode-button labels added so the top bar
+   stays on one row at the default 900x400 size. */
+.action-btn.analyze-btn,
+.action-btn.screen-ai-btn {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Keep the pills compact at the new size. */
+.monitor-status-badge {
+  padding: 1px 7px;
+}
+
+.monitor-master-state {
+  padding: 1px 7px;
+}
+
+/* Room for three log lines at 11px. */
+.monitor-log-list {
+  max-height: 56px;
+}
