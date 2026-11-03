@@ -31,6 +31,7 @@ const { registerAssistantIpc } = require('./features/assistant/ipc');
 const { createAssemblyAiService } = require('../services/assembly-ai/service');
 const { createOcrService } = require('../services/ocr/service');
 const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
+const { createLinuxMonitorCapture } = require('../services/assembly-ai/linux-monitor-capture');
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
@@ -90,6 +91,7 @@ async function startApplication() {
     mobileServer.broadcast(channel, data);
   };
 
+  const linuxMonitorCapture = createLinuxMonitorCapture();
   const assemblyAiService = createAssemblyAiService({
     WebSocket,
     desktopCapturer,
@@ -216,6 +218,7 @@ async function startApplication() {
   }
 
   function cleanupTransientResources() {
+    linuxMonitorCapture.dispose();
     assemblyAiService.dispose();
     screenshotManager.cleanupTransientResources();
     ocrService.dispose().catch((error) => {
@@ -255,7 +258,9 @@ async function startApplication() {
 
   registerAssemblyAiIpc({
     ipcMain,
-    assemblyAiService
+    assemblyAiService,
+    linuxMonitorCapture,
+    sendToRenderer
   });
 
   registerSettingsIpc({

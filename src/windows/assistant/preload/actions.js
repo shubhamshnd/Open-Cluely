@@ -87,6 +87,19 @@ function createInvokeActions(ipcRenderer) {
       ipcRenderer.send('audio-chunk', { source, data: audioData });
     },
 
+    startLinuxMonitorCapture: invokeWithFallback(ipcRenderer, {
+      channel: 'start-linux-monitor-capture',
+      label: 'startLinuxMonitorCapture',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    stopLinuxMonitorCapture: invokeWithFallback(ipcRenderer, {
+      channel: 'stop-linux-monitor-capture',
+      label: 'stopLinuxMonitorCapture',
+      transformArgs: (args) => [{ token: args[0] }],
+      fallback: (error) => ({ stopped: false, error: error.message })
+    }),
+
     getDesktopSources: invokeWithFallback(ipcRenderer, {
       channel: 'get-desktop-sources',
       label: 'getDesktopSources',

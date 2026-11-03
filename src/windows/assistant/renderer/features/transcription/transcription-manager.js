@@ -32,6 +32,8 @@ export function createTranscriptionManager({
     let systemMediaStream = null;
     let systemScriptProcessor = null;
     let isSystemActive = false;
+    let systemNativeCapture = null;
+    let systemStartGeneration = 0;
 
     let micPartialText = '';
     let micPartialDiv = null;
@@ -289,10 +291,6 @@ export function createTranscriptionManager({
         return audioPipeline.getSystemAudioStream(sourceId);
     }
 
-    async function getSystemAudioMonitorStream() {
-        return audioPipeline.getSystemAudioMonitorStream();
-    }
-
     function resetSourceSampleQueue(source) {
         audioPipeline.resetSourceSampleQueue(source);
     }
@@ -376,8 +374,59 @@ export function createTranscriptionManager({
         showFeedback('Mic off', 'info');
     }
 
+    // Releases everything the Host source owns: renderer stream/context (non-Linux)
+    // and the main-process pw-record capture (Linux). Safe to call repeatedly.
+    function releaseSystemResources({ cancelPendingStart = false } = {}) {
+        stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
+        systemAudioContext = null;
+        systemMediaStream = null;
+        systemScriptProcessor = null;
+        const nativeCapture = systemNativeCapture;
+        systemNativeCapture = null;
+        // No handle yet means a Linux start may still be pending in the main
+        // process; a token-less stop cancels it there (the attempt's own
+        // generation check then drops any handle that arrives late).
+        const cancelPending =
+            cancelPendingStart && !nativeCapture && window.electronAPI?.platform === 'linux'
+                ? () => window.electronAPI.stopLinuxMonitorCapture?.()
+                : null;
+        const stopNative = nativeCapture ? () => nativeCapture.stop() : cancelPending;
+        return stopNative
+            ? Promise.resolve().then(stopNative).catch((error) => {
+                addMonitorLog('error', 'stop-failed', error?.message || 'Failed to stop host capture', 'system');
+            })
+            : Promise.resolve();
+    }
+
     async function startSystemAudioRecording() {
         if (isSystemActive || sourceStatuses.system === 'connecting') return;
+
+        // Every await below can outlive a Stop (or a Stop + new Start). The
+        // generation tells this attempt whether it is still the live one; the
+        // attempt's own resources stay local until it is verified current, so a
+        // late result is released immediately and can never activate the session
+        // or touch a newer session's resources.
+        systemStartGeneration += 1;
+        const generation = systemStartGeneration;
+        const isCurrent = () => generation === systemStartGeneration;
+        let nativeCapture = null;
+        let stream = null;
+        let context = null;
+        let processor = null;
+        const releaseAttemptResources = async () => {
+            stopAudioResources(context, stream, processor);
+            context = null;
+            stream = null;
+            processor = null;
+            const capture = nativeCapture;
+            nativeCapture = null;
+            if (capture) {
+                try {
+                    await capture.stop();
+                } catch (_) {}
+            }
+        };
+
         setSourceStatus('system', 'connecting', 'Connecting to host audio...');
         addMonitorLog('info', 'start-request', 'Starting host audio source', 'system');
         resetFinalTranscriptBuffer('system');
@@ -387,68 +436,90 @@ export function createTranscriptionManager({
             // a UA guess. On Linux, Chromium has no desktop-audio loopback
             // and a chromeMediaSource:'desktop' request would hold a GNOME
             // screencast session open for the whole transcription while
-            // returning no audio — so the host source captures the
-            // PipeWire/Pulse "Monitor of <output>" input instead, audio-only.
+            // returning no audio, so the main process captures the default
+            // output's PipeWire monitor with pw-record instead (audio-only).
             const isLinuxHost = window.electronAPI?.platform === 'linux';
             let sourceId = null;
 
             if (!isLinuxHost) {
                 const sources = await window.electronAPI.getDesktopSources();
+                if (!isCurrent()) return;
                 if (!sources || sources.length === 0) throw new Error('No desktop sources found');
                 sourceId = sources[0].id;
                 addMonitorLog('info', 'desktop-source', `Using desktop source: ${sources[0].name || sourceId}`, 'system');
             }
 
             const result = await window.electronAPI.startVoiceRecognition('system');
+            if (!isCurrent()) return;
             if (result && result.error) throw new Error(result.error);
 
-            systemMediaStream = isLinuxHost
-                ? await getSystemAudioMonitorStream()
-                : await getSystemAudioStream(sourceId);
+            if (isLinuxHost) {
+                nativeCapture = await audioPipeline.startNativeMonitorCapture();
+                if (!isCurrent()) {
+                    await releaseAttemptResources();
+                    return;
+                }
+            } else {
+                stream = await getSystemAudioStream(sourceId);
+                if (!isCurrent()) {
+                    await releaseAttemptResources();
+                    return;
+                }
 
-            const videoTrack = systemMediaStream.getVideoTracks()[0];
-            if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
-                throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
+                const videoTrack = stream.getVideoTracks()[0];
+                if (videoTrack && isLikelyCameraTrack(videoTrack.label)) {
+                    throw new Error(`Desktop capture fell back to camera source (${videoTrack.label || 'unknown'}).`);
+                }
+
+                // Only audio is used; stop any video track right away so a
+                // desktop-capture session is never held open.
+                stream.getVideoTracks().forEach((track) => track.stop());
+
+                context = new AudioContext();
+                await context.resume();
+                if (!isCurrent()) {
+                    await releaseAttemptResources();
+                    return;
+                }
+                resetSourceSampleQueue('system');
+                processor = await buildAudioProcessor(context, stream, 'system', () => isSystemActive);
+                if (!isCurrent()) {
+                    await releaseAttemptResources();
+                    return;
+                }
             }
 
-            // Only audio is used; stop any video track right away so a
-            // desktop-capture session (non-Linux path) is never held open.
-            systemMediaStream.getVideoTracks().forEach((track) => track.stop());
-
-            systemAudioContext = new AudioContext();
-            await systemAudioContext.resume();
-            resetSourceSampleQueue('system');
-            systemScriptProcessor = await buildAudioProcessor(systemAudioContext, systemMediaStream, 'system', () => isSystemActive);
+            systemNativeCapture = nativeCapture;
+            systemMediaStream = stream;
+            systemAudioContext = context;
+            systemScriptProcessor = processor;
 
             setSystemActive(true);
             addChatMessage('system', 'Listening to host audio...');
             showFeedback('System audio on', 'success');
             addMonitorLog('info', 'source-active', 'Host source active', 'system');
         } catch (error) {
+            await releaseAttemptResources();
+            if (!isCurrent()) return;
             console.error('Failed to start system audio:', error);
 
-            // Desktop-audio loopback is Windows-only in Chromium; on Linux
-            // the host source captures a PipeWire/Pulse monitor input, so a
-            // typed unsupported error there means no "Monitor of …" device
-            // was found. Say so explicitly instead of a generic failure, and
-            // never leave the host source looking like it is listening.
+            // A typed unsupported error means the host source could not be
+            // captured (Linux: pw-record/PipeWire unavailable). Say so
+            // explicitly and never leave the source looking like it is listening.
             const unsupportedMessage = isSystemAudioUnsupportedError(error)
                 ? getSystemAudioUnsupportedMessage(window.navigator?.userAgent)
                 : null;
 
             if (unsupportedMessage) {
+                const detail = typeof error.cause === 'string' && error.cause ? ` (${error.cause})` : '';
                 addChatMessage('system', unsupportedMessage);
                 showFeedback(unsupportedMessage, 'error');
-                addMonitorLog('error', 'system-audio-unsupported', unsupportedMessage, 'system');
+                addMonitorLog('error', 'system-audio-unsupported', `${unsupportedMessage}${detail}`, 'system');
             } else {
                 showFeedback(`System audio failed: ${error.message}`, 'error');
                 addMonitorLog('error', 'source-failed', error.message, 'system');
             }
 
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null;
-            systemMediaStream = null;
-            systemScriptProcessor = null;
             setSystemActive(false);
             resetSourceSampleQueue('system');
             setSourceStatus('system', 'error', unsupportedMessage || `Host error: ${error.message}`);
@@ -461,13 +532,12 @@ export function createTranscriptionManager({
     }
 
     async function stopSystemAudioRecording() {
+        // Invalidate any start still awaiting a step, even if nothing is active yet.
+        systemStartGeneration += 1;
         if (!isSystemActive && sourceStatuses.system !== 'connecting') return;
         drainSourceSampleQueue('system', { flushPartial: true });
         flushFinalTranscript('system', 'stop-request');
-        stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-        systemAudioContext = null;
-        systemMediaStream = null;
-        systemScriptProcessor = null;
+        const releasing = releaseSystemResources({ cancelPendingStart: true });
         if (systemPartialDiv) {
             systemPartialDiv.remove();
             systemPartialDiv = null;
@@ -478,6 +548,7 @@ export function createTranscriptionManager({
         } catch (error) {
             addMonitorLog('error', 'stop-failed', error.message || 'Failed to stop host source', 'system');
         }
+        await releasing;
         setSystemActive(false);
         resetSourceSampleQueue('system');
         audioPipeline.resetChunkCounter('system');
@@ -591,10 +662,7 @@ export function createTranscriptionManager({
         flushFinalTranscript(source, 'status-error');
 
         if (source === 'system') {
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null;
-            systemMediaStream = null;
-            systemScriptProcessor = null;
+            releaseSystemResources();
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;
@@ -627,10 +695,7 @@ export function createTranscriptionManager({
         console.log(`STT stopped [${source}]`);
         flushFinalTranscript(source, 'stopped-event');
         if (source === 'system') {
-            stopAudioResources(systemAudioContext, systemMediaStream, systemScriptProcessor);
-            systemAudioContext = null;
-            systemMediaStream = null;
-            systemScriptProcessor = null;
+            releaseSystemResources();
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;
