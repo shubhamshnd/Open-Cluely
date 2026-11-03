@@ -106,10 +106,7 @@ function createAssistantWindow({
     mainWindow.setSkipTaskbar(true);
     mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
     mainWindow.setAppDetails({
-      appId: 'SystemProcess',
-      appIconPath: '',
-      relaunchCommand: '',
-      relaunchDisplayName: ''
+      appId: 'com.opencluely.app'
     });
   }
 
