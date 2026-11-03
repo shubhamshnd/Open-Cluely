@@ -10,6 +10,7 @@ import { setupIpcListeners as setupIpcListenersModule } from './renderer/feature
 import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
 import { createSettingsPanelManager } from './renderer/features/settings/settings-panel-manager.js';
 import { createTranscriptionManager } from './renderer/features/transcription/transcription-manager.js';
+import { canStartTranscription, normalizeSttProvider } from './renderer/features/transcription/stt-start-gate.js';
 
 import {
     createTranscriptionSourceState,
@@ -234,6 +235,11 @@ const MAX_CHAT_INPUT_HEIGHT = 88;
 let isCloseConfirmationOpen = false;
 let hasGeminiApiKeysConfigured = false;
 let hasAssemblyAiApiKeyConfigured = false;
+// Active speech-to-text provider ('assemblyai' | 'transcribe'), mirrored from
+// settings. The AssemblyAI key gate below applies to AssemblyAI only; with
+// Amazon Transcribe the start is allowed and credential problems surface
+// through the normal transcription error path.
+let activeSttProvider = 'assemblyai';
 const aiActionInFlightState = {
     askAi: false,
     screenAi: false,
@@ -583,8 +589,11 @@ function applyApiKeyAvailabilityFromSettings(settings) {
     if (!settings || typeof settings !== 'object') {
         hasGeminiApiKeysConfigured = false;
         hasAssemblyAiApiKeyConfigured = false;
+        activeSttProvider = normalizeSttProvider(null);
         return;
     }
+
+    activeSttProvider = normalizeSttProvider(settings.sttProvider);
 
     // Main process reports whether the ACTIVE provider is ready (key, AWS
     // chain, or local server); fall back to Gemini key checks for old payloads.
@@ -714,8 +723,12 @@ function setSourceSelected(source, enabled) {
 }
 
 async function toggleMasterTranscription() {
-    if (!hasAssemblyAiApiKeyConfigured) {
-        showFeedback('AssemblyAI API key missing. Add it in Settings.', 'error');
+    const gate = canStartTranscription({
+        sttProvider: activeSttProvider,
+        hasAssemblyAiApiKey: hasAssemblyAiApiKeyConfigured
+    });
+    if (!gate.allowed) {
+        showFeedback(gate.message, 'error');
         return;
     }
 
@@ -1061,7 +1074,10 @@ function updateUI() {
     const hasEnabledScreenshots = aiBundle.enabledScreenshotIds.length > 0;
     const hasAiContext = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
     const canRunAiActions = hasGeminiApiKeysConfigured;
-    const canRunTranscription = hasAssemblyAiApiKeyConfigured;
+    const canRunTranscription = canStartTranscription({
+        sttProvider: activeSttProvider,
+        hasAssemblyAiApiKey: hasAssemblyAiApiKeyConfigured
+    }).allowed;
     const askAiInFlight = isAiActionInFlight('askAi');
     const screenAiInFlight = isAiActionInFlight('screenAi');
     const suggestInFlight = isAiActionInFlight('suggest');
