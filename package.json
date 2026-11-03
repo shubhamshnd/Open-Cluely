@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Desktop AI copilot for meetings and interview practice",
   "main": "src/main.js",
+  "homepage": "https://github.com/shubhamshnd/Open-Cluely",
   "scripts": {
     "start": "node scripts/run-electron.js",
     "start:hidden": "node scripts/run-electron.js --start-hidden",
@@ -51,7 +52,15 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Open Cluely needs microphone access to transcribe your voice during meetings.",
+        "NSScreenCaptureUsageDescription": "Open Cluely needs screen recording access to capture screenshots and host audio for transcription."
+      }
     },
     "win": {
       "target": [
@@ -71,10 +80,39 @@
       "artifactName": "OpenCluely.exe"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icons",
       "category": "Utility",
       "maintainer": "Open Cluely"
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ],
+      "category": "Utility",
+      "packageCategory": "utils",
+      "maintainer": "Open Cluely",
+      "synopsis": "Desktop AI copilot for meetings and interview practice",
+      "description": "Desktop AI copilot for meetings and interview practice: transcribes host and microphone audio, captures screenshots, and answers with configurable AI providers.",
+      "desktop": {
+        "Name": "Open Cluely",
+        "GenericName": "AI Meeting Copilot",
+        "Comment": "Desktop AI copilot for meetings and interview practice",
+        "Icon": "open-cluely",
+        "StartupWMClass": "open-cluely",
+        "Categories": "Utility;"
+      }
     }
   },
   "author": "Shubham",
