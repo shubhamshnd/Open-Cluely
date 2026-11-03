@@ -35,6 +35,7 @@ const { createLinuxMonitorCapture } = require('../services/assembly-ai/linux-mon
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
 const { parseShortcutActionArg } = require('./shared/shortcut-actions');
+const { getActionSocketPath, startActionSocketServer } = require('./shared/action-socket');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
 const { logStartupConfiguration, warnLinuxContentProtectionOnce } = require('./startup-logging');
 const { createMobileServer } = require('./features/mobile-server/server');
@@ -142,6 +143,30 @@ async function startApplication() {
       windowController.runShortcutAction(actionId);
     }
   });
+
+  // Linux fast path for GNOME custom keybindings: a private Unix socket in
+  // userData that accepts a shortcut action id (see shared/action-socket.js).
+  let actionSocket = null;
+  if (process.platform === 'linux') {
+    app.whenReady().then(async () => {
+      try {
+        const knownActions = new Set(windowController.getShortcutActionIds());
+        actionSocket = await startActionSocketServer({
+          socketPath: getActionSocketPath(app.getPath('userData')),
+          isKnownAction: (id) => knownActions.has(id),
+          onAction: (id) => windowController.runShortcutAction(id)
+        });
+      } catch (error) {
+        console.warn('[ActionSocket] Fast shortcut path unavailable:', error && error.message);
+      }
+    });
+    app.on('will-quit', () => {
+      if (actionSocket) {
+        actionSocket.close();
+        actionSocket = null;
+      }
+    });
+  }
 
   function loadPersistedAppState() {
     appState = loadAppState(app);
@@ -408,7 +433,6 @@ async function startApplication() {
     });
   });
 
-  process.title = 'SystemIdleProcess';
 }
 
 module.exports = {

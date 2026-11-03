@@ -34,6 +34,7 @@ function registerSettingsIpc({
     env: process.env,
     execPath: process.execPath,
     appPath: app.getAppPath(),
+    userDataPath: process.platform === 'linux' ? app.getPath('userData') : '',
     shortcuts: (Array.isArray(keyboardShortcuts) ? keyboardShortcuts : [])
       .filter((shortcut) => installableActionIds.has(shortcut.id))
       .map((shortcut) => ({

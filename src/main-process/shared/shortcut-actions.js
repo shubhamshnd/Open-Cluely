@@ -5,6 +5,11 @@
 
 const { execFile } = require('child_process');
 const fs = require('fs');
+const {
+  buildGnomeShortcutScript,
+  getActionSocketPath,
+  getGnomeShortcutScriptPath
+} = require('./action-socket');
 
 const MEDIA_KEYS_SCHEMA = 'org.gnome.settings-daemon.plugins.media-keys';
 const CUSTOM_KEYBINDINGS_KEY = 'custom-keybindings';
@@ -284,7 +289,10 @@ function createGnomeShortcutInstaller({
   execPath,
   appPath,
   shortcuts = [],
-  execFileImpl
+  execFileImpl,
+  userDataPath = '',
+  writeScriptImpl,
+  removeScriptImpl
 } = {}) {
   const execveEnviron = procEnviron || (platform === 'linux' ? readSessionEnviron() : {});
   const runGsettings = typeof execFileImpl === 'function'
@@ -300,17 +308,31 @@ function createGnomeShortcutInstaller({
       });
     });
 
+  // Fast path: GNOME runs a tiny script that writes the action id to the
+  // running app's private Unix socket (~ms) instead of starting a second
+  // Electron process per keypress (~0.8 s). See action-socket.js.
+  const scriptPath = userDataPath ? getGnomeShortcutScriptPath(userDataPath) : '';
+  const fallbackArgv = env.APPIMAGE ? [env.APPIMAGE] : [execPath, appPath, '--no-sandbox'];
+  const writeScript = typeof writeScriptImpl === 'function'
+    ? writeScriptImpl
+    : (file, content) => fs.writeFileSync(file, content, { mode: 0o700 });
+  const removeScript = typeof removeScriptImpl === 'function'
+    ? removeScriptImpl
+    : (file) => { try { fs.unlinkSync(file); } catch (_) { /* already gone */ } };
+
   const entries = (Array.isArray(shortcuts) ? shortcuts : []).map((shortcut) => ({
     id: shortcut.id,
     name: shortcut.name,
     accelerator: shortcut.accelerator,
     path: buildCustomKeybindingPath(shortcut.id),
-    command: buildShortcutActionCommand({
-      actionId: shortcut.id,
-      appImagePath: env.APPIMAGE || '',
-      execPath,
-      appPath
-    })
+    command: scriptPath
+      ? `${quoteGnomeCommandArg(scriptPath)} ${shortcut.id}`
+      : buildShortcutActionCommand({
+        actionId: shortcut.id,
+        appImagePath: env.APPIMAGE || '',
+        execPath,
+        appPath
+      })
   }));
   const ourPaths = entries.map((entry) => entry.path);
 
@@ -374,6 +396,12 @@ function createGnomeShortcutInstaller({
     }
 
     try {
+      if (scriptPath) {
+        writeScript(scriptPath, buildGnomeShortcutScript({
+          socketPath: getActionSocketPath(userDataPath),
+          fallbackArgv
+        }));
+      }
       for (const entry of entries) {
         await writeEntry(entry);
       }
@@ -400,6 +428,9 @@ function createGnomeShortcutInstaller({
       await writePathList(removeCustomKeybindingPaths(existing, ourPaths));
       for (const path of ourPaths) {
         await resetEntry(path);
+      }
+      if (scriptPath) {
+        removeScript(scriptPath);
       }
       return { success: true, message: 'Removed the Open Cluely GNOME shortcuts.' };
     } catch (error) {
