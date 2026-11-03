@@ -225,3 +225,35 @@ test('service: a stopped socket late open does not resurrect streaming', () => {
   service.startAssemblyAiStream('system');
   assert.equal(sockets.length, 2, 'a stopped open must not make a new start skip');
 });
+
+test('service: a start for a new attempt ends the orphaned streaming session and never returns its identity', () => {
+  const { service, events, sockets } = createHarness();
+
+  service.startAssemblyAiStream('system', { attemptId: 'att-a' });
+  sockets[0].emit('open'); // att-a is streaming
+
+  // The renderer restarts with a NEW attempt while att-a is still streaming
+  // (its capture died and the backend stop has not landed, or was never
+  // sent). The start must end the orphaned session scoped to att-a and open
+  // a fresh one — never return att-a's identity for an att-b request.
+  const second = service.startAssemblyAiStream('system', { attemptId: 'att-b' });
+  assert.equal(second.attemptId, 'att-b', 'the new attempt gets its own identity');
+  assert.equal(sockets.length, 2, 'a fresh socket is opened for the new attempt');
+  assert.ok(
+    sockets[0].sent.some((frame) => String(frame).includes('Terminate')),
+    'the orphaned session is ended, scoped to its own attempt'
+  );
+
+  // The orphaned session's late events are suppressed as superseded.
+  sockets[0].emit('message', terminationFrame());
+  assert.deepEqual(voskEvents(events, 'vosk-stopped'), [], 'the orphaned socket Termination emits nothing');
+
+  // The new session streams and its own terminal event applies exactly once.
+  sockets[1].emit('open');
+  service.handleAudioChunk({ source: 'system', data: Buffer.alloc(4) });
+  assert.ok(sockets[1].sent.some((frame) => Buffer.isBuffer(frame)), 'the fresh session streams');
+  sockets[1].emit('message', terminationFrame());
+  const stopped = voskEvents(events, 'vosk-stopped');
+  assert.equal(stopped.length, 1);
+  assert.equal(stopped[0][1].attemptId, 'att-b');
+});

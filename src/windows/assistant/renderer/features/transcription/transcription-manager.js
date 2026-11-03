@@ -490,6 +490,15 @@ export function createTranscriptionManager({
             const result = await window.electronAPI.startVoiceRecognition('system', { attemptId });
             if (!isCurrent()) return;
             if (result && result.error) throw new Error(result.error);
+            // A start must never adopt another attempt's backend session: if
+            // the main process answered with a different attempt identity,
+            // this attempt would be attached to a socket whose events are all
+            // tagged with the other id (and therefore ignored as stale). Fail
+            // the start instead of activating on the wrong session; the
+            // catch below cleans up scoped to this attempt.
+            if (result && typeof result.attemptId === 'string' && result.attemptId !== attemptId) {
+                throw new Error('Host backend returned a different session identity than requested');
+            }
 
             if (isLinuxHost) {
                 nativeCapture = await audioPipeline.startNativeMonitorCapture({ attemptId });
@@ -731,6 +740,21 @@ export function createTranscriptionManager({
             const endedAttemptId = currentSystemAttemptId;
             currentSystemAttemptId = null;
             releaseSystemResources({ cancelPendingStart: true, attemptId: endedAttemptId });
+            // End the BACKEND session owned by this attempt too, exactly as a
+            // user Stop would: when this event is a native capture death the
+            // backend socket is still streaming, and leaving it would orphan
+            // the session (a restart would find it and could adopt its
+            // identity). Scoped to the ended attempt, so it can never kill a
+            // newer attempt's session; its stop acknowledgement is tagged
+            // with the ended id and is stale by construction. For a backend
+            // terminal event the session is already gone and this is a no-op.
+            try {
+                Promise.resolve(
+                    window.electronAPI.stopVoiceRecognition?.('system', { attemptId: endedAttemptId ?? undefined })
+                ).catch((stopError) => {
+                    addMonitorLog('error', 'stop-failed', stopError?.message || 'Failed to stop host backend', 'system');
+                });
+            } catch (_) {}
             if (systemPartialDiv) {
                 systemPartialDiv.remove();
                 systemPartialDiv = null;

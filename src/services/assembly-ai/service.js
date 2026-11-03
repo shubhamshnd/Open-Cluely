@@ -152,17 +152,36 @@ function createAssemblyAiService({
     }
 
     if (isSourceStreaming(resolvedSource)) {
-      emitSttDebug({
-        source: resolvedSource,
-        event: 'start-skipped',
-        message: 'Start requested while source is already streaming'
-      });
-      return {
-        success: true,
-        message: resolvedSource === 'system' ? 'System audio already streaming' : 'Mic already streaming',
-        sessionId: currentSessionIds[resolvedSource],
-        attemptId: currentAttemptIds[resolvedSource] ?? undefined
-      };
+      const liveAttemptId = currentAttemptIds[resolvedSource] ?? null;
+      if (correlationId && liveAttemptId !== correlationId) {
+        // A start carrying a NEW renderer attempt id arrived while a session
+        // owned by a DIFFERENT attempt is still streaming: that session is
+        // orphaned (its renderer attempt is over — e.g. its native capture
+        // died — and its backend stop has not landed or was never sent).
+        // End it scoped to its own attempt (its late events stay tagged with
+        // the old id and are ignored by the renderer), then fall through and
+        // open a fresh session. A start must never adopt another attempt's
+        // backend: the renderer correlates events by attempt id, so events
+        // of an adopted session would be tagged with the old id and ignored.
+        emitSttDebug({
+          source: resolvedSource,
+          event: 'start-replaces-orphaned-session',
+          message: 'Start for a new attempt ends the orphaned streaming session and opens a fresh one'
+        });
+        stopVoiceRecognition({ source: resolvedSource, attemptId: liveAttemptId ?? undefined });
+      } else {
+        emitSttDebug({
+          source: resolvedSource,
+          event: 'start-skipped',
+          message: 'Start requested while source is already streaming'
+        });
+        return {
+          success: true,
+          message: resolvedSource === 'system' ? 'System audio already streaming' : 'Mic already streaming',
+          sessionId: currentSessionIds[resolvedSource],
+          attemptId: liveAttemptId ?? undefined
+        };
+      }
     }
 
     try {

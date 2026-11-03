@@ -943,8 +943,8 @@ test('REGRESSION correlation: a stale session event during a pending replacement
 // the live session's own terminal events always apply.
 // ---------------------------------------------------------------------------
 
-function buildServiceBackedHostHarness({ managerModule, platform = 'linux', apiKey = 'test-key', delivery = 'direct' } = {}) {
-  const h = buildHostHarness({ managerModule, platform });
+function buildServiceBackedHostHarness({ managerModule, platform = 'linux', apiKey = 'test-key', delivery = 'direct', gates = {} } = {}) {
+  const h = buildHostHarness({ managerModule, platform, gates });
   const sockets = [];
   const delivered = [];
   const queue = [];
@@ -1136,3 +1136,82 @@ test('REGRESSION cross-layer: a stop acknowledgement arriving before the stop RP
   assert.ok(h.events.includes('nativeStop:2'), 'the next session termination is not swallowed by the early ack');
   assert.equal(h.sourceStatuses.system, 'off');
 });
+
+// ---------------------------------------------------------------------------
+// Native capture death ends the WHOLE attempt: the backend session owned by
+// the dead capture's attempt is stopped (scoped to that attempt), and a
+// restart never adopts the orphaned backend session — the main process ends
+// it and opens a fresh one with the new attempt's identity. A live backend
+// failure after the restart then releases the new capture. These mirror the
+// reviewer's REVIEW_NATIVE_RESTART scratch reproductions.
+// ---------------------------------------------------------------------------
+
+for (const pending of [false, true]) {
+  test(`REGRESSION cross-layer: native capture death ${pending ? 'during acquisition' : 'while active'} ends the backend attempt and the restart starts fresh`, async (t) => {
+    const { manager: managerModule } = await loadModules();
+    afterHostTest(t);
+    const gate = deferred();
+    const h = buildServiceBackedHostHarness({ managerModule, gates: pending ? { nativeStart: gate } : {} });
+    const m = h.transcriptionManager;
+    const starts = [];
+    window.electronAPI.startVoiceRecognition = async (source, opts) => {
+      h.events.push(`startVoiceRecognition:${source}`);
+      const socketCount = h.sockets.length;
+      const result = h.service.startAssemblyAiStream(source, opts);
+      starts.push({ requested: opts?.attemptId, returned: result?.attemptId });
+      if (result && result.success && h.sockets.length > socketCount) {
+        h.sockets[h.sockets.length - 1].emit('open'); // the connection completes
+      }
+      return result;
+    };
+
+    const first = m.toggleMasterTranscription();
+    await flush();
+    if (!pending) await first; // attempt A fully active (backend socket 0 + capture 1)
+    const attemptA = starts[0].requested;
+    assert.ok(attemptA, 'the renderer handed its attempt id to the backend start');
+
+    // The current attempt's pw-record dies — while active or while its start
+    // RPC is still pending — tagged with the owning attempt, as ipc.js sends it.
+    m.handleVoskError({
+      source: 'system',
+      attemptId: attemptA,
+      captureToken: attemptA,
+      error: 'Host audio capture stopped unexpectedly (pw-record exit code 1)'
+    });
+    gate.resolve(); // pending case: the late capture handle arrives after the death
+    await first;
+    await flush();
+
+    assert.ok(h.events.includes('nativeStop:1'), 'the dead attempt capture is released');
+    assert.deepEqual(lastSystemActive(h.recorded), ['system', false]);
+    assert.ok(
+      h.sockets[0].sent.some((frame) => String(frame).includes('Terminate')),
+      'native capture death must also end the backend session owned by the same attempt'
+    );
+
+    // Restart: attempt B must get a FRESH backend session with its own
+    // identity, never adopt the orphaned one.
+    await m.toggleMasterTranscription();
+    await flush();
+
+    assert.ok(h.events.includes('nativeStart:2'), 'the restart acquires a fresh capture');
+    assert.equal(starts.length, 2);
+    assert.equal(
+      starts[1].returned,
+      starts[1].requested,
+      'the restart must have the backend identity of the new renderer attempt, not the previous dead attempt'
+    );
+    assert.ok(h.sockets.length >= 2, 'a fresh backend socket was opened for the restart');
+
+    // A live backend failure of the NEW session now applies and releases the
+    // NEW capture (previously it was tagged with the dead attempt and ignored).
+    const liveSocket = h.sockets[h.sockets.length - 1];
+    liveSocket.emit('error', new Error('current socket connection lost after restart'));
+    await flush();
+
+    assert.ok(h.events.includes('nativeStop:2'), 'a live backend failure after the restart must release the new capture');
+    assert.deepEqual(lastSystemActive(h.recorded), ['system', false]);
+    assert.equal(h.sourceStatuses.system, 'error');
+  });
+}
