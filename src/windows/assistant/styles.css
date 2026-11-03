@@ -26,6 +26,14 @@ button {
   cursor: default !important;
 }
 
+/* Utility: any element carrying .hidden is not displayed. Every scoped
+   .hidden rule below (.results-panel.hidden, .settings-panel.hidden, ...)
+   sets exactly this, so this global rule only adds the missing coverage for
+   the settings provider groups and the Ollama model dropdown. */
+.hidden {
+  display: none !important;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: transparent !important;
