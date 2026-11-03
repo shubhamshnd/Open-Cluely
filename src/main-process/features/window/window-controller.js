@@ -439,7 +439,7 @@ function createWindowController({
   // launch). Unknown ids are logged and ignored. Returns whether a handler ran.
   function runShortcutAction(shortcutId) {
     const handler = shortcutActionHandlers[shortcutId];
-    if (!handler) {
+    if (!Object.hasOwn(shortcutActionHandlers, shortcutId) || typeof handler !== 'function') {
       console.warn(`Ignoring unknown shortcut action "${shortcutId}"`);
       return false;
     }
