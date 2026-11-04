@@ -1,5 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const {
+  isConfiguredAiProvider,
+  isConfiguredAwsAuthMode,
+  isConfiguredSttProvider,
+  isConfiguredTranscribeLanguage,
+  isConfiguredTranscribeAuthMode
+} = require('../../config');
 
 const APP_STATE_DIR_NAME = 'cache';
 const APP_STATE_FILE_NAME = 'app-state.json';
@@ -11,12 +18,52 @@ function getDefaultAppState() {
     assemblyAiApiKey: null,
     geminiApiKeyIndex: 0,
     geminiModel: null,
+    openaiApiKey: null,
+    openaiModel: null,
+    anthropicApiKey: null,
+    anthropicModel: null,
+    bedrockRegion: null,
+    bedrockAccessKeyId: null,
+    bedrockSecretAccessKey: null,
+    bedrockModelId: null,
+    // AWS auth, shared by Bedrock and Amazon Transcribe. `awsAuthMode: null`
+    // means "not migrated yet": sanitizeAppState derives it once from the
+    // legacy bedrockAccessKeyId/bedrockSecretAccessKey pair.
+    awsAuthMode: null,
+    awsProfile: null,
+    awsAccessKeyId: null,
+    awsSecretAccessKey: null,
+    awsSessionToken: null,
+    bedrockApiKey: null,
+    // Speech-to-text provider ('assemblyai' default) + Amazon Transcribe.
+    sttProvider: 'assemblyai',
+    transcribeRegion: null,
+    transcribeLanguage: null,
+    transcribeVocabularyName: null,
+    // Optional Transcribe-only AWS credentials. 'inherit' (the default) uses
+    // the shared block above, exactly the historical behavior; 'profile' and
+    // 'keys' use the transcribeAws* fields and leave Bedrock untouched.
+    transcribeAuthMode: 'inherit',
+    transcribeAwsProfile: null,
+    transcribeAwsAccessKeyId: null,
+    transcribeAwsSecretAccessKey: null,
+    transcribeAwsSessionToken: null,
+    // Ordered provider names tried when the active provider fails with an
+    // auth, quota, timeout or connection error. Empty = no fallback.
+    providerFallback: [],
     ollamaBaseUrl: null,
     ollamaModel: null,
     assemblyAiSpeechModel: null,
     programmingLanguage: null,
     windowOpacityLevel: 10,
-    themePreference: null
+    themePreference: null,
+    // Capture/startup toggles. `null` = "not migrated yet": on launch the
+    // value is seeded once from .env/built-in defaults, then owned by app
+    // state (packaged builds cannot write into process.resourcesPath).
+    hideFromScreenCapture: null,
+    startHidden: null,
+    maxScreenshots: null,
+    screenshotDelay: null
   };
 }
 
@@ -25,7 +72,7 @@ function sanitizeAppState(state) {
 
   if (state && typeof state === 'object' && !Array.isArray(state)) {
     const aiProvider = String(state.aiProvider ?? '').trim().toLowerCase();
-    if (aiProvider === 'gemini' || aiProvider === 'ollama') {
+    if (isConfiguredAiProvider(aiProvider)) {
       nextState.aiProvider = aiProvider;
     }
 
@@ -46,6 +93,74 @@ function sanitizeAppState(state) {
 
     if (typeof state.geminiModel === 'string' && state.geminiModel.trim()) {
       nextState.geminiModel = state.geminiModel.trim();
+    }
+
+    for (const key of [
+      'openaiApiKey',
+      'openaiModel',
+      'anthropicApiKey',
+      'anthropicModel',
+      'bedrockRegion',
+      'bedrockAccessKeyId',
+      'bedrockSecretAccessKey',
+      'bedrockModelId',
+      'awsProfile',
+      'awsAccessKeyId',
+      'awsSecretAccessKey',
+      'awsSessionToken',
+      'bedrockApiKey',
+      'transcribeRegion',
+      'transcribeVocabularyName',
+      'transcribeAwsProfile',
+      'transcribeAwsAccessKeyId',
+      'transcribeAwsSecretAccessKey',
+      'transcribeAwsSessionToken'
+    ]) {
+      if (typeof state[key] === 'string' && state[key].trim()) {
+        nextState[key] = state[key].trim();
+      }
+    }
+
+    // AWS auth mode. One-time migration: a state file with the legacy Bedrock
+    // key pair but no auth mode yet becomes mode 'keys' with those values;
+    // anything else without a mode becomes 'default'. Once a mode is set it
+    // is always kept, so the migration can never re-trigger.
+    const savedAuthMode = typeof state.awsAuthMode === 'string' ? state.awsAuthMode.trim() : '';
+    const legacyAccessKeyId = typeof state.bedrockAccessKeyId === 'string' ? state.bedrockAccessKeyId.trim() : '';
+    const legacySecretAccessKey = typeof state.bedrockSecretAccessKey === 'string' ? state.bedrockSecretAccessKey.trim() : '';
+    if (isConfiguredAwsAuthMode(savedAuthMode)) {
+      nextState.awsAuthMode = savedAuthMode;
+    } else if (legacyAccessKeyId && legacySecretAccessKey) {
+      nextState.awsAuthMode = 'keys';
+      if (!nextState.awsAccessKeyId) {
+        nextState.awsAccessKeyId = legacyAccessKeyId;
+      }
+      if (!nextState.awsSecretAccessKey) {
+        nextState.awsSecretAccessKey = legacySecretAccessKey;
+      }
+    } else {
+      nextState.awsAuthMode = 'default';
+    }
+
+    if (typeof state.sttProvider === 'string' && isConfiguredSttProvider(state.sttProvider.trim())) {
+      nextState.sttProvider = state.sttProvider.trim();
+    }
+
+    if (typeof state.transcribeLanguage === 'string' && isConfiguredTranscribeLanguage(state.transcribeLanguage.trim())) {
+      nextState.transcribeLanguage = state.transcribeLanguage.trim();
+    }
+
+    // Transcribe-only auth split: an unrecognized stored mode (older/newer
+    // state files, hand edits) falls back to 'inherit' — the pre-split
+    // behavior — so a bad value can never break transcription.
+    if (typeof state.transcribeAuthMode === 'string' && isConfiguredTranscribeAuthMode(state.transcribeAuthMode.trim())) {
+      nextState.transcribeAuthMode = state.transcribeAuthMode.trim();
+    }
+
+    if (Array.isArray(state.providerFallback)) {
+      nextState.providerFallback = state.providerFallback
+        .map((entry) => String(entry ?? '').trim().toLowerCase())
+        .filter((entry, index, list) => isConfiguredAiProvider(entry) && list.indexOf(entry) === index);
     }
 
     if (typeof state.ollamaBaseUrl === 'string' && state.ollamaBaseUrl.trim()) {
@@ -72,6 +187,24 @@ function sanitizeAppState(state) {
     const themePreference = String(state.themePreference ?? '').trim().toLowerCase();
     if (themePreference === 'dark' || themePreference === 'light') {
       nextState.themePreference = themePreference;
+    }
+
+    if (typeof state.hideFromScreenCapture === 'boolean') {
+      nextState.hideFromScreenCapture = state.hideFromScreenCapture;
+    }
+
+    if (typeof state.startHidden === 'boolean') {
+      nextState.startHidden = state.startHidden;
+    }
+
+    const maxScreenshots = Number.parseInt(String(state.maxScreenshots ?? ''), 10);
+    if (Number.isFinite(maxScreenshots) && maxScreenshots > 0) {
+      nextState.maxScreenshots = maxScreenshots;
+    }
+
+    const screenshotDelay = Number.parseInt(String(state.screenshotDelay ?? ''), 10);
+    if (Number.isFinite(screenshotDelay) && screenshotDelay >= 0) {
+      nextState.screenshotDelay = screenshotDelay;
     }
   }
 
@@ -103,16 +236,29 @@ function getAppStatePath(app) {
 }
 
 function ensureAppStateDir(app) {
-  fs.mkdirSync(getAppStateDir(app), { recursive: true });
+  const stateDir = getAppStateDir(app);
+  fs.mkdirSync(stateDir, { recursive: true });
+  // The state file holds API keys: the directory must not be listable by
+  // other users. Best-effort — on filesystems without POSIX modes (or
+  // Windows, where only the write bit maps) this is a no-op.
+  try {
+    fs.chmodSync(stateDir, 0o700);
+  } catch (_) { /* ignore */ }
 }
 
 function writeAppStateFile(app, state) {
   ensureAppStateDir(app);
+  const statePath = getAppStatePath(app);
   fs.writeFileSync(
-    getAppStatePath(app),
+    statePath,
     `${JSON.stringify(state, null, 2)}\n`,
     'utf8'
   );
+  // Tighten after every write: covers both fresh files (umask default is
+  // typically 0644) and pre-existing wide-open files.
+  try {
+    fs.chmodSync(statePath, 0o600);
+  } catch (_) { /* ignore */ }
 }
 
 function loadAppState(app) {
@@ -155,5 +301,7 @@ module.exports = {
   getDefaultAppState,
   getAppStatePath,
   loadAppState,
-  saveAppState
+  saveAppState,
+  // Exported for tests; the migration/normalization rules all live here.
+  sanitizeAppState
 };

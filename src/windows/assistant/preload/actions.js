@@ -72,20 +72,34 @@ function createInvokeActions(ipcRenderer) {
     startVoiceRecognition: invokeWithFallback(ipcRenderer, {
       channel: 'start-voice-recognition',
       label: 'startVoiceRecognition',
-      transformArgs: (args) => [{ source: args[0] }],
+      transformArgs: (args) => [{ source: args[0], attemptId: args[1]?.attemptId }],
       fallback: (error) => ({ error: error.message })
     }),
 
     stopVoiceRecognition: invokeWithFallback(ipcRenderer, {
       channel: 'stop-voice-recognition',
       label: 'stopVoiceRecognition',
-      transformArgs: (args) => [{ source: args[0] }],
+      transformArgs: (args) => [{ source: args[0], attemptId: args[1]?.attemptId }],
       fallback: (error) => ({ error: error.message })
     }),
 
     sendAudioChunk: (source, audioData) => {
       ipcRenderer.send('audio-chunk', { source, data: audioData });
     },
+
+    startLinuxMonitorCapture: invokeWithFallback(ipcRenderer, {
+      channel: 'start-linux-monitor-capture',
+      label: 'startLinuxMonitorCapture',
+      transformArgs: (args) => [{ attemptId: args[0]?.attemptId }],
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    stopLinuxMonitorCapture: invokeWithFallback(ipcRenderer, {
+      channel: 'stop-linux-monitor-capture',
+      label: 'stopLinuxMonitorCapture',
+      transformArgs: (args) => [{ token: args[0] }],
+      fallback: (error) => ({ stopped: false, error: error.message })
+    }),
 
     getDesktopSources: invokeWithFallback(ipcRenderer, {
       channel: 'get-desktop-sources',
@@ -153,6 +167,24 @@ function createInvokeActions(ipcRenderer) {
       fallback: (error) => ({ error: error.message })
     }),
 
+    listProviderModels: invokeWithFallback(ipcRenderer, {
+      channel: 'list-provider-models',
+      label: 'listProviderModels',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    listAwsProfiles: invokeWithFallback(ipcRenderer, {
+      channel: 'list-aws-profiles',
+      label: 'listAwsProfiles',
+      fallback: (error) => ({ success: false, error: error.message, profiles: [] })
+    }),
+
+    saveTranscribeVocabulary: invokeWithFallback(ipcRenderer, {
+      channel: 'transcribe-vocabulary-save',
+      label: 'saveTranscribeVocabulary',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
     saveSettings: invokeWithFallback(ipcRenderer, {
       channel: 'save-settings',
       label: 'saveSettings',
@@ -163,6 +195,18 @@ function createInvokeActions(ipcRenderer) {
       channel: 'set-theme-preference',
       label: 'setThemePreference',
       transformArgs: (args) => [{ theme: args[0] }],
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    installGnomeShortcuts: invokeWithFallback(ipcRenderer, {
+      channel: 'gnome-shortcuts-install',
+      label: 'installGnomeShortcuts',
+      fallback: (error) => ({ success: false, error: error.message })
+    }),
+
+    removeGnomeShortcuts: invokeWithFallback(ipcRenderer, {
+      channel: 'gnome-shortcuts-remove',
+      label: 'removeGnomeShortcuts',
       fallback: (error) => ({ success: false, error: error.message })
     }),
 

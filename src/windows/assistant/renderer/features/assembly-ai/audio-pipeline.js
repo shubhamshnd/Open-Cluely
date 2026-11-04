@@ -1,4 +1,5 @@
 ﻿import { normalizeSource } from './source-state.js';
+import { createSystemAudioUnsupportedError } from './system-audio-errors.js';
 
 const TARGET_SAMPLE_RATE = 16000;
 const TARGET_FRAME_MS = 100;
@@ -7,13 +8,20 @@ const TARGET_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * TARGET_FRAME_MS) /
 const MIN_FRAME_SAMPLES = Math.round((TARGET_SAMPLE_RATE * MIN_FRAME_MS) / 1000);
 const WORKLET_MODULE_PATH = 'pcm-capture-worklet.js';
 
-export function createAudioPipeline({ sendAudioChunk, addMonitorLog }) {
+export function createAudioPipeline({ sendAudioChunk, addMonitorLog, getUserMedia, nativeMonitor }) {
   const workletLoadedContexts = new WeakSet();
   const sourceSampleQueues = {
     mic: { chunks: [], length: 0 },
     system: { chunks: [], length: 0 }
   };
   const audioChunkCounters = { mic: 0, system: 0 };
+
+  // Injectable for tests; the desktop-audio path below is where unsupported
+  // host capture is detected and turned into a typed error.
+  const requestUserMedia =
+    typeof getUserMedia === 'function'
+      ? getUserMedia
+      : (constraints) => navigator.mediaDevices.getUserMedia(constraints);
 
   function convertToPCM16(float32Data) {
     const int16Data = new Int16Array(float32Data.length);
@@ -92,17 +100,81 @@ export function createAudioPipeline({ sendAudioChunk, addMonitorLog }) {
       video: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId }
     };
 
+    let stream = null;
+    let lastError = null;
+
     try {
-      return await navigator.mediaDevices.getUserMedia(mandatoryConstraints);
-    } catch (_mandatoryError) {
+      stream = await requestUserMedia(mandatoryConstraints);
+    } catch (mandatoryError) {
+      lastError = mandatoryError;
       addMonitorLog(
         'info',
         'desktop-constraints-fallback',
         'Mandatory desktop constraints failed; trying flat syntax',
         'system'
       );
-      return navigator.mediaDevices.getUserMedia(flatConstraints);
+      try {
+        stream = await requestUserMedia(flatConstraints);
+      } catch (flatError) {
+        lastError = flatError;
+      }
     }
+
+    const audioTracks = stream ? stream.getAudioTracks() : [];
+    const hasLiveAudioTrack = audioTracks.some((track) => track.readyState === 'live');
+
+    if (stream && !hasLiveAudioTrack) {
+      // Chromium can hand back a stream whose video track works but whose
+      // audio track is missing or already ended (its desktop-audio loopback
+      // is Windows-only). Stop the unusable stream and fail with a typed
+      // error instead of letting the host source sit there "listening"
+      // while capturing no audio at all.
+      stream.getTracks().forEach((track) => track.stop());
+      throw createSystemAudioUnsupportedError('desktop capture returned no usable audio track');
+    }
+
+    if (!stream) {
+      throw createSystemAudioUnsupportedError(lastError);
+    }
+
+    return stream;
+  }
+
+  // Linux Host audio. Chromium has no desktop-audio loopback on Linux and
+  // Electron does not expose PipeWire sink monitors as audio inputs, so the
+  // main process runs `pw-record` against the default sink's monitor and feeds
+  // the PCM straight into the 'system' STT socket. Nothing is captured in the
+  // renderer: no MediaStream, no AudioContext, no screencast session. This
+  // returns a handle whose stop() releases the main-process capture by token
+  // (a stale handle can never stop a newer capture). The renderer-owned
+  // attemptId (when given) becomes the capture token, so the capture's death
+  // error correlates to this attempt from the first moment.
+  const nativeMonitorBridge =
+    nativeMonitor ||
+    {
+      start: (options) => window.electronAPI.startLinuxMonitorCapture(options),
+      stop: (token) => window.electronAPI.stopLinuxMonitorCapture(token)
+    };
+
+  async function startNativeMonitorCapture({ attemptId } = {}) {
+    const result = await nativeMonitorBridge.start({ attemptId });
+    if (!result || !result.success || !result.token) {
+      throw createSystemAudioUnsupportedError(result?.error || 'native monitor capture did not start');
+    }
+
+    addMonitorLog('info', 'monitor-capture', 'Host audio: default output monitor (PipeWire, audio-only)', 'system');
+
+    let stopped = false;
+    return {
+      token: result.token,
+      stop: async () => {
+        if (stopped) {
+          return;
+        }
+        stopped = true;
+        await nativeMonitorBridge.stop(result.token);
+      }
+    };
   }
 
   function resetSourceSampleQueue(source) {
@@ -266,6 +338,7 @@ export function createAudioPipeline({ sendAudioChunk, addMonitorLog }) {
     isLikelyCameraTrack,
     resetChunkCounter,
     resetSourceSampleQueue,
+    startNativeMonitorCapture,
     stopAudioResources
   };
 }

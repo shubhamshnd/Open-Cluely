@@ -1,7 +1,16 @@
 // AI provider configuration.
-// Supported providers: 'gemini' and 'ollama'.
-const AI_PROVIDERS = ['gemini', 'ollama'];
+// Supported providers: 'gemini', 'openai', 'anthropic', 'bedrock' and 'ollama'.
+const AI_PROVIDERS = ['gemini', 'openai', 'anthropic', 'bedrock', 'ollama'];
 const DEFAULT_AI_PROVIDER = 'gemini';
+
+// Human-readable labels for the settings panel and the top bar.
+const AI_PROVIDER_LABELS = {
+  gemini: 'Gemini',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  bedrock: 'Amazon Bedrock',
+  ollama: 'Ollama'
+};
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 const DEFAULT_OLLAMA_MODEL = 'llama3.2';
@@ -15,12 +24,74 @@ const GEMINI_MODELS = [
   'gemini-3.1-pro-preview'
 ];
 
+// OpenAI model configuration.
+// The first model in this list is treated as the default model everywhere.
+// supportsImages marks models that accept image_url content blocks.
+const OPENAI_MODELS = [
+  { id: 'gpt-4.1-mini', supportsImages: true },
+  { id: 'gpt-4.1', supportsImages: true },
+  { id: 'gpt-4o-mini', supportsImages: true }
+];
+
+// Anthropic model configuration (curated — the Anthropic API has no public
+// list-models call, so the settings panel uses this list as-is).
+// The first model in this list is treated as the default model everywhere.
+const ANTHROPIC_MODELS = [
+  { id: 'claude-sonnet-4-5', supportsImages: true },
+  { id: 'claude-haiku-4-5', supportsImages: true }
+];
+
+// Amazon Bedrock configuration (Converse API — one client covers Claude,
+// Llama, Nova, and other Bedrock models).
+// The AWS account must have model access enabled in the Bedrock console or
+// calls fail with AccessDeniedException. Cross-region inference profile ids
+// (the `us.` prefix) work as model ids too.
+const DEFAULT_BEDROCK_REGION = 'us-east-1';
+const BEDROCK_MODELS = [
+  { id: 'us.anthropic.claude-sonnet-5-5', supportsImages: true },
+  { id: 'amazon.nova-lite-v1:0', supportsImages: true },
+  { id: 'us.moonshotai.kimi-k3', supportsImages: false }
+];
+
 // AssemblyAI speech model configuration.
 // The first model in this list is treated as the default model everywhere.
 const ASSEMBLY_AI_SPEECH_MODELS = [
   'universal-streaming-english',
   'universal-streaming-multilingual'
 ];
+
+// AWS auth methods, shared by Amazon Bedrock and Amazon Transcribe. The first
+// entry is the default. 'apiKey' (Bedrock API key / bearer) works for Bedrock
+// only — Amazon Transcribe has no bearer scheme.
+const AWS_AUTH_MODES = ['default', 'profile', 'keys', 'apiKey'];
+const AWS_AUTH_MODE_LABELS = {
+  default: 'Default (AWS credential chain)',
+  profile: 'AWS profile',
+  keys: 'Access key + secret (+ optional session token)',
+  apiKey: 'Bedrock API key'
+};
+
+// Speech-to-text providers. The first entry is the default.
+const STT_PROVIDERS = ['assemblyai', 'transcribe'];
+const STT_PROVIDER_LABELS = {
+  assemblyai: 'AssemblyAI',
+  transcribe: 'Amazon Transcribe'
+};
+
+// Amazon Transcribe can either reuse the shared AWS auth block above
+// ('inherit' — the default, exactly the historical behavior) or sign in with
+// its own IAM identity: a different named profile or its own access keys. A
+// Bedrock API key is not offered here: Transcribe has no bearer scheme.
+const TRANSCRIBE_AUTH_MODES = ['inherit', 'profile', 'keys'];
+const TRANSCRIBE_AUTH_MODE_LABELS = {
+  inherit: 'Same as Bedrock (default)',
+  profile: 'Different AWS profile',
+  keys: 'Access key + secret (+ optional session token)'
+};
+
+// Amazon Transcribe streaming configuration.
+const DEFAULT_TRANSCRIBE_REGION = 'us-east-1';
+const TRANSCRIBE_LANGUAGES = ['en-US', 'en-IN', 'en-GB', 'en-AU', 'hi-IN'];
 
 // Programming language configuration.
 // The first language in this list is treated as the default language everywhere.
@@ -166,6 +237,10 @@ function resolveAiProvider(providerName) {
   return isConfiguredAiProvider(providerName) ? providerName : DEFAULT_AI_PROVIDER;
 }
 
+function getAiProviderLabel(providerName) {
+  return AI_PROVIDER_LABELS[resolveAiProvider(providerName)] || resolveAiProvider(providerName);
+}
+
 function getDefaultOllamaBaseUrl() {
   return DEFAULT_OLLAMA_BASE_URL;
 }
@@ -195,6 +270,133 @@ function resolveGeminiModel(modelName) {
   return isConfiguredGeminiModel(modelName) ? modelName : getDefaultGeminiModel();
 }
 
+// OpenAI model configuration functions
+function getOpenAIModels() {
+  if (!Array.isArray(OPENAI_MODELS) || OPENAI_MODELS.length === 0) {
+    throw new Error('OpenAI models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return OPENAI_MODELS.map((entry) => ({ ...entry }));
+}
+
+function getDefaultOpenAIModel() {
+  return getOpenAIModels()[0].id;
+}
+
+function isConfiguredOpenAIModel(modelName) {
+  return getOpenAIModels().some((entry) => entry.id === modelName);
+}
+
+// The settings panel can list models fetched from the OpenAI API that are not
+// in the curated list; those still resolve as valid selections.
+function resolveOpenAIModel(modelName) {
+  const normalized = String(modelName || '').trim();
+  return normalized || getDefaultOpenAIModel();
+}
+
+// Vision support for curated models comes from the flag; fetched models fall
+// back to a conservative id heuristic. Unknown ids are treated as text-only.
+function openAIModelSupportsImages(modelName) {
+  const configured = getOpenAIModels().find((entry) => entry.id === modelName);
+  if (configured) {
+    return configured.supportsImages === true;
+  }
+
+  const normalized = String(modelName || '');
+  // Text-only members of otherwise vision-capable families.
+  if (/^(o1-mini|o1-preview|o3-mini|gpt-4-turbo-preview|gpt-4-\d{4}-preview)/i.test(normalized)) {
+    return false;
+  }
+
+  return /^(chatgpt-4o|gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-4-vision|gpt-5|o1|o3|o4)/i.test(normalized);
+}
+
+// Anthropic model configuration functions
+function getAnthropicModels() {
+  if (!Array.isArray(ANTHROPIC_MODELS) || ANTHROPIC_MODELS.length === 0) {
+    throw new Error('Anthropic models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return ANTHROPIC_MODELS.map((entry) => ({ ...entry }));
+}
+
+function getDefaultAnthropicModel() {
+  return getAnthropicModels()[0].id;
+}
+
+function isConfiguredAnthropicModel(modelName) {
+  return getAnthropicModels().some((entry) => entry.id === modelName);
+}
+
+function resolveAnthropicModel(modelName) {
+  const normalized = String(modelName || '').trim();
+  return isConfiguredAnthropicModel(normalized) ? normalized : getDefaultAnthropicModel();
+}
+
+// Every Claude 3+ model accepts image input; curated flags win when present.
+function anthropicModelSupportsImages(modelName) {
+  const configured = getAnthropicModels().find((entry) => entry.id === modelName);
+  if (configured) {
+    return configured.supportsImages === true;
+  }
+
+  return /^claude-(3|4|5|sonnet|haiku|opus)/i.test(String(modelName || ''));
+}
+
+// Bedrock configuration functions
+function getBedrockModels() {
+  if (!Array.isArray(BEDROCK_MODELS) || BEDROCK_MODELS.length === 0) {
+    throw new Error('Bedrock models are not configured. Add at least one model to src/config.js.');
+  }
+
+  return BEDROCK_MODELS.map((entry) => ({ ...entry }));
+}
+
+function getDefaultBedrockModel() {
+  return getBedrockModels()[0].id;
+}
+
+function getDefaultBedrockRegion() {
+  return DEFAULT_BEDROCK_REGION;
+}
+
+function isConfiguredBedrockModel(modelId) {
+  return getBedrockModels().some((entry) => entry.id === modelId);
+}
+
+// Bedrock model ids are account- and region-specific (including inference
+// profile ids), so any non-empty id the user entered or fetched resolves.
+function resolveBedrockModel(modelId) {
+  const normalized = String(modelId || '').trim();
+  return normalized || getDefaultBedrockModel();
+}
+
+function resolveBedrockRegion(region) {
+  const normalized = String(region || '').trim();
+  return normalized || DEFAULT_BEDROCK_REGION;
+}
+
+// Vision support: curated flags win; otherwise a conservative id heuristic.
+// Unknown ids are treated as text-only so Screen AI falls back to OCR text.
+function bedrockModelSupportsImages(modelId) {
+  const configured = getBedrockModels().find((entry) => entry.id === modelId);
+  if (configured) {
+    return configured.supportsImages === true;
+  }
+
+  const normalized = String(modelId || '').toLowerCase();
+  // Text-only members of otherwise vision-capable families.
+  if (/(claude-v2|claude-instant|claude-3-5-haiku|nova-micro)/.test(normalized)) {
+    return false;
+  }
+  return (
+    normalized.includes('claude') ||
+    normalized.includes('nova') ||
+    normalized.includes('vision') ||
+    normalized.includes('pixtral')
+  );
+}
+
 // Programming language configuration functions
 function getProgrammingLanguages() {
   if (!Array.isArray(PROGRAMMING_LANGUAGES) || PROGRAMMING_LANGUAGES.length === 0) {
@@ -216,6 +418,87 @@ function resolveProgrammingLanguage(languageName) {
   return isConfiguredProgrammingLanguage(languageName)
     ? languageName
     : getDefaultProgrammingLanguage();
+}
+
+// AWS auth mode configuration functions
+function getAwsAuthModes() {
+  return [...AWS_AUTH_MODES];
+}
+
+function getAwsAuthModeLabels() {
+  return { ...AWS_AUTH_MODE_LABELS };
+}
+
+function isConfiguredAwsAuthMode(mode) {
+  return AWS_AUTH_MODES.includes(mode);
+}
+
+function resolveAwsAuthMode(mode, fallback = AWS_AUTH_MODES[0]) {
+  return isConfiguredAwsAuthMode(mode) ? mode : fallback;
+}
+
+// Speech-to-text provider configuration functions
+function getSttProviders() {
+  return [...STT_PROVIDERS];
+}
+
+function getSttProviderLabels() {
+  return { ...STT_PROVIDER_LABELS };
+}
+
+function isConfiguredSttProvider(providerName) {
+  return STT_PROVIDERS.includes(providerName);
+}
+
+function resolveSttProvider(providerName) {
+  return isConfiguredSttProvider(providerName) ? providerName : STT_PROVIDERS[0];
+}
+
+function getSttProviderLabel(providerName) {
+  return STT_PROVIDER_LABELS[resolveSttProvider(providerName)] || resolveSttProvider(providerName);
+}
+
+// Amazon Transcribe configuration functions
+function getTranscribeLanguages() {
+  return [...TRANSCRIBE_LANGUAGES];
+}
+
+function getDefaultTranscribeLanguage() {
+  return TRANSCRIBE_LANGUAGES[0];
+}
+
+function isConfiguredTranscribeLanguage(language) {
+  return TRANSCRIBE_LANGUAGES.includes(language);
+}
+
+function resolveTranscribeLanguage(language) {
+  return isConfiguredTranscribeLanguage(language) ? language : getDefaultTranscribeLanguage();
+}
+
+// Amazon Transcribe auth split configuration functions
+function getTranscribeAuthModes() {
+  return [...TRANSCRIBE_AUTH_MODES];
+}
+
+function getTranscribeAuthModeLabels() {
+  return { ...TRANSCRIBE_AUTH_MODE_LABELS };
+}
+
+function isConfiguredTranscribeAuthMode(mode) {
+  return TRANSCRIBE_AUTH_MODES.includes(mode);
+}
+
+function resolveTranscribeAuthMode(mode, fallback = TRANSCRIBE_AUTH_MODES[0]) {
+  return isConfiguredTranscribeAuthMode(mode) ? mode : fallback;
+}
+
+function getDefaultTranscribeRegion() {
+  return DEFAULT_TRANSCRIBE_REGION;
+}
+
+function resolveTranscribeRegion(region) {
+  const normalized = String(region || '').trim();
+  return normalized || DEFAULT_TRANSCRIBE_REGION;
 }
 
 // AssemblyAI speech model configuration functions
@@ -281,11 +564,31 @@ function getKeyboardShortcutAccelerator(shortcutId) {
 
 module.exports = {
   getAiProviders,
+  getAiProviderLabel,
   getDefaultAiProvider,
   getDefaultOllamaBaseUrl,
   getDefaultOllamaModel,
   isConfiguredAiProvider,
   resolveAiProvider,
+  getAwsAuthModes,
+  getAwsAuthModeLabels,
+  isConfiguredAwsAuthMode,
+  resolveAwsAuthMode,
+  getSttProviders,
+  getSttProviderLabels,
+  isConfiguredSttProvider,
+  resolveSttProvider,
+  getSttProviderLabel,
+  getTranscribeLanguages,
+  getDefaultTranscribeLanguage,
+  isConfiguredTranscribeLanguage,
+  resolveTranscribeLanguage,
+  getTranscribeAuthModes,
+  getTranscribeAuthModeLabels,
+  isConfiguredTranscribeAuthMode,
+  resolveTranscribeAuthMode,
+  getDefaultTranscribeRegion,
+  resolveTranscribeRegion,
   getAssemblyAiSpeechModels,
   getDefaultAssemblyAiSpeechModel,
   getGeminiModels,
@@ -295,9 +598,26 @@ module.exports = {
   getKeyboardShortcuts,
   getDefaultProgrammingLanguage,
   getProgrammingLanguages,
+  anthropicModelSupportsImages,
+  bedrockModelSupportsImages,
+  getAnthropicModels,
+  getBedrockModels,
+  getDefaultAnthropicModel,
+  getDefaultBedrockModel,
+  getDefaultBedrockRegion,
+  isConfiguredBedrockModel,
+  resolveBedrockModel,
+  resolveBedrockRegion,
+  resolveAnthropicModel,
+  isConfiguredAnthropicModel,
   isConfiguredAssemblyAiSpeechModel,
   isConfiguredGeminiModel,
+  isConfiguredOpenAIModel,
   isConfiguredProgrammingLanguage,
+  openAIModelSupportsImages,
+  getOpenAIModels,
+  getDefaultOpenAIModel,
+  resolveOpenAIModel,
   resolveAssemblyAiSpeechModel,
   resolveGeminiModel,
   resolveProgrammingLanguage

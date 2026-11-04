@@ -6,6 +6,8 @@
 // ============================================================================
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { redactSecretsInText } = require('../state/secret-masking');
+const { stripRoutingLabels } = require('./response-cleanup');
 const {
   getDefaultGeminiModel,
   resolveGeminiModel,
@@ -42,6 +44,16 @@ class GeminiService {
     this.maxHistoryLength = 20;
 
     this._initializeModel();
+  }
+
+  // Shared provider contract: Gemini models used here all accept image input.
+  get supportsImages() {
+    return true;
+  }
+
+  // Shared provider contract: ready when an API key is configured.
+  ready() {
+    return this.apiKey.length > 0;
   }
 
   _initializeModel() {
@@ -172,7 +184,9 @@ class GeminiService {
       try {
         await this.waitForRateLimit();
         const result = await this._executeRequest(request);
-        request.resolve(result);
+        // Defensive: a leaked routing label ("Domain: conceptual") never
+        // reaches the user, even when the model ignores the prompt rule.
+        request.resolve(stripRoutingLabels(result));
       } catch (error) {
         request.reject(error);
       }
@@ -231,7 +245,7 @@ class GeminiService {
       console.log(`[Gemini API] Non-streaming ${request.type} request completed (${responseText.length} chars)`);
       return responseText;
     } catch (error) {
-      console.error(`Request error (attempt ${retryCount + 1}):`, error.message);
+      console.error(`Request error (attempt ${retryCount + 1}):`, redactSecretsInText(error?.message));
 
       if (this.isQuotaExhaustedError(error)) {
         console.error('Quota-exhausted error detected. Skipping retries.');

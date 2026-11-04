@@ -1,5 +1,11 @@
 const path = require('path');
 const { BrowserWindow } = require('electron');
+const { resolveAllowedFilePath } = require('./file-protocol-guard');
+
+// Electron implements setContentProtection (hiding the window from screen
+// capture/sharing) only on Windows and macOS; on Linux the call is a no-op.
+// Warn once per process instead of silently overclaiming stealth.
+const { warnLinuxContentProtectionOnce } = require('../../main-process/startup-logging');
 
 function createAssistantWindow({
   app,
@@ -36,8 +42,13 @@ function createAssistantWindow({
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false,
       offscreen: false,
+      // webSecurity must stay off: Settings fetches the Ollama model list
+      // (http://localhost:11434) from this file:// page, which needs a CORS
+      // exemption no localhost origin reliably grants. Renderer JS never sees
+      // stored secrets anyway (get-settings masks them) and the file:
+      // protocol handler below only serves app resources, so the remaining
+      // exposure is bounded.
       webSecurity: false,
-      allowRunningInsecureContent: true,
       experimentalFeatures: false,
       enableRemoteModule: false,
       sandbox: false
@@ -83,9 +94,22 @@ function createAssistantWindow({
     return permission === 'microphone' || permission === 'media';
   });
 
-  mainWindow.webContents.session.protocol.registerFileProtocol('file', (request, callback) => {
-    const pathname = decodeURI(request.url.replace('file:///', ''));
-    callback(pathname);
+  // The file: scheme is restricted to the app's own src/ directory: the
+  // renderer bundle (html/css/js/worklet) lives there, and nothing else the
+  // window loads comes from file:. This must be interceptFileProtocol —
+  // registerFileProtocol on the standard file scheme does NOT intercept
+  // fetch/XHR/subresource loads, so without interception any renderer script
+  // (webSecurity is off) could fetch() arbitrary local files, including the
+  // API keys in app-state.json.
+  const appSrcRoot = path.resolve(__dirname, '..', '..');
+  mainWindow.webContents.session.protocol.interceptFileProtocol('file', (request, callback) => {
+    const allowedPath = resolveAllowedFilePath(request.url, appSrcRoot);
+    if (!allowedPath) {
+      console.warn('[Security] Blocked file: access outside app resources:', request.url);
+      callback({ error: -6 }); // ERR_FILE_NOT_FOUND
+      return;
+    }
+    callback(allowedPath);
   });
 
   if (process.platform === 'darwin') {
@@ -101,10 +125,20 @@ function createAssistantWindow({
     mainWindow.setSkipTaskbar(true);
     mainWindow.setAlwaysOnTop(true, 'pop-up-menu');
     mainWindow.setAppDetails({
-      appId: 'SystemProcess',
-      appIconPath: '',
-      relaunchCommand: '',
-      relaunchDisplayName: ''
+      appId: 'com.opencluely.app'
+    });
+  }
+  if (process.platform === 'linux') {
+    // Without this the window is mapped but has no _NET_WM_STATE_ABOVE hint, so
+    // after Alt+Shift+H the window reappears BEHIND the focused browser/Meet
+    // window and looks like the shortcut did nothing.
+    mainWindow.setAlwaysOnTop(true);
+    // Electron applies the hint reliably only once the window is mapped, so
+    // re-assert it whenever the window is shown.
+    mainWindow.on('show', () => {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(true);
+      }, 50);
     });
   }
 
@@ -112,6 +146,11 @@ function createAssistantWindow({
   console.log(
     `Content protection ${hideFromScreenCapture ? 'enabled' : 'disabled'} (HIDE_FROM_SCREEN_CAPTURE=${hideFromScreenCapture})`
   );
+
+  if (hideFromScreenCapture) {
+    // Shared once-guard with the startup warning: one line per process.
+    warnLinuxContentProtectionOnce();
+  }
 
   mainWindow.setIgnoreMouseEvents(false);
 

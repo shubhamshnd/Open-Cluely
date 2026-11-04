@@ -1,7 +1,6 @@
 # Node.js
 node_modules/
 dist/
-build/
 
 # Logs
 logs/
@@ -55,3 +54,4 @@ logs.txt
 
 #.md files
 # notes.md
+graphify-out/

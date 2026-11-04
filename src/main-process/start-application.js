@@ -10,8 +10,7 @@ const WebSocket = require('ws');
 
 const {
   loadApplicationEnvironment,
-  normalizeGeminiApiKeys,
-  saveApplicationEnvironment
+  normalizeGeminiApiKeys
 } = require('../bootstrap/environment');
 const {
   getAssemblyAiSpeechModels,
@@ -30,12 +29,17 @@ const { createGeminiRuntime } = require('./features/assistant/gemini-runtime');
 const { createScreenshotManager } = require('./features/assistant/screenshot-manager');
 const { registerAssistantIpc } = require('./features/assistant/ipc');
 const { createAssemblyAiService } = require('../services/assembly-ai/service');
+const { createAwsTranscribeService } = require('../services/stt/aws-transcribe-service');
+const { createSttRouter } = require('../services/stt/stt-router');
 const { createOcrService } = require('../services/ocr/service');
 const { registerAssemblyAiIpc } = require('../services/assembly-ai/ipc');
+const { createLinuxMonitorCapture } = require('../services/assembly-ai/linux-monitor-capture');
 const { registerSettingsIpc } = require('./features/settings/ipc');
 const { createWindowController } = require('./features/window/window-controller');
+const { parseShortcutActionArg } = require('./shared/shortcut-actions');
+const { getActionSocketPath, startActionSocketServer } = require('./shared/action-socket');
 const { DEFAULT_WINDOW_OPACITY_LEVEL } = require('./features/window/window-constants');
-const { logStartupConfiguration } = require('./startup-logging');
+const { logStartupConfiguration, warnLinuxContentProtectionOnce } = require('./startup-logging');
 const { createMobileServer } = require('./features/mobile-server/server');
 
 function resolveStartupOptions(argv = process.argv) {
@@ -51,6 +55,15 @@ function resolveStartupOptions(argv = process.argv) {
 }
 
 async function startApplication() {
+  // Single instance: a launch with `--action=<shortcutId>` (e.g. from a GNOME
+  // custom keybinding on Wayland, where global shortcuts cannot fire while a
+  // native Wayland window is focused) is forwarded to the already-running
+  // instance via 'second-instance'; this second instance exits immediately.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
+
   let appEnvironment = null;
   let appState = null;
   let isShuttingDown = false;
@@ -91,6 +104,7 @@ async function startApplication() {
     mobileServer.broadcast(channel, data);
   };
 
+  const linuxMonitorCapture = createLinuxMonitorCapture();
   const assemblyAiService = createAssemblyAiService({
     WebSocket,
     desktopCapturer,
@@ -100,13 +114,47 @@ async function startApplication() {
     sendToRenderer
   });
 
+  // Amazon Transcribe: the second STT provider. Reads its region/language/
+  // vocabulary and AWS auth state from app state at start time — the shared
+  // block plus the optional Transcribe-only override (transcribeAuthMode
+  // 'inherit' means the shared block, exactly the historical behavior).
+  const awsTranscribeService = createAwsTranscribeService({
+    getTranscribeSettings: () => ({
+      region: appState?.transcribeRegion,
+      language: appState?.transcribeLanguage,
+      vocabularyName: appState?.transcribeVocabularyName,
+      awsAuth: {
+        awsAuthMode: appState?.awsAuthMode,
+        awsProfile: appState?.awsProfile,
+        awsAccessKeyId: appState?.awsAccessKeyId,
+        awsSecretAccessKey: appState?.awsSecretAccessKey,
+        awsSessionToken: appState?.awsSessionToken,
+        bedrockApiKey: appState?.bedrockApiKey,
+        transcribeAuthMode: appState?.transcribeAuthMode,
+        transcribeAwsProfile: appState?.transcribeAwsProfile,
+        transcribeAwsAccessKeyId: appState?.transcribeAwsAccessKeyId,
+        transcribeAwsSecretAccessKey: appState?.transcribeAwsSecretAccessKey,
+        transcribeAwsSessionToken: appState?.transcribeAwsSessionToken
+      }
+    }),
+    getGeminiService: () => geminiRuntime.getService(),
+    sendToRenderer
+  });
+
+  // The IPC layer talks to this router; the Settings STT provider decides
+  // which backend each call lands on.
+  const sttService = createSttRouter({
+    getSttProvider: () => appState?.sttProvider,
+    services: { assemblyai: assemblyAiService, transcribe: awsTranscribeService }
+  });
+
   windowController = createWindowController({
     app,
     screen,
     globalShortcut,
     createAssistantWindow,
     getAppEnvironment: () => appEnvironment,
-    emitSttDebug: assemblyAiService.emitSttDebug,
+    emitSttDebug: (payload) => sttService.emitSttDebug(payload),
     sendToRenderer,
     onTakeStealthScreenshot: async () => {
       if (screenshotManager) {
@@ -122,6 +170,40 @@ async function startApplication() {
     sendToRenderer
   });
 
+  // A second instance launched with `--action=<shortcutId>` runs the same
+  // handler its globalShortcut registration uses. A first launch carrying
+  // `--action` simply starts normally and ignores it (nothing reads it here).
+  app.on('second-instance', (_event, secondInstanceArgv) => {
+    const actionId = parseShortcutActionArg(secondInstanceArgv);
+    if (actionId && windowController) {
+      windowController.runShortcutAction(actionId);
+    }
+  });
+
+  // Linux fast path for GNOME custom keybindings: a private Unix socket in
+  // userData that accepts a shortcut action id (see shared/action-socket.js).
+  let actionSocket = null;
+  if (process.platform === 'linux') {
+    app.whenReady().then(async () => {
+      try {
+        const knownActions = new Set(windowController.getShortcutActionIds());
+        actionSocket = await startActionSocketServer({
+          socketPath: getActionSocketPath(app.getPath('userData')),
+          isKnownAction: (id) => knownActions.has(id),
+          onAction: (id) => windowController.runShortcutAction(id)
+        });
+      } catch (error) {
+        console.warn('[ActionSocket] Fast shortcut path unavailable:', error && error.message);
+      }
+    });
+    app.on('will-quit', () => {
+      if (actionSocket) {
+        actionSocket.close();
+        actionSocket = null;
+      }
+    });
+  }
+
   function loadPersistedAppState() {
     appState = loadAppState(app);
 
@@ -133,6 +215,25 @@ async function startApplication() {
     const activeGeminiModel = geminiRuntime.setActiveGeminiModel(appState.geminiModel);
     const activeOllamaBaseUrl = geminiRuntime.setActiveOllamaBaseUrl(appState.ollamaBaseUrl);
     const activeOllamaModel = geminiRuntime.setActiveOllamaModel(appState.ollamaModel);
+    geminiRuntime.setProviderFallback(appState.providerFallback);
+    geminiRuntime.setProviderSettings('openai', {
+      apiKey: appState.openaiApiKey,
+      modelName: appState.openaiModel
+    });
+    geminiRuntime.setProviderSettings('anthropic', {
+      apiKey: appState.anthropicApiKey,
+      modelName: appState.anthropicModel
+    });
+    geminiRuntime.setProviderSettings('bedrock', {
+      region: appState.bedrockRegion,
+      authMode: appState.awsAuthMode,
+      profile: appState.awsProfile,
+      accessKeyId: appState.awsAccessKeyId,
+      secretAccessKey: appState.awsSecretAccessKey,
+      sessionToken: appState.awsSessionToken,
+      apiKey: appState.bedrockApiKey,
+      modelId: appState.bedrockModelId
+    });
     activeAssemblyAiSpeechModel = resolveAssemblyAiSpeechModel(appState.assemblyAiSpeechModel);
     const activeProgrammingLanguage = geminiRuntime.setActiveProgrammingLanguage(appState.programmingLanguage);
     const activeWindowOpacityLevel = windowController.setWindowOpacityLevel(appState.windowOpacityLevel);
@@ -159,8 +260,40 @@ async function startApplication() {
       });
     }
 
+    // Capture/startup toggles: on first run seed app state from .env /
+    // built-in defaults, then let app state own the values. Packaged builds
+    // cannot write into process.resourcesPath, so .env is dev-only from here on.
+    const captureStartupSeed = {};
+    for (const key of ['hideFromScreenCapture', 'startHidden', 'maxScreenshots', 'screenshotDelay']) {
+      if (appState[key] == null) {
+        captureStartupSeed[key] = appEnvironment[key];
+      }
+    }
+    if (Object.keys(captureStartupSeed).length > 0) {
+      appState = saveAppState(app, captureStartupSeed);
+      console.log('Migrated capture/startup settings from environment into app state:', Object.keys(captureStartupSeed).join(', '));
+    }
+
+    appEnvironment = {
+      ...appEnvironment,
+      hideFromScreenCapture: appState.hideFromScreenCapture,
+      startHidden: appState.startHidden,
+      maxScreenshots: appState.maxScreenshots,
+      screenshotDelay: appState.screenshotDelay
+    };
+    process.env.HIDE_FROM_SCREEN_CAPTURE = String(appEnvironment.hideFromScreenCapture);
+    process.env.START_HIDDEN = String(appEnvironment.startHidden);
+    process.env.MAX_SCREENSHOTS = String(appEnvironment.maxScreenshots);
+    process.env.SCREENSHOT_DELAY = String(appEnvironment.screenshotDelay);
+
     console.log('Loaded app state from:', getAppStatePath(app));
     console.log('Restored AI provider from app state:', activeAiProvider);
+    console.log('Restored capture/startup settings from app state:', {
+      hideFromScreenCapture: appEnvironment.hideFromScreenCapture,
+      startHidden: appEnvironment.startHidden,
+      maxScreenshots: appEnvironment.maxScreenshots,
+      screenshotDelay: appEnvironment.screenshotDelay
+    });
     console.log(`Restored Gemini API key index from app state: ${keyState.activeApiKeyIndex + 1}/${keyState.geminiApiKeys.length}`);
     console.log('Restored Gemini model from app state:', activeGeminiModel);
     console.log('Restored Ollama config from app state:', activeOllamaModel, 'at', activeOllamaBaseUrl);
@@ -170,13 +303,19 @@ async function startApplication() {
   }
 
   function cleanupTransientResources() {
-    assemblyAiService.dispose();
+    // dispose() resolves only once every owned pw-record child actually exited
+    // (SIGTERM escalated to SIGKILL after its grace period), so quit can wait
+    // for it instead of exiting under a child that ignored SIGTERM.
+    const captureDisposed = Promise.resolve(linuxMonitorCapture.dispose());
+    // Disposes BOTH STT providers (AssemblyAI and Amazon Transcribe).
+    sttService.dispose();
     screenshotManager.cleanupTransientResources();
     ocrService.dispose().catch((error) => {
       console.error('Failed to dispose OCR worker:', error);
     });
     windowController.unregisterShortcuts();
     mobileServer.close();
+    return captureDisposed;
   }
 
   function quitApplication() {
@@ -186,12 +325,17 @@ async function startApplication() {
 
     isShuttingDown = true;
 
-    cleanupTransientResources();
+    const captureDisposed = cleanupTransientResources();
     windowController.destroyWindow();
 
-    setTimeout(() => {
+    // Exit only after the capture child is really gone (its SIGKILL escalation
+    // is ~1.5 s); the hard cap keeps a wedged child from hanging quit forever.
+    const forceExitTimer = setTimeout(() => app.exit(0), 5000);
+    forceExitTimer.unref?.();
+    Promise.resolve(captureDisposed).then(() => {
+      clearTimeout(forceExitTimer);
       app.exit(0);
-    }, 50);
+    });
   }
 
   ipcMain.handle('mobile-server-get-status', () => mobileServer.getStatus());
@@ -202,29 +346,28 @@ async function startApplication() {
     ocrService,
     windowController,
     geminiRuntime,
-    assemblyAiService,
+    // The router's flush/reset covers both providers' transcript history.
+    assemblyAiService: sttService,
     sendToRenderer,
     quitApplication
   });
 
   registerAssemblyAiIpc({
     ipcMain,
-    assemblyAiService
+    sttService,
+    linuxMonitorCapture,
+    sendToRenderer
   });
 
   registerSettingsIpc({
     ipcMain,
     app,
     getAppEnvironment: () => appEnvironment,
-    setAppEnvironment: (nextEnvironment) => {
-      appEnvironment = nextEnvironment;
-    },
     getAppState: () => appState,
     setAppState: (nextAppState) => {
       appState = nextAppState;
     },
     getAppStatePath,
-    saveApplicationEnvironment,
     saveAppState,
     geminiRuntime,
     windowController,
@@ -261,6 +404,11 @@ async function startApplication() {
       defaultProgrammingLanguage: geminiRuntime.getDefaultProgrammingLanguage()
     });
 
+    // Electron only implements setContentProtection on Windows and macOS;
+    // on Linux the assistant window stays visible in screen shares and
+    // recordings even when HIDE_FROM_SCREEN_CAPTURE is enabled.
+    warnLinuxContentProtectionOnce();
+
     geminiRuntime.setActiveKeyIndexChangeHandler((nextIndex) => {
       if (!appState || appState.geminiApiKeyIndex === nextIndex) {
         return;
@@ -270,25 +418,18 @@ async function startApplication() {
       console.log(`Persisted Gemini API key index: ${nextIndex + 1}/${geminiRuntime.getApiKeys().length}`);
     });
 
-    if (geminiRuntime.getActiveAiProvider() === 'ollama') {
-      geminiRuntime.initializeOllamaService(
-        geminiRuntime.getActiveOllamaBaseUrl(),
-        geminiRuntime.getActiveOllamaModel(),
-        geminiRuntime.getActiveProgrammingLanguage()
-      );
-    } else {
-      geminiRuntime.initializeGeminiService(
-        geminiRuntime.getActiveApiKey(),
-        geminiRuntime.getActiveGeminiModel(),
-        geminiRuntime.getActiveProgrammingLanguage()
-      );
-    }
+    geminiRuntime.initializeAiService();
 
     app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-    app.commandLine.appendSwitch('ignore-certificate-errors');
-    app.commandLine.appendSwitch('allow-running-insecure-content');
-    app.commandLine.appendSwitch('disable-web-security');
     app.commandLine.appendSwitch('enable-media-stream');
+    // NOTE: 'ignore-certificate-errors', 'allow-running-insecure-content' and
+    // 'disable-web-security' were removed. They were appended here — after
+    // app-ready — so they only reached child processes spawned later, and
+    // 'ignore-certificate-errors' disabled TLS certificate validation for the
+    // network service, exposing every provider API key to MITM forgery. The
+    // app needs none of them: API endpoints use public CAs, the page loads
+    // no insecure subresources, and per-window webPreferences carry the (still
+    // required) webSecurity setting — see windows/assistant/window.js.
 
     const launchHidden = startupOptions.startHidden || appEnvironment.startHidden;
     console.log('App is ready, creating window...');
@@ -339,7 +480,6 @@ async function startApplication() {
     });
   });
 
-  process.title = 'SystemIdleProcess';
 }
 
 module.exports = {

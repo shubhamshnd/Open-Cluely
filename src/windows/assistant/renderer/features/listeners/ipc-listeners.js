@@ -47,6 +47,10 @@ export function setupIpcListeners({
         const stream = typeof getActiveScreenAiStream === 'function' ? getActiveScreenAiStream() : null;
         console.log('[onAnalysisResult] stream active:', !!stream, 'has error:', !!data.error);
         if (data.error) {
+            if (stream) {
+                // Drop the placeholder: junk text must not pollute later context.
+                stream.discard();
+            }
             addChatMessage('system', `Error: ${data.error}`);
             showFeedback('Analysis failed', 'error');
         } else if (stream) {
@@ -63,6 +67,16 @@ export function setupIpcListeners({
             clearActiveScreenAiStream();
         }
     });
+
+    if (windowApi.onScreenshotError) {
+        windowApi.onScreenshotError((data) => {
+            const message = typeof data === 'string'
+                ? data
+                : (data && data.message) || 'Screenshot capture failed';
+            addChatMessage('system', `Error: ${message}`);
+            showFeedback(message, 'error');
+        });
+    }
 
     windowApi.onSetStealthMode((enabled) => {
         showFeedback(enabled ? 'Stealth mode ON' : 'Stealth mode OFF', 'info');

@@ -18,7 +18,7 @@
     <div class="window-resize-handle resize-handle-nw" data-resize-handle="nw" aria-hidden="true"></div>
     <!-- Draggable Header with Close Button -->
     <div class="drag-handle">
-      <button id="close-app-btn" class="close-app-btn">&times;</button>
+      <button id="close-app-btn" class="close-app-btn" title="Close">&times;</button>
     </div>
     <!-- Compact Interface - Horizontal Layout like Cluely -->
     <div class="main-interface">
@@ -40,8 +40,8 @@
       <div class="content-section">
         <div class="action-buttons">
           <div id="transcription-control" class="transcription-control">
-            <button id="transcription-toggle" class="action-btn transcription-btn" type="button" aria-label="Toggle transcription">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button id="transcription-toggle" class="action-btn transcription-btn" type="button" aria-label="Toggle transcription" title="Toggle transcription">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 10v4" />
                 <path d="M7 7v10" />
                 <path d="M11 4v16" />
@@ -50,13 +50,13 @@
               </svg>
             </button>
             <div id="transcription-sources" class="transcription-sources" role="group" aria-label="Transcription sources">
-              <button id="source-system-toggle" class="source-toggle source-system selected" type="button">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+              <button id="source-system-toggle" class="source-toggle source-system selected" type="button" title="Host audio (system sound)" aria-label="Toggle host audio capture">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
                 </svg>
               </button>
-              <button id="source-mic-toggle" class="source-toggle source-mic" type="button">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+              <button id="source-mic-toggle" class="source-toggle source-mic" type="button" title="Microphone (your voice)" aria-label="Toggle microphone capture">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                   <path d="M12 19v4"/>
@@ -66,8 +66,8 @@
             </div>
           </div>
 
-          <button id="screenshot-btn" class="action-btn screenshot-btn">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <button id="screenshot-btn" class="action-btn screenshot-btn" title="Take a screenshot" aria-label="Take a screenshot">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
             </svg>
           </button>
@@ -92,8 +92,8 @@
             Insights
           </button>
 
-          <button id="clear-btn" class="action-btn clear-btn">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <button id="clear-btn" class="action-btn clear-btn" title="Clear chat" aria-label="Clear chat">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
             </svg>
           </button>
@@ -105,11 +105,12 @@
               type="button"
               aria-label="Switch to dark mode"
               aria-pressed="false"
+              title="Switch between dark and light theme"
             >
-              <svg class="theme-toggle-icon theme-toggle-icon-moon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <svg class="theme-toggle-icon theme-toggle-icon-moon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12.25 2.1a1 1 0 0 0-.92 1.34 8.5 8.5 0 0 1-9.88 11.22 1 1 0 0 0-1.08 1.52A11 11 0 1 0 12.25 2.1z" />
               </svg>
-              <svg class="theme-toggle-icon theme-toggle-icon-sun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <svg class="theme-toggle-icon theme-toggle-icon-sun" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />
                 <path d="M12 2v2" />
                 <path d="M12 20v2" />
@@ -122,14 +123,14 @@
               </svg>
             </button>
 
-            <button id="settings-btn" class="action-btn settings-btn">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <button id="settings-btn" class="action-btn settings-btn" title="Settings" aria-label="Settings">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
               </svg>
             </button>
 
-            <button id="hide-btn" class="action-btn hide-btn">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <button id="hide-btn" class="action-btn hide-btn" title="Hide window" aria-label="Hide window">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7a1 1 0 1 0-1.42 1.42L10.59 12l-4.9 4.89a1 1 0 0 0 1.42 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0 0-1.4Z"/>
               </svg>
             </button>
@@ -138,11 +139,21 @@
       </div>
     </div>
     
-    <div id="transcription-monitor" class="transcription-monitor">
-      <div class="monitor-header">
+    <div id="transcription-monitor" class="transcription-monitor compact">
+      <div
+        id="monitor-header"
+        class="monitor-header"
+        role="button"
+        tabindex="0"
+        aria-expanded="false"
+        aria-controls="monitor-details"
+        title="Show or hide transcription details"
+      >
         <span class="monitor-title">Transcription Monitor</span>
         <span id="monitor-master-state" class="monitor-master-state">Idle</span>
+        <span id="monitor-chevron" class="monitor-chevron" aria-hidden="true">▸</span>
       </div>
+      <div id="monitor-details" class="monitor-details">
       <div class="monitor-source-grid">
         <div class="monitor-source-row">
           <span class="monitor-source-label">Host</span>
@@ -156,12 +167,14 @@
         </div>
       </div>
       <div id="monitor-log-list" class="monitor-log-list"></div>
+      </div>
     </div>
 
     <!-- Chat Interface -->
     <div id="chat-container" class="chat-container">
       <div class="chat-header">
         <span class="chat-title">&#x1F916; AI Assistant</span>
+        <span id="chat-provider-model" class="chat-provider-model" title="Active AI provider and model"></span>
       </div>
       <div id="chat-messages" class="chat-messages">
         <!-- Messages will be added here dynamically -->
@@ -171,7 +184,7 @@
           id="chat-manual-input"
           class="chat-manual-input"
           rows="1"
-          placeholder="Type context to add as You..."
+          placeholder="Add context…"
           aria-label="Manual context input"
         ></textarea>
         <button
@@ -224,6 +237,9 @@
           <label class="settings-label">AI Provider</label>
           <select id="setting-ai-provider" class="settings-input">
             <option value="gemini">Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="bedrock">Amazon Bedrock</option>
             <option value="ollama">Ollama (Local)</option>
           </select>
         </div>
@@ -249,6 +265,50 @@
             <select id="setting-gemini-model" class="settings-input"></select>
           </div>
         </div>
+        <div id="openai-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">OpenAI API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-openai-key" class="settings-input" placeholder="sk-..." autocomplete="off" />
+              <button type="button" id="toggle-openai-key-visibility" class="settings-input-toggle" aria-label="Show OpenAI API key" aria-pressed="false">Show</button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">OpenAI Model</label>
+            <div class="settings-input-row">
+              <select id="setting-openai-model" class="settings-input"></select>
+              <button type="button" id="fetch-openai-models" class="settings-input-toggle" aria-label="Fetch available OpenAI models">Fetch</button>
+            </div>
+          </div>
+        </div>
+        <div id="anthropic-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">Anthropic API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-anthropic-key" class="settings-input" placeholder="sk-ant-..." autocomplete="off" />
+              <button type="button" id="toggle-anthropic-key-visibility" class="settings-input-toggle" aria-label="Show Anthropic API key" aria-pressed="false">Show</button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Anthropic Model</label>
+            <select id="setting-anthropic-model" class="settings-input"></select>
+          </div>
+        </div>
+        <div id="bedrock-settings-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">Bedrock Region</label>
+            <input type="text" id="setting-bedrock-region" class="settings-input" placeholder="us-east-1" />
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Bedrock Model ID</label>
+            <div class="settings-input-row">
+              <input type="text" id="setting-bedrock-model" class="settings-input" list="bedrock-model-options" placeholder="us.anthropic.claude-sonnet-5-5" />
+              <button type="button" id="fetch-bedrock-models" class="settings-input-toggle" aria-label="Fetch available Bedrock models">Fetch</button>
+            </div>
+            <datalist id="bedrock-model-options"></datalist>
+          </div>
+          <div class="settings-helper-text">Bedrock signs in with the shared AWS credentials below.</div>
+        </div>
         <div id="ollama-settings-group" class="hidden">
           <div class="settings-group">
             <label class="settings-label">Ollama Server URL</label>
@@ -267,28 +327,160 @@
             <select id="setting-ollama-model-select" class="settings-input hidden"></select>
           </div>
         </div>
+        <div id="aws-credentials-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">AWS Auth Method</label>
+            <select id="setting-aws-auth-mode" class="settings-input">
+              <option value="default">Default (AWS credential chain)</option>
+              <option value="profile">AWS profile</option>
+              <option value="keys">Access key + secret (+ optional session token)</option>
+              <option value="apiKey">Bedrock API key</option>
+            </select>
+            <div class="settings-helper-text">Shared by Amazon Bedrock and Amazon Transcribe (unless Transcribe has its own credentials below).</div>
+          </div>
+          <div id="aws-profile-group" class="settings-group hidden">
+            <label class="settings-label">AWS Profile</label>
+            <div class="settings-input-row">
+              <select id="setting-aws-profile-select" class="settings-input"></select>
+              <button type="button" id="refresh-aws-profiles" class="settings-input-toggle" aria-label="Refresh AWS profile list">Refresh</button>
+            </div>
+            <input type="text" id="setting-aws-profile" class="settings-input" placeholder="Or type a profile name..." autocomplete="off" />
+            <div class="settings-helper-text">Profile names are read from ~/.aws/config and ~/.aws/credentials. Only names are listed, never credentials.</div>
+          </div>
+          <div id="aws-keys-group" class="hidden">
+            <div class="settings-group">
+              <label class="settings-label">AWS Access Key ID</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-aws-access-key" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-aws-access-key-visibility" class="settings-input-toggle" aria-label="Show AWS access key ID" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">AWS Secret Access Key</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-aws-secret" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-aws-secret-visibility" class="settings-input-toggle" aria-label="Show AWS secret access key" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">AWS Session Token (optional)</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-aws-session-token" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-aws-session-token-visibility" class="settings-input-toggle" aria-label="Show AWS session token" aria-pressed="false">Show</button>
+              </div>
+              <div class="settings-helper-text">Only for temporary credentials (STS). Leave blank for long-lived keys.</div>
+            </div>
+          </div>
+          <div id="aws-api-key-group" class="settings-group hidden">
+            <label class="settings-label">Bedrock API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-bedrock-api-key" class="settings-input" autocomplete="off" />
+              <button type="button" id="toggle-bedrock-api-key-visibility" class="settings-input-toggle" aria-label="Show Bedrock API key" aria-pressed="false">Show</button>
+            </div>
+            <div class="settings-helper-text">Bedrock only; Amazon Transcribe can't use it.</div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">Fallback Provider (optional)</label>
+          <select id="setting-provider-fallback" class="settings-input">
+            <option value="">None</option>
+          </select>
+          <div class="settings-helper-text">Used only if the selected provider fails on credentials, quota, timeout, or connection. Providers that are not set up are skipped.</div>
+        </div>
         <div class="settings-group">
           <label class="settings-label">Programming Language</label>
           <select id="setting-programming-language" class="settings-input"></select>
         </div>
         <div class="settings-group">
-          <label class="settings-label">AssemblyAI API Key</label>
-          <div class="settings-input-row">
-            <input type="password" id="setting-assembly-key" class="settings-input" placeholder="Enter AssemblyAI API key..." />
-            <button
-              type="button"
-              id="toggle-assembly-key-visibility"
-              class="settings-input-toggle"
-              aria-label="Show AssemblyAI API key"
-              aria-pressed="false"
-            >
-              Show
-            </button>
+          <label class="settings-label">Speech-to-text Provider</label>
+          <select id="setting-stt-provider" class="settings-input">
+            <option value="assemblyai">AssemblyAI</option>
+            <option value="transcribe">Amazon Transcribe</option>
+          </select>
+          <div id="stt-provider-locked-hint" class="settings-helper-text hidden">Stop transcription to change the speech-to-text provider.</div>
+        </div>
+        <div id="assemblyai-stt-group">
+          <div class="settings-group">
+            <label class="settings-label">AssemblyAI API Key</label>
+            <div class="settings-input-row">
+              <input type="password" id="setting-assembly-key" class="settings-input" placeholder="Enter AssemblyAI API key..." />
+              <button
+                type="button"
+                id="toggle-assembly-key-visibility"
+                class="settings-input-toggle"
+                aria-label="Show AssemblyAI API key"
+                aria-pressed="false"
+              >
+                Show
+              </button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">AssemblyAI Speech Model</label>
+            <select id="setting-assembly-model" class="settings-input"></select>
           </div>
         </div>
-        <div class="settings-group">
-          <label class="settings-label">AssemblyAI Speech Model</label>
-          <select id="setting-assembly-model" class="settings-input"></select>
+        <div id="transcribe-stt-group" class="hidden">
+          <div class="settings-group">
+            <label class="settings-label">Transcribe Region</label>
+            <input type="text" id="setting-transcribe-region" class="settings-input" placeholder="us-east-1" />
+            <div class="settings-helper-text">Streaming is about $0.60/hour per source (Mic and Host are separate streams).</div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Transcribe AWS Credentials</label>
+            <select id="setting-transcribe-auth-mode" class="settings-input">
+              <option value="inherit">Same as Bedrock (default)</option>
+              <option value="profile">Different AWS profile</option>
+              <option value="keys">Access key + secret (+ optional session token)</option>
+            </select>
+            <div class="settings-helper-text">By default Transcribe signs in with the shared AWS credentials above. Pick a different profile or keys when Transcribe needs its own IAM identity (Bedrock is unaffected).</div>
+          </div>
+          <div id="transcribe-profile-group" class="settings-group hidden">
+            <label class="settings-label">Transcribe AWS Profile</label>
+            <div class="settings-input-row">
+              <select id="setting-transcribe-profile-select" class="settings-input"></select>
+              <button type="button" id="refresh-transcribe-profiles" class="settings-input-toggle" aria-label="Refresh Transcribe AWS profile list">Refresh</button>
+            </div>
+            <input type="text" id="setting-transcribe-profile" class="settings-input" placeholder="Or type a profile name..." autocomplete="off" />
+            <div class="settings-helper-text">Profile names are read from ~/.aws/config and ~/.aws/credentials. Only names are listed, never credentials.</div>
+          </div>
+          <div id="transcribe-keys-group" class="hidden">
+            <div class="settings-group">
+              <label class="settings-label">Transcribe AWS Access Key ID</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-transcribe-access-key" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-transcribe-access-key-visibility" class="settings-input-toggle" aria-label="Show Transcribe AWS access key ID" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">Transcribe AWS Secret Access Key</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-transcribe-secret" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-transcribe-secret-visibility" class="settings-input-toggle" aria-label="Show Transcribe AWS secret access key" aria-pressed="false">Show</button>
+              </div>
+            </div>
+            <div class="settings-group">
+              <label class="settings-label">Transcribe AWS Session Token (optional)</label>
+              <div class="settings-input-row">
+                <input type="password" id="setting-transcribe-session-token" class="settings-input" autocomplete="off" />
+                <button type="button" id="toggle-transcribe-session-token-visibility" class="settings-input-toggle" aria-label="Show Transcribe AWS session token" aria-pressed="false">Show</button>
+              </div>
+              <div class="settings-helper-text">Only for temporary credentials (STS). Leave blank for long-lived keys.</div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Language</label>
+            <select id="setting-transcribe-language" class="settings-input"></select>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Custom Words (optional)</label>
+            <textarea id="setting-transcribe-vocabulary-words" class="settings-input settings-textarea" rows="3" placeholder="One word or phrase per line"></textarea>
+            <div class="settings-helper-text">Transcribe phrases can't contain spaces, so spaces become hyphens (&quot;REST API&quot; → &quot;REST-API&quot;). Saved as vocabulary open-cluely-&lt;language&gt;.</div>
+            <div class="settings-input-row">
+              <button type="button" id="transcribe-vocabulary-save" class="settings-input-toggle">Create / update vocabulary</button>
+            </div>
+            <div id="transcribe-vocabulary-status" class="settings-helper-text"></div>
+          </div>
         </div>
         <div class="settings-group">
           <div class="settings-label-row">
@@ -309,6 +501,14 @@
           <label class="settings-label">Keyboard Shortcuts</label>
           <div id="settings-shortcuts-list" class="settings-shortcuts-list"></div>
           <div class="settings-helper-text">Shortcuts are read-only here. Edit <code>src/config.js</code> to customize.</div>
+          <div id="gnome-shortcuts-group" class="hidden">
+            <div class="settings-helper-text">On GNOME Wayland, app shortcuts only work while the app is focused. Add them as GNOME keyboard shortcuts to use them anywhere.</div>
+            <div class="settings-input-row">
+              <button type="button" id="gnome-shortcuts-add" class="settings-input-toggle">Add to GNOME shortcuts</button>
+              <button type="button" id="gnome-shortcuts-remove" class="settings-input-toggle">Remove from GNOME shortcuts</button>
+            </div>
+            <div id="gnome-shortcuts-status" class="settings-helper-text"></div>
+          </div>
         </div>
         <button id="save-settings-btn" class="save-settings-btn">Save Settings</button>
       </div>

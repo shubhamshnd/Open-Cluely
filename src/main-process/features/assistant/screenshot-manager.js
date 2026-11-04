@@ -1,6 +1,112 @@
 ﻿const fs = require('fs');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
+const { setWindowOpacity, getWindowOpacity } = require('../../shared/window-opacity');
+
+// screenshot-desktop's Linux backend never wires its internal listDisplays()
+// (xrandr) rejection into the returned promise, so when xrandr or the capture
+// tool is missing the promise can stay pending forever instead of rejecting.
+// Race it against a timeout so the fallback below actually gets to run.
+const SCREENSHOT_CLI_TIMEOUT_MS = 5000;
+
+const NO_SCREENSHOT_METHOD_MESSAGE =
+  'No screenshot method available — install `gnome-screenshot`, `scrot`, ' +
+  'ImageMagick (`import`), or run on Wayland with XDG portal support';
+
+// Electron-native capture: no external CLI binary needed. Works on X11 and on
+// Wayland via the XDG desktop portal that Chromium already uses for
+// desktopCapturer. Used as a fallback on Linux when screenshot-desktop cannot
+// find gnome-screenshot/scrot/import/grim on the host.
+async function captureWithDesktopCapturer(screenshotPath) {
+  const { desktopCapturer, screen } = require('electron');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const scaleFactor = primaryDisplay.scaleFactor || 1;
+  const { width, height } = primaryDisplay.size;
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: {
+      width: Math.floor(width * scaleFactor),
+      height: Math.floor(height * scaleFactor)
+    }
+  });
+  if (!sources || sources.length === 0) {
+    throw new Error('desktopCapturer returned no screen sources');
+  }
+  const pngBuffer = sources[0].thumbnail.toPNG();
+  if (!pngBuffer || pngBuffer.length === 0) {
+    throw new Error('desktopCapturer returned an empty thumbnail');
+  }
+  fs.writeFileSync(screenshotPath, pngBuffer);
+}
+
+// Builds the capture chain: primary (screenshot-desktop CLI) first, then — on
+// Linux only — one retry with the Electron-native capture. Split out as a
+// factory so the fallback order can be unit-tested with stubbed captures.
+function createScreenshotCapture({
+  capturePrimary,
+  captureFallback = captureWithDesktopCapturer,
+  platform = process.platform,
+  cliTimeoutMs = SCREENSHOT_CLI_TIMEOUT_MS,
+  log = console.warn
+} = {}) {
+  if (typeof capturePrimary !== 'function') {
+    throw new Error('createScreenshotCapture requires a capturePrimary function');
+  }
+
+  return async function captureScreenshot(screenshotPath) {
+    // Windows/macOS keep the original screenshot-desktop path unchanged: no
+    // timeout (a macOS permission prompt can legitimately take a while) and
+    // no fallback. The race and no-file check below exist for Linux only.
+    if (platform !== 'linux') {
+      await capturePrimary(screenshotPath);
+      return;
+    }
+
+    let primaryError = null;
+    let timeoutHandle = null;
+
+    try {
+      const primaryPromise = Promise.resolve(capturePrimary(screenshotPath));
+      // If the timeout wins the race below, a late CLI rejection must not
+      // surface as an unhandled rejection.
+      primaryPromise.catch(() => {});
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error(`screenshot-desktop timed out after ${cliTimeoutMs}ms`)),
+          cliTimeoutMs
+        );
+      });
+
+      try {
+        await Promise.race([primaryPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
+
+      if (!fs.existsSync(screenshotPath) || fs.statSync(screenshotPath).size === 0) {
+        primaryError = new Error('screenshot-desktop completed but produced no file');
+      }
+    } catch (error) {
+      primaryError = error;
+    }
+
+    if (!primaryError) {
+      return;
+    }
+
+    log(
+      `screenshot-desktop failed on Linux (${primaryError.message}), retrying with Electron desktopCapturer`
+    );
+
+    try {
+      await captureFallback(screenshotPath);
+    } catch (fallbackError) {
+      const combinedError = new Error(NO_SCREENSHOT_METHOD_MESSAGE);
+      combinedError.cause = fallbackError;
+      throw combinedError;
+    }
+  };
+}
 
 function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendToRenderer }) {
   let screenshots = [];
@@ -48,6 +154,10 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
     return screenshotsDir;
   }
 
+  const captureScreenshot = createScreenshotCapture({
+    capturePrimary: (screenshotPath) => screenshot({ filename: screenshotPath })
+  });
+
   function cleanupScreenshotFile(entry) {
     const normalizedEntry = normalizeScreenshotEntry(entry);
     if (normalizedEntry && fs.existsSync(normalizedEntry.path)) {
@@ -71,16 +181,16 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
     screenshotInProgress = true;
     try {
       console.log('Taking stealth screenshot...');
-      const currentOpacity = mainWindow.getOpacity();
+      const currentOpacity = getWindowOpacity(mainWindow);
       const screenshotDelay = appEnvironment?.screenshotDelay || 300;
 
-      mainWindow.setOpacity(0.01);
+      setWindowOpacity(mainWindow, 0.01);
       await new Promise((resolve) => setTimeout(resolve, screenshotDelay));
 
       const screenshotsDir = ensureScreenshotsDir();
       const screenshotPath = path.join(screenshotsDir, `stealth-${Date.now()}.png`);
 
-      await screenshot({ filename: screenshotPath });
+      await captureScreenshot(screenshotPath);
 
       const screenshotEntry = {
         id: nextScreenshotId(),
@@ -93,7 +203,7 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
         cleanupScreenshotFile(screenshots.shift());
       }
 
-      mainWindow.setOpacity(currentOpacity);
+      setWindowOpacity(mainWindow, currentOpacity);
 
       console.log(`Screenshot saved: ${screenshotPath}`);
       console.log(`Total screenshots: ${screenshots.length}`);
@@ -107,11 +217,14 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
       return screenshotPath;
     } catch (error) {
       try {
-        mainWindow.setOpacity(1.0);
+        setWindowOpacity(mainWindow, 1.0);
       } catch (_) {
         // no-op
       }
       console.error('Stealth screenshot error:', error);
+      sendToRenderer('screenshot-error', {
+        message: error && error.message ? error.message : 'Screenshot capture failed'
+      });
       throw error;
     } finally {
       screenshotInProgress = false;
@@ -200,5 +313,6 @@ function createScreenshotManager({ app, getMainWindow, getAppEnvironment, sendTo
 }
 
 module.exports = {
+  createScreenshotCapture,
   createScreenshotManager
 };

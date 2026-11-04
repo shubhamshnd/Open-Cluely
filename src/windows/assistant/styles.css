@@ -1,17 +1,21 @@
 /* COMPACT GLASS OVERLAY - CLUELY STYLE WITH CHAT INTERFACE */
 
 :root {
-  --glass-shell-bg: rgba(255, 255, 255, 0.05);
-  --glass-shell-border: rgba(255, 255, 255, 0.3);
-  --glass-panel-bg: rgba(255, 255, 255, 0.05);
-  --glass-panel-border: rgba(255, 255, 255, 0.3);
-  --glass-header-bg: rgba(255, 255, 255, 0.08);
-  --glass-control-bg: rgba(255, 255, 255, 0.1);
-  --glass-control-border: rgba(255, 255, 255, 0.3);
-  --glass-input-bg: rgba(255, 255, 255, 0.1);
-  --glass-input-focus-bg: rgba(255, 255, 255, 0.15);
-  --glass-message-bg: rgba(255, 255, 255, 0.05);
-  --glass-settings-bg: rgba(255, 255, 255, 0.92);
+  /* Light theme surfaces. Linux Electron cannot blur what is behind a
+     transparent window, so every surface that holds text is near-opaque
+     (>= 0.92). The glass look comes from borders, shadows and radius. The
+     user's window-opacity setting still fades the whole page. */
+  --glass-shell-bg: rgba(241, 245, 249, 0.96);
+  --glass-shell-border: rgba(100, 116, 139, 0.55);
+  --glass-panel-bg: rgba(255, 255, 255, 0.95);
+  --glass-panel-border: rgba(100, 116, 139, 0.45);
+  --glass-header-bg: rgba(226, 232, 240, 0.97);
+  --glass-control-bg: rgba(226, 232, 240, 0.97);
+  --glass-control-border: rgba(100, 116, 139, 0.5);
+  --glass-input-bg: rgba(255, 255, 255, 0.98);
+  --glass-input-focus-bg: rgba(255, 255, 255, 1);
+  --glass-message-bg: rgba(248, 250, 252, 0.96);
+  --glass-settings-bg: rgba(255, 255, 255, 0.98);
 }
 
 * {
@@ -24,6 +28,14 @@
 
 button {
   cursor: default !important;
+}
+
+/* Utility: any element carrying .hidden is not displayed. Every scoped
+   .hidden rule below (.results-panel.hidden, .settings-panel.hidden, ...)
+   sets exactly this, so this global rule only adds the missing coverage for
+   the settings provider groups and the Ollama model dropdown. */
+.hidden {
+  display: none !important;
 }
 
 body {
@@ -645,6 +657,41 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+}
+
+/* Compact monitor: a single status line when idle; the full panel shows
+   while a source is active or after a click on the header (defect: at
+   900x400 the always-expanded monitor crowded the answer area). */
+.monitor-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.monitor-header:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.monitor-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.transcription-monitor.compact .monitor-details {
+  display: none;
+}
+
+.monitor-chevron {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  flex: 0 0 auto;
+}
+
+body:not(.theme-dark) .monitor-chevron {
+  color: #334155;
 }
 
 .monitor-title {
@@ -1316,6 +1363,37 @@ body.chat-resizing * {
   border-left: 3px solid rgba(59, 130, 246, 0.8);
 }
 
+/* Sizes: the UA default (up to 2em) overwhelms a 12px chat. */
+.result-text h1, .message-content h1 { font-size: 15px; }
+.result-text h2, .message-content h2 { font-size: 14px; }
+.result-text h3, .message-content h3 { font-size: 13px; }
+
+.message-content blockquote {
+  margin: 6px 0;
+  padding: 4px 8px;
+  border-left: 3px solid rgba(148, 163, 184, 0.7);
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 0 4px 4px 0;
+  color: inherit;
+}
+
+.message-content hr {
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.5);
+  margin: 8px 0;
+}
+
+.message-content p {
+  margin: 6px 0;
+}
+
+.message-content p:first-child,
+.message-content h1:first-child,
+.message-content h2:first-child,
+.message-content h3:first-child {
+  margin-top: 0;
+}
+
 .result-text ul, .message-content ul,
 .result-text ol, .message-content ol {
   margin: 6px 0;
@@ -1711,6 +1789,14 @@ body.chat-resizing * {
   min-width: 0;
 }
 
+.settings-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 54px;
+  line-height: 1.45;
+}
+
 .settings-input-toggle {
   height: 30px;
   min-width: 50px;
@@ -1927,17 +2013,17 @@ select.settings-input {
 
 /* THEME: DARK MODE */
 body.theme-dark {
-  --glass-shell-bg: rgba(8, 14, 28, 0.08);
-  --glass-shell-border: rgba(148, 163, 184, 0.3);
-  --glass-panel-bg: rgba(15, 23, 42, 0.08);
-  --glass-panel-border: rgba(148, 163, 184, 0.24);
-  --glass-header-bg: rgba(30, 41, 59, 0.1);
-  --glass-control-bg: rgba(30, 41, 59, 0.15);
-  --glass-control-border: rgba(148, 163, 184, 0.3);
-  --glass-input-bg: rgba(15, 23, 42, 0.15);
-  --glass-input-focus-bg: rgba(30, 41, 59, 0.2);
-  --glass-message-bg: rgba(15, 23, 42, 0.08);
-  --glass-settings-bg: rgba(2, 6, 23, 0.94);
+  --glass-shell-bg: rgba(8, 14, 28, 0.96);
+  --glass-shell-border: rgba(148, 163, 184, 0.4);
+  --glass-panel-bg: rgba(15, 23, 42, 0.95);
+  --glass-panel-border: rgba(148, 163, 184, 0.32);
+  --glass-header-bg: rgba(30, 41, 59, 0.96);
+  --glass-control-bg: rgba(30, 41, 59, 0.96);
+  --glass-control-border: rgba(148, 163, 184, 0.4);
+  --glass-input-bg: rgba(15, 23, 42, 0.97);
+  --glass-input-focus-bg: rgba(30, 41, 59, 0.98);
+  --glass-message-bg: rgba(15, 23, 42, 0.94);
+  --glass-settings-bg: rgba(2, 6, 23, 0.98);
   color: rgba(226, 232, 240, 0.94);
 }
 
@@ -2232,4 +2318,1527 @@ body.theme-dark .results-content::-webkit-scrollbar-thumb:hover,
 body.theme-dark .monitor-log-list::-webkit-scrollbar-thumb:hover,
 body.theme-dark .settings-body::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.58);
+}
+
+.chat-provider-model {
+  margin-left: 8px;
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+/* Light theme Settings panel.
+ * The panel background is near-opaque white (--glass-settings-bg), but the base
+ * .settings-* rules use white text meant for the dark glass look, so in light
+ * mode labels, inputs and the close icon rendered white-on-white. Dark theme
+ * already overrides these above; this gives light theme readable equivalents. */
+body:not(.theme-dark) .settings-panel {
+  color: rgba(15, 23, 42, 0.92);
+}
+
+body:not(.theme-dark) .settings-title,
+body:not(.theme-dark) .settings-label,
+body:not(.theme-dark) .settings-shortcut-button,
+body:not(.theme-dark) .settings-shortcut-description,
+body:not(.theme-dark) .settings-shortcuts-empty,
+body:not(.theme-dark) .settings-shortcut-key {
+  color: rgba(15, 23, 42, 0.88);
+}
+
+body:not(.theme-dark) .settings-helper-text {
+  color: rgba(51, 65, 85, 0.85);
+}
+
+body:not(.theme-dark) .settings-input {
+  color: rgba(15, 23, 42, 0.95);
+  background-color: rgba(241, 245, 249, 0.95);
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .settings-input:focus {
+  background-color: #ffffff;
+  border-color: rgba(37, 99, 235, 0.7);
+}
+
+body:not(.theme-dark) .settings-input::placeholder {
+  color: rgba(100, 116, 139, 0.9);
+}
+
+body:not(.theme-dark) select.settings-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%23334155' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+}
+
+body:not(.theme-dark) select.settings-input option {
+  color: #0f172a;
+  background: #ffffff;
+}
+
+body:not(.theme-dark) .settings-helper-text code {
+  color: rgba(15, 23, 42, 0.92);
+  background: rgba(226, 232, 240, 0.9);
+}
+
+body:not(.theme-dark) #close-settings.close-btn {
+  color: rgba(153, 27, 27, 0.95);
+  background: rgba(254, 226, 226, 0.95);
+  border-color: rgba(220, 38, 38, 0.55);
+}
+
+body:not(.theme-dark) #close-settings.close-btn:hover {
+  background: rgba(254, 202, 202, 1);
+}
+
+body:not(.theme-dark) .settings-value-chip,
+body:not(.theme-dark) .settings-input-toggle {
+  color: rgba(30, 64, 175, 0.95);
+}
+
+body:not(.theme-dark) .settings-shortcut-row {
+  background: rgba(241, 245, 249, 0.9);
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+
+/* ==========================================================================
+   READABILITY LAYER
+   Every surface that carries text is near-opaque in BOTH themes, and every
+   text color reaches WCAG AA (4.5:1) on its surface. Light theme gets an
+   explicit equivalent for each dark-theme override. Keep this block last so
+   it wins the cascade over the older glass rules above.
+   ========================================================================== */
+
+/* Status/badge colors are identical in both themes (white on a saturated,
+   solid background). The old 0.9-alpha green/blue/red gave 2.3-3.8:1. */
+.monitor-master-state,
+.monitor-status-badge,
+.monitor-status-badge.off {
+  background: #475569;
+  color: #ffffff;
+}
+
+.monitor-master-state.active,
+.monitor-status-badge.listening {
+  background: #15803d;
+}
+
+.monitor-master-state.connecting,
+.monitor-status-badge.connecting {
+  background: #1d4ed8;
+}
+
+.monitor-status-badge.error {
+  background: #b91c1c;
+}
+
+.screenshot-count {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.close-app-btn {
+  background: #dc2626;
+  color: #ffffff;
+  opacity: 0.85;
+}
+
+.close-app-btn:hover {
+  background: #b91c1c;
+  opacity: 1;
+}
+
+.action-btn.analyze-btn,
+.save-settings-btn,
+.chat-manual-send {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+
+.action-btn.analyze-btn:hover,
+.save-settings-btn:hover,
+.chat-manual-send:hover {
+  background: #1e40af;
+}
+
+.action-btn:disabled,
+.chat-manual-send:disabled,
+.source-toggle:disabled {
+  /* Mute by desaturating instead of lowering opacity: saturate() keeps the
+     luminance of both the label and the fill, so the contrast ratio (and so
+     readability) survives the disabled state instead of washing the whole
+     button out over whatever surface is behind it. */
+  opacity: 1;
+  filter: saturate(0.45);
+}
+
+.chat-autoscroll-toggle.off {
+  opacity: 0.75;
+}
+
+.mobile-server-pill.off {
+  opacity: 0.85;
+}
+
+/* ---------- LAYOUT: no clipping, wrap instead of overflow ---------- */
+.glass-container {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.main-interface {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.content-section {
+  min-width: 0;
+}
+
+.action-buttons {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.action-btn,
+.source-toggle,
+.mobile-server-pill {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.utility-buttons {
+  flex: 0 0 auto;
+}
+
+.chat-header {
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chat-provider-model {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  margin-left: 0;
+  text-align: right;
+  opacity: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-live-text {
+  font-size: 10px;
+}
+
+.monitor-log-entry {
+  font-size: 10px;
+}
+
+.monitor-log-list {
+  max-height: 48px;
+}
+
+.message-content {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+  text-shadow: none;
+}
+
+.message-content.ai-response {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.message-time,
+.message-label {
+  font-size: 10px;
+}
+
+.settings-helper-text {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* ---------- ERROR / FEEDBACK BANNER ---------- */
+.status-text {
+  top: 44px;
+  max-width: min(86%, 640px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+  padding: 8px 12px 8px 30px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #f8fafc;
+  backdrop-filter: none;
+  -webkit-user-select: text;
+  user-select: text;
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.35);
+}
+
+.status-text.show {
+  pointer-events: auto;
+}
+
+.status-text::before {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  content: '\2139';
+}
+
+.status-text.error {
+  background: #7f1d1d;
+  border-color: #fca5a5;
+  color: #ffffff;
+}
+
+.status-text.error::before {
+  content: '\26A0';
+}
+
+.status-text.success {
+  background: #14532d;
+  border-color: #86efac;
+  color: #ffffff;
+}
+
+.status-text.success::before {
+  content: '\2713';
+}
+
+.monitor-log-entry.error {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+  font-weight: 600;
+  position: relative;
+  padding-left: 18px;
+}
+
+.monitor-log-entry.error::before {
+  content: '\26A0';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+}
+
+.monitor-log-entry {
+  -webkit-user-select: text;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.monitor-live-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ---------- SETTINGS: sticky Save, readable controls, focus rings ---------- */
+.settings-panel {
+  min-height: 0;
+}
+
+.settings-body {
+  min-height: 0;
+  padding-bottom: 0;
+  gap: 12px;
+}
+
+.settings-group {
+  gap: 4px;
+}
+
+.settings-body .save-settings-btn {
+  position: sticky;
+  bottom: 6px;
+  z-index: 3;
+  margin: 8px 0 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  min-height: 36px;
+  /* Solid band around the sticky button so scrolled fields never show
+     through or get cut mid-line behind it. */
+  box-shadow: 0 0 0 14px var(--glass-settings-bg), 0 -14px 0 14px var(--glass-settings-bg);
+}
+
+.settings-label {
+  font-size: 11px;
+}
+
+.settings-input {
+  font-size: 12px;
+  min-height: 28px;
+  min-width: 0;
+}
+
+.settings-input-toggle {
+  min-height: 28px;
+  font-size: 11px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.settings-input:focus-visible,
+.settings-input-toggle:focus-visible,
+.save-settings-btn:focus-visible,
+.action-btn:focus-visible,
+.source-toggle:focus-visible,
+.chat-manual-input:focus-visible,
+.chat-manual-send:focus-visible,
+.chat-autoscroll-toggle:focus-visible,
+.message-copy-btn:focus-visible,
+.ai-include-toggle:focus-visible,
+.close-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+body.theme-dark .settings-input:focus-visible,
+body.theme-dark .settings-input-toggle:focus-visible,
+body.theme-dark .save-settings-btn:focus-visible,
+body.theme-dark .action-btn:focus-visible,
+body.theme-dark .source-toggle:focus-visible,
+body.theme-dark .chat-manual-input:focus-visible,
+body.theme-dark .chat-manual-send:focus-visible,
+body.theme-dark .chat-autoscroll-toggle:focus-visible,
+body.theme-dark .message-copy-btn:focus-visible,
+body.theme-dark .ai-include-toggle:focus-visible,
+body.theme-dark .close-btn:focus-visible {
+  outline-color: #93c5fd;
+}
+
+select.settings-input option {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+body.theme-dark select.settings-input option {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+/* ==========================================================================
+   LIGHT THEME (explicit equivalent for every dark-theme override)
+   ========================================================================== */
+body:not(.theme-dark) {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .glass-container {
+  box-shadow:
+    0 14px 38px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body:not(.theme-dark) .status-section,
+body:not(.theme-dark) .chat-composer,
+body:not(.theme-dark) .close-confirmation-card {
+  border-color: rgba(100, 116, 139, 0.5);
+}
+
+body:not(.theme-dark) .timer,
+body:not(.theme-dark) .monitor-title,
+body:not(.theme-dark) .monitor-source-label,
+body:not(.theme-dark) .chat-title,
+body:not(.theme-dark) .result-text,
+body:not(.theme-dark) .results-title,
+body:not(.theme-dark) .close-confirmation-title,
+body:not(.theme-dark) .message-content,
+body:not(.theme-dark) .result-text li,
+body:not(.theme-dark) .message-content li {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .monitor-live-text,
+body:not(.theme-dark) .close-confirmation-text,
+body:not(.theme-dark) .partial-text {
+  color: #334155;
+}
+
+body:not(.theme-dark) .message-time {
+  color: #475569;
+}
+
+body:not(.theme-dark) .chat-provider-model {
+  color: #334155;
+}
+
+body:not(.theme-dark) .status-text {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+body:not(.theme-dark) .status-text.error {
+  background: #7f1d1d;
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .status-text.success {
+  background: #14532d;
+  color: #ffffff;
+}
+
+/* Top-bar controls */
+body:not(.theme-dark) .action-btn {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .action-btn:hover {
+  background: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+
+body:not(.theme-dark) .action-btn.analyze-btn,
+body:not(.theme-dark) .action-btn.transcription-btn.active,
+body:not(.theme-dark) .action-btn.transcription-btn.listening,
+body:not(.theme-dark) .action-btn.transcription-btn.connecting {
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .action-btn.analyze-btn {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body:not(.theme-dark) .action-btn.analyze-btn:hover {
+  background: #1e40af;
+}
+
+body:not(.theme-dark) .action-btn.transcription-btn {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+}
+
+body:not(.theme-dark) .action-btn.transcription-btn.active,
+body:not(.theme-dark) .action-btn.transcription-btn.listening {
+  background: #15803d;
+  border-color: #166534;
+}
+
+body:not(.theme-dark) .action-btn.transcription-btn.connecting {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body:not(.theme-dark) .action-btn.screen-ai-btn {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #0c4a6e;
+}
+
+body:not(.theme-dark) .action-btn.screen-ai-btn:hover {
+  background: #bae6fd;
+}
+
+body:not(.theme-dark) .action-btn.suggest-btn {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #78350f;
+}
+
+body:not(.theme-dark) .action-btn.notes-btn {
+  background: #ede9fe;
+  border-color: #7c3aed;
+  color: #4c1d95;
+}
+
+body:not(.theme-dark) .action-btn.insights-btn {
+  background: #fce7f3;
+  border-color: #db2777;
+  color: #831843;
+}
+
+body:not(.theme-dark) .action-btn.theme-toggle-btn {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  color: #312e81;
+}
+
+body:not(.theme-dark) .action-btn.settings-btn {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .transcription-control {
+  border-color: #16a34a;
+  background: #dcfce7;
+}
+
+body:not(.theme-dark) .source-toggle {
+  border-color: #64748b;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .source-toggle:hover {
+  background: #e2e8f0;
+}
+
+body:not(.theme-dark) .source-toggle.selected {
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .source-toggle.source-system.selected {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+body:not(.theme-dark) .source-toggle.source-mic.selected {
+  background: #b91c1c;
+  border-color: #991b1b;
+}
+
+body:not(.theme-dark) .source-toggle.running {
+  box-shadow: 0 0 0 2px rgba(30, 64, 175, 0.5);
+}
+
+body:not(.theme-dark) .mobile-server-pill {
+  background: #f1f5f9;
+  border-color: #64748b;
+  color: #334155;
+}
+
+body:not(.theme-dark) .mobile-server-pill:hover {
+  background: #e2e8f0;
+}
+
+body:not(.theme-dark) .mobile-server-pill.idle {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #78350f;
+}
+
+body:not(.theme-dark) .mobile-server-pill.connected {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+}
+
+/* Transcription monitor */
+body:not(.theme-dark) .transcription-monitor {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+body:not(.theme-dark) .monitor-source-row {
+  background: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .monitor-log-entry {
+  background: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .monitor-log-entry.error {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #7f1d1d;
+}
+
+/* Chat */
+body:not(.theme-dark) .chat-composer {
+  background: #f1f5f9;
+  border-top-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .chat-manual-input {
+  background: #ffffff;
+  border-color: #64748b;
+  color: #0f172a;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+body:not(.theme-dark) .chat-manual-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+body:not(.theme-dark) .chat-manual-input::placeholder {
+  color: #334155;
+}
+
+body:not(.theme-dark) .chat-manual-send {
+  border-color: #1e40af;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .chat-manual-send:hover {
+  background: #1e40af;
+}
+
+body:not(.theme-dark) .chat-autoscroll-toggle {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .chat-message {
+  background: #f8fafc;
+  border-color: rgba(100, 116, 139, 0.45);
+}
+
+body:not(.theme-dark) .chat-message.voice-message {
+  background: #ecfdf5;
+  border-color: rgba(22, 163, 74, 0.5);
+  border-left-color: #16a34a;
+}
+
+body:not(.theme-dark) .chat-message.screenshot-message {
+  background: #eff6ff;
+  border-color: rgba(37, 99, 235, 0.45);
+  border-left-color: #2563eb;
+}
+
+body:not(.theme-dark) .chat-message.ai-response-message {
+  background: #f5f3ff;
+  border-color: rgba(124, 58, 237, 0.45);
+  border-left-color: #7c3aed;
+}
+
+body:not(.theme-dark) .chat-message.system-message {
+  background: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.5);
+  border-left-color: #64748b;
+}
+
+body:not(.theme-dark) .chat-message.interim {
+  background: #fffbeb;
+  border-left-color: #d97706;
+}
+
+body:not(.theme-dark) .chat-message.partial {
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+}
+
+body:not(.theme-dark) .partial-indicator {
+  color: #166534;
+  background: #dcfce7;
+}
+
+body:not(.theme-dark) .message-label {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .message-content {
+  background: #ffffff;
+  text-shadow: none;
+}
+
+body:not(.theme-dark) .message-content.system-message {
+  color: #475569;
+  background: #ffffff;
+}
+
+body:not(.theme-dark) .message-content.ai-response {
+  color: #0f172a;
+  background: #ffffff;
+}
+
+body:not(.theme-dark) .result-text .key-points,
+body:not(.theme-dark) .message-content .key-points {
+  background: #fef9c3;
+  border-left-color: #ca8a04;
+}
+
+body:not(.theme-dark) .result-text strong,
+body:not(.theme-dark) .message-content strong {
+  color: #0f172a;
+  background: #fef08a;
+  box-shadow: none;
+}
+
+body:not(.theme-dark) .result-text h1,
+body:not(.theme-dark) .message-content h1,
+body:not(.theme-dark) .result-text h2,
+body:not(.theme-dark) .message-content h2,
+body:not(.theme-dark) .result-text h3,
+body:not(.theme-dark) .message-content h3 {
+  color: #0f172a;
+  background: #dbeafe;
+}
+
+body:not(.theme-dark) .result-text .logic-section,
+body:not(.theme-dark) .message-content .logic-section {
+  background: #eff6ff;
+}
+
+body:not(.theme-dark) .ai-include-toggle {
+  border-color: #059669;
+  background: #d1fae5;
+  color: #064e3b;
+}
+
+body:not(.theme-dark) .ai-include-toggle.excluded {
+  border-color: #e11d48;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+body:not(.theme-dark) .message-copy-btn {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+body:not(.theme-dark) .message-copy-btn:hover {
+  background: #bfdbfe;
+}
+
+body:not(.theme-dark) .ai-excluded-note {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+
+body:not(.theme-dark) .loading-overlay {
+  background: rgba(241, 245, 249, 0.92);
+}
+
+body:not(.theme-dark) .loading-text {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .loading-text small {
+  color: #475569;
+}
+
+body:not(.theme-dark) .results-panel,
+body:not(.theme-dark) .chat-container {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+body:not(.theme-dark) .close-btn {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .close-confirmation {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+body:not(.theme-dark) .close-confirmation-card {
+  background: #ffffff;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.3);
+}
+
+body:not(.theme-dark) .close-confirmation-btn-secondary {
+  background: #e2e8f0;
+  border-color: #64748b;
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .close-confirmation-btn-secondary:hover {
+  background: #cbd5e1;
+}
+
+body:not(.theme-dark) .close-confirmation-btn-danger {
+  background: #b91c1c;
+  border-color: #991b1b;
+  color: #ffffff;
+}
+
+/* Settings (the rest of the light Settings rules sit just above) */
+body:not(.theme-dark) .settings-title,
+body:not(.theme-dark) .settings-label {
+  color: #0f172a;
+}
+
+body:not(.theme-dark) .settings-helper-text,
+body:not(.theme-dark) .settings-shortcut-description,
+body:not(.theme-dark) .settings-shortcuts-empty {
+  color: #475569;
+}
+
+body:not(.theme-dark) .settings-shortcut-icon {
+  color: #1e3a8a;
+}
+
+body:not(.theme-dark) .settings-shortcut-key {
+  color: #1e3a8a;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+body:not(.theme-dark) .settings-value-chip,
+body:not(.theme-dark) .settings-input-toggle {
+  color: #1e3a8a;
+  background: #dbeafe;
+  border-color: #60a5fa;
+}
+
+body:not(.theme-dark) .settings-input-toggle:hover {
+  background: #bfdbfe;
+}
+
+body:not(.theme-dark) .settings-input {
+  background-color: #ffffff;
+  border-color: #64748b;
+}
+
+body:not(.theme-dark) .settings-shortcut-row {
+  background: #f1f5f9;
+}
+
+body:not(.theme-dark) .settings-helper-text code {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+body:not(.theme-dark) .save-settings-btn {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+
+body:not(.theme-dark) .chat-messages::-webkit-scrollbar-track,
+body:not(.theme-dark) .results-content::-webkit-scrollbar-track,
+body:not(.theme-dark) .monitor-log-list::-webkit-scrollbar-track,
+body:not(.theme-dark) .settings-body::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+body:not(.theme-dark) .chat-messages::-webkit-scrollbar-thumb,
+body:not(.theme-dark) .results-content::-webkit-scrollbar-thumb,
+body:not(.theme-dark) .monitor-log-list::-webkit-scrollbar-thumb,
+body:not(.theme-dark) .settings-body::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+}
+
+body:not(.theme-dark) .chat-messages::-webkit-scrollbar-thumb:hover,
+body:not(.theme-dark) .results-content::-webkit-scrollbar-thumb:hover,
+body:not(.theme-dark) .monitor-log-list::-webkit-scrollbar-thumb:hover,
+body:not(.theme-dark) .settings-body::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* ==========================================================================
+   DARK THEME: solid surfaces + AA text (wins over the older dark rules above)
+   ========================================================================== */
+body.theme-dark .timer,
+body.theme-dark .monitor-title,
+body.theme-dark .monitor-source-label,
+body.theme-dark .chat-title,
+body.theme-dark .result-text,
+body.theme-dark .results-title,
+body.theme-dark .close-confirmation-title,
+body.theme-dark .message-content,
+body.theme-dark .result-text li,
+body.theme-dark .message-content li {
+  color: #f1f5f9;
+}
+
+body.theme-dark .monitor-live-text,
+body.theme-dark .close-confirmation-text,
+body.theme-dark .partial-text {
+  color: #cbd5e1;
+}
+
+body.theme-dark .message-time,
+body.theme-dark .settings-helper-text,
+body.theme-dark .settings-shortcut-description,
+body.theme-dark .settings-shortcuts-empty {
+  color: #a8b6ca;
+}
+
+body.theme-dark .chat-provider-model {
+  color: #cbd5e1;
+}
+
+body.theme-dark .action-btn {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .action-btn:hover {
+  background: #334155;
+}
+
+body.theme-dark .action-btn.analyze-btn {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+body.theme-dark .action-btn.analyze-btn:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .action-btn.transcription-btn {
+  background: #14532d;
+  border-color: #22c55e;
+  color: #f0fdf4;
+}
+
+body.theme-dark .action-btn.transcription-btn.active,
+body.theme-dark .action-btn.transcription-btn.listening {
+  background: #15803d;
+  border-color: #4ade80;
+  color: #ffffff;
+}
+
+body.theme-dark .action-btn.transcription-btn.connecting {
+  background: #1d4ed8;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+body.theme-dark .action-btn.screen-ai-btn {
+  background: #0c4a6e;
+  border-color: #38bdf8;
+  color: #f0f9ff;
+}
+
+body.theme-dark .action-btn.screen-ai-btn:hover {
+  background: #075985;
+}
+
+body.theme-dark .action-btn.suggest-btn {
+  background: #78350f;
+  border-color: #fbbf24;
+  color: #fffbeb;
+}
+
+body.theme-dark .action-btn.notes-btn {
+  background: #4c1d95;
+  border-color: #a78bfa;
+  color: #f5f3ff;
+}
+
+body.theme-dark .action-btn.insights-btn {
+  background: #831843;
+  border-color: #f472b6;
+  color: #fdf2f8;
+}
+
+body.theme-dark .action-btn.theme-toggle-btn {
+  background: #3730a3;
+  border-color: #a5b4fc;
+  color: #eef2ff;
+}
+
+body.theme-dark .action-btn.settings-btn {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .transcription-control {
+  border-color: #22c55e;
+  background: #0f2f22;
+}
+
+body.theme-dark .source-toggle {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .source-toggle:hover {
+  background: #334155;
+}
+
+body.theme-dark .source-toggle.selected {
+  color: #ffffff;
+}
+
+body.theme-dark .source-toggle.source-system.selected {
+  background: #1d4ed8;
+  border-color: #60a5fa;
+}
+
+body.theme-dark .source-toggle.source-mic.selected {
+  background: #b91c1c;
+  border-color: #f87171;
+}
+
+body.theme-dark .mobile-server-pill {
+  background: #0f172a;
+  border-color: #64748b;
+  color: #e2e8f0;
+}
+
+body.theme-dark .mobile-server-pill:hover {
+  background: #1e293b;
+}
+
+body.theme-dark .mobile-server-pill.idle {
+  background: #451a03;
+  border-color: #d97706;
+  color: #fde68a;
+}
+
+body.theme-dark .mobile-server-pill.connected {
+  background: #14532d;
+  border-color: #22c55e;
+  color: #dcfce7;
+}
+
+body.theme-dark .transcription-monitor {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+body.theme-dark .monitor-source-row {
+  background: #111c33;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+body.theme-dark .monitor-log-entry {
+  background: #111c33;
+  border-color: rgba(148, 163, 184, 0.38);
+  color: #e2e8f0;
+}
+
+body.theme-dark .monitor-log-entry.error {
+  background: #450a0a;
+  border-color: #f87171;
+  color: #fecaca;
+}
+
+body.theme-dark .chat-composer {
+  background: #0f172a;
+}
+
+body.theme-dark .chat-manual-input {
+  background: #0b1220;
+  color: #f1f5f9;
+}
+
+body.theme-dark .chat-manual-input::placeholder {
+  color: #cbd5e1;
+}
+
+body.theme-dark .chat-manual-send {
+  background: #2563eb;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+body.theme-dark .chat-manual-send:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .chat-autoscroll-toggle {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+body.theme-dark .chat-message {
+  background: #111c33;
+  border-color: rgba(148, 163, 184, 0.38);
+}
+
+body.theme-dark .chat-message.voice-message {
+  background: #052e22;
+  border-color: rgba(34, 197, 94, 0.5);
+  border-left-color: #22c55e;
+}
+
+body.theme-dark .chat-message.screenshot-message {
+  background: #0b1e3f;
+  border-color: rgba(96, 165, 250, 0.5);
+  border-left-color: #60a5fa;
+}
+
+body.theme-dark .chat-message.ai-response-message {
+  background: #1e1538;
+  border-color: rgba(167, 139, 250, 0.5);
+  border-left-color: #a78bfa;
+}
+
+body.theme-dark .chat-message.system-message {
+  background: #1e293b;
+  border-color: rgba(148, 163, 184, 0.45);
+  border-left-color: #94a3b8;
+}
+
+body.theme-dark .chat-message.interim {
+  background: #2a2108;
+  border-left-color: #f59e0b;
+}
+
+body.theme-dark .chat-message.partial {
+  background: #052e22;
+  border-left-color: #22c55e;
+}
+
+body.theme-dark .partial-indicator {
+  color: #bbf7d0;
+  background: #14532d;
+}
+
+body.theme-dark .message-label {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+body.theme-dark .message-content {
+  background: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-dark .message-content.system-message {
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-dark .message-content.ai-response {
+  color: #f8fafc;
+  background: #1e293b;
+}
+
+body.theme-dark .result-text .key-points,
+body.theme-dark .message-content .key-points {
+  background: #3a3210;
+  border-left-color: #facc15;
+}
+
+body.theme-dark .result-text strong,
+body.theme-dark .message-content strong {
+  color: #ffffff;
+  background: #4d3f0a;
+}
+
+body.theme-dark .result-text h1,
+body.theme-dark .message-content h1,
+body.theme-dark .result-text h2,
+body.theme-dark .message-content h2,
+body.theme-dark .result-text h3,
+body.theme-dark .message-content h3 {
+  color: #f1f5f9;
+  background: #1e3a5f;
+}
+
+body.theme-dark .result-text .logic-section,
+body.theme-dark .message-content .logic-section {
+  background: #0f2744;
+}
+
+body.theme-dark .ai-include-toggle {
+  border-color: #34d399;
+  background: #064e3b;
+  color: #ecfdf5;
+}
+
+body.theme-dark .ai-include-toggle.excluded {
+  border-color: #fb7185;
+  background: #4c0519;
+  color: #fecdd3;
+}
+
+body.theme-dark .message-copy-btn {
+  border-color: #60a5fa;
+  background: #1e3a8a;
+  color: #f1f5f9;
+}
+
+body.theme-dark .message-copy-btn:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .ai-excluded-note {
+  color: #fecdd3;
+  background: #4c0519;
+}
+
+body.theme-dark .loading-overlay {
+  background: rgba(2, 6, 23, 0.9);
+}
+
+body.theme-dark .results-panel,
+body.theme-dark .chat-container {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+body.theme-dark .close-confirmation-card {
+  background: #0f172a;
+}
+
+body.theme-dark .close-confirmation-btn-secondary {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+body.theme-dark .close-confirmation-btn-secondary:hover {
+  background: #475569;
+}
+
+body.theme-dark .close-confirmation-btn-danger {
+  background: #b91c1c;
+  border-color: #f87171;
+  color: #ffffff;
+}
+
+body.theme-dark .settings-title,
+body.theme-dark .settings-label {
+  color: #f1f5f9;
+}
+
+body.theme-dark .settings-value-chip,
+body.theme-dark .settings-input-toggle {
+  color: #f1f5f9;
+  background: #1e3a8a;
+  border-color: #60a5fa;
+}
+
+body.theme-dark .settings-input-toggle:hover {
+  background: #1d4ed8;
+}
+
+body.theme-dark .settings-shortcut-row {
+  background: #111c33;
+}
+
+body.theme-dark .settings-shortcut-key {
+  color: #f1f5f9;
+  background: #1e3a8a;
+  border-color: #60a5fa;
+}
+
+body.theme-dark .settings-shortcut-button {
+  color: #e2e8f0;
+}
+
+body.theme-dark .settings-input {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+body.theme-dark .settings-input::placeholder {
+  color: #94a3b8;
+}
+
+body.theme-dark .save-settings-btn {
+  background: #2563eb;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+/* Let the chat panel shrink instead of overflowing the window at its
+   600x380 minimum (the wrapped top bar needs the extra rows). */
+.chat-container {
+  min-height: 120px;
+}
+
+.monitor-log-list {
+  max-height: 40px;
+}
+
+/* ==========================================================================
+   READABILITY POLISH (round 2): mode buttons, placeholder, secondary text,
+   icons, edges
+   ========================================================================== */
+/* Mode-button labels: 10px is below the readable floor for a label this
+   small; 11px keeps the top bar intact and reads clearly. */
+.action-btn.analyze-btn,
+.action-btn.screen-ai-btn,
+.action-btn.suggest-btn,
+.action-btn.notes-btn,
+.action-btn.insights-btn {
+  font-size: 11px;
+}
+
+/* Secondary text: everything small and dim moves to at least 11px. These
+   were 9-10px, below the readable floor for status text. Colors already
+   meet >= 4.5:1 in both themes; this is the size floor. */
+.monitor-title,
+.monitor-source-label,
+.monitor-master-state,
+.monitor-status-badge,
+.monitor-live-text,
+.monitor-log-entry,
+.message-time,
+.message-label,
+.settings-helper-text,
+.settings-shortcut-description,
+.settings-shortcuts-empty {
+  font-size: 11px;
+}
+
+/* Top status bar: pill and counter are status adornments, not listed
+   secondary text; 10.5px keeps the bar on one row at the 900px default. */
+.mobile-server-pill,
+.screenshot-count {
+  font-size: 10.5px;
+}
+
+/* Claw back the width the 11px mode-button labels added so the top bar
+   stays on one row at the default 900x400 size. */
+.action-btn.analyze-btn,
+.action-btn.screen-ai-btn {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Keep the pills compact at the new size. */
+.monitor-status-badge {
+  padding: 1px 7px;
+}
+
+.monitor-master-state {
+  padding: 1px 7px;
+}
+
+/* Room for three log lines at 11px. */
+.monitor-log-list {
+  max-height: 56px;
+}
+
+/* ---------- EDGES: margin around the frame controls ---------- */
+/* Close button: centered in a 30px handle it sat 5-6px from the top frame
+   edge and crowded the corner accent. Give it real air. */
+.drag-handle {
+  padding: 9px 16px 0 0;
+  align-items: flex-start;
+}
+
+/* Corner resize accents: an 18px triangle hard against the rounded frame
+   corner read as clipped and crowded the close button / Add button. Inset
+   them and trim the size; the grab area stays usable. */
+.resize-handle-ne,
+.resize-handle-se,
+.resize-handle-sw,
+.resize-handle-nw {
+  width: 14px;
+  height: 14px;
+}
+
+.resize-handle-ne {
+  top: 4px;
+  right: 4px;
+  border-radius: 0 8px 0 0;
+}
+
+.resize-handle-se {
+  right: 4px;
+  bottom: 4px;
+  border-radius: 0 0 8px 0;
+}
+
+.resize-handle-sw {
+  left: 4px;
+  bottom: 4px;
+  border-radius: 0 0 0 8px;
+}
+
+.resize-handle-nw {
+  top: 4px;
+  left: 4px;
+  border-radius: 8px 0 0 0;
+}
+
+/* Add button: lift the composer off the bottom frame edge. */
+.chat-composer {
+  padding-bottom: 10px;
+}
+
+/* ---------- STRENGTHEN the items the vision pass still flagged ---------- */
+/* Light-theme mode buttons: same hue family, one shade darker text. */
+body:not(.theme-dark) .action-btn.screen-ai-btn {
+  color: #082f49;
+}
+
+body:not(.theme-dark) .action-btn.suggest-btn {
+  color: #451a03;
+}
+
+body:not(.theme-dark) .action-btn.notes-btn {
+  color: #2e1065;
+}
+
+body:not(.theme-dark) .action-btn.insights-btn {
+  color: #500724;
+}
+
+/* Model label: full-strength text at 12px in the chat header. */
+body:not(.theme-dark) .chat-provider-model {
+  color: #0f172a;
+}
+
+body.theme-dark .chat-provider-model {
+  color: #e2e8f0;
+}
+
+.chat-provider-model {
+  font-size: 12px;
+}
+
+/* Dim grays move one step darker/lighter for small-size rendering. */
+body:not(.theme-dark) .message-time,
+body:not(.theme-dark) .settings-helper-text,
+body:not(.theme-dark) .settings-shortcut-description,
+body:not(.theme-dark) .settings-shortcuts-empty {
+  color: #334155;
+}
+
+body.theme-dark .message-time,
+body.theme-dark .settings-helper-text,
+body.theme-dark .settings-shortcut-description,
+body.theme-dark .settings-shortcuts-empty {
+  color: #cbd5e1;
+}
+
+/* Composer text and placeholder at 12px. */
+.chat-manual-input {
+  font-size: 12px;
+}
+
+/* Cap the line length of chat messages: at the default width a full-width
+   line runs ~130 characters, well past the comfortable reading range. */
+.message-content {
+  max-width: 78ch;
+}
+
+/* Monitor live text and log lines have room for 12px; the panel scrolls. */
+.monitor-live-text,
+.monitor-log-entry {
+  font-size: 12px;
+}
+
+.monitor-log-list {
+  max-height: 62px;
+}
+
+/* Corner accents: keep them subtle so they don't fight the close/Add
+   buttons for attention (hover still brightens them). */
+.resize-handle-ne {
+  background: linear-gradient(225deg, transparent 50%, rgba(59, 130, 246, 0.3) 50%);
+}
+
+.resize-handle-se {
+  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.3) 50%);
+}
+
+.resize-handle-sw {
+  background: linear-gradient(225deg, rgba(59, 130, 246, 0.3) 50%, transparent 50%);
+}
+
+.resize-handle-nw {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 50%, transparent 50%);
 }

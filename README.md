@@ -100,13 +100,17 @@ Use Notes to produce a shareable record at the end of a meeting or interview deb
 
 ### Requirements
 
-- Windows 10/11 is the primary development target for this repo.
+- Windows 10/11 is the primary development target for this repo; Linux is supported with the limitations listed below.
 - Node.js `20.x` is recommended. The existing docs and environment were prepared around `20.20.1`.
 - npm `10+`
 - At least one Gemini API key (configured in the app Settings UI)
-- One AssemblyAI API key (configured in the app Settings UI)
+- A speech-to-text backend (configured in the app Settings UI): one AssemblyAI API key, or AWS credentials for Amazon Transcribe (see *Speech-to-text (STT) providers*)
+
+**Linux screenshot support:** the primary capture path (`screenshot-desktop`) shells out to an external tool — install `gnome-screenshot`, `scrot`, or ImageMagick (`import`) on X11, or `grim` on Wayland. If none of these is present, the app automatically falls back to Electron's built-in `desktopCapturer` (works on X11 and on Wayland via the XDG desktop portal), which covers the common case with no extra install. If both paths fail, the UI shows an explicit error instead of failing silently.
 
 ### Setup
+
+Windows (PowerShell):
 
 ```powershell
 nvm install 20.20.1
@@ -115,7 +119,22 @@ npm ci
 Copy-Item .env.example .env
 ```
 
+Linux / macOS (bash):
+
+```bash
+nvm install 20.20.1
+nvm use 20.20.1
+npm ci
+cp .env.example .env
+```
+
 API keys are configured from the in-app Settings panel after launch.
+
+On Linux under Wayland, global shortcuts may not register through the default Ozone backend. If they don't, start the app through XWayland:
+
+```bash
+npm start -- --ozone-platform=x11
+```
 
 Start the app:
 
@@ -141,18 +160,41 @@ npm run build:win
 This creates:
 
 ```text
-dist/GoogleChrome.exe
+dist/OpenCluely.exe
 ```
 
-You can then run the packaged app directly by double-clicking `dist/GoogleChrome.exe`.
+You can then run the packaged app directly by double-clicking `dist/OpenCluely.exe`.
 
-### Native Windows Build Tools
+### Installing the .deb on Linux (Debian/Ubuntu)
 
-This app depends on native modules. If `npm ci` fails with `node-gyp` or Visual Studio toolchain errors, install the C++ build tools and Python:
+`npm run build:linux` produces two artifacts: `dist/Open Cluely-<version>.AppImage` and `dist/open-cluely_<version>_amd64.deb`. Install the package with apt (resolves the dependencies for you):
 
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```bash
+sudo apt install ./dist/open-cluely_1.0.0_amd64.deb
+open-cluely            # via /usr/bin/open-cluely (update-alternatives symlink)
+# or from the app menu / activities: "Open Cluely"
 ```
+
+The package installs the app to `/opt/Open Cluely/`, a `open-cluely.desktop` entry under `/usr/share/applications/`, and hicolor icons under `/usr/share/icons/hicolor/*/apps/open-cluely.png`. Runtime dependencies (`libgtk-3-0`, `libnss3`, `libxss1`, `libsecret-1-0`, …) are declared in the package and pulled in by apt. The installer's `postinst` marks `/opt/Open Cluely/chrome-sandbox` SUID root (`4755`), so the installed app runs with the Chromium sandbox enabled — no `--no-sandbox` needed (see the AppArmor note under *Known limitations on Linux*).
+
+Settings and other runtime data live in the user-data directory: `~/.config/open-cluely/` (state in `cache/app-state.json`, screenshots in `.stealth_screenshots/`). Uninstalling the package does not touch them:
+
+```bash
+sudo apt remove open-cluely
+```
+
+### Native build tools
+
+None are required. `package-lock.json` contains no `gypfile` entries and no install scripts that compile native code (the only `postinstall` is the harmless `opencollective-postinstall` banner), so `npm ci` does not need Visual Studio Build Tools, Python, or a C++ compiler on any OS.
+
+### Known limitations on Linux
+
+- **Content protection does not hide the window.** `HIDE_FROM_SCREEN_CAPTURE` / `setContentProtection` is only effective on Windows and macOS. On Linux the window is visible to screen capture and screen sharing.
+- **Host audio on Linux uses PipeWire's `pw-record`.** The Host source runs `pw-record -P '{ stream.capture.sink=true }'` from the main process, which records the monitor of your *default playback output* (audio-only; no screen-share/portal session, no video). It needs a running PipeWire session and the `pw-record` tool (`pipewire-bin`/`pipewire-utils`). It does not change your default microphone/output or any other app's audio, the process is stopped when you stop transcription, close the window or quit. Verified on Ubuntu 26.04 / GNOME 50 / PipeWire; not tested on PulseAudio-only systems (the Host source reports an error there; use Mic). Windows/macOS are unchanged.
+- **Screenshots have a fallback.** If no external tool (`gnome-screenshot`, `scrot`, `import`, `grim`) is installed, the app uses Electron's `desktopCapturer`. On Wayland this goes through the XDG desktop portal and may show a permission prompt.
+- **Global shortcuts cannot fire while a native Wayland window has focus** (Electron 28 has no GlobalShortcuts-portal support). On GNOME, click **Add to GNOME shortcuts** under Settings → Keyboard Shortcuts to install them as real GNOME keyboard shortcuts that work in any window (single-instance `--action=<id>` launches; **Remove from GNOME shortcuts** reverts it, leaving your own custom shortcuts untouched). On other Wayland compositors, start with `--ozone-platform=x11` (see Setup) and keep an XWayland window focused.
+- Both an AppImage and a `.deb` are built on Linux (see *Installing the .deb on Linux*); running the AppImage on newer distros may need `libfuse2`.
+- **Chromium sandbox on Ubuntu 23.10+ / 24.04+:** Ubuntu's AppArmor policy blocks unprivileged user namespaces, which the Chromium sandbox needs when no SUID helper is installed. The `.deb` is unaffected — its `postinst` sets `chrome-sandbox` to mode `4755` (SUID root), so the installed app runs with the normal sandbox and no flags. The **AppImage cannot ship a SUID helper**, so if it fails to start with a sandbox error (`The SUID sandbox helper binary was found, but is not configured correctly` / `FATAL:...zygote`), either launch it with `--no-sandbox` (the GNOME shortcut script adds that flag automatically when the app runs from source or an AppImage), or — cleaner — install an AppArmor profile for the AppImage path such as `/etc/apparmor.d/open-cluely` containing `abi <abi/4.0>,` + `profile open-cluely "/home/<you>/Apps/Open Cluely-*.AppImage" flags=(unconfined) { userns, }` and run `sudo apparmor_parser -r /etc/apparmor.d/open-cluely`. Do **not** disable the restriction system-wide (`kernel.apparmor_restrict_unprivileged_userns`); the package never touches sysctl.
 
 ## Configuration
 
@@ -167,6 +209,8 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-pack
 | `NODE_ENV` | No | Defaults to `production`. `development` opens DevTools automatically. |
 | `NODE_OPTIONS` | No | Defaults to `--max-old-space-size=4096`. |
 
+On packaged builds (Windows portable, Linux AppImage/.deb, macOS), the capture/startup toggles above are controlled from the in-app Settings panel and persisted in `cache/app-state.json` under the user-data directory — `.env` only applies when running from source (`npm start`), so edit it before launching and treat it as a dev-only file.
+
 ### Source-Of-Truth Config
 
 [`src/config.js`](./src/config.js) defines the app's configurable lists and defaults:
@@ -178,9 +222,36 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-pack
 
 The first item in each model/language list is treated as the default.
 
+### Speech-to-text (STT) providers
+
+Settings → **Speech-to-text provider** picks the streaming transcription backend; only the selected provider's fields are shown, and the select is disabled while transcription is running (stop transcription to switch).
+
+- **AssemblyAI** (default): needs one AssemblyAI API key. Streaming pricing is billed by AssemblyAI per session.
+- **Amazon Transcribe**: streams 16 kHz PCM per source (`StartStreamTranscription`). Needs AWS credentials (below) and a region (default `us-east-1`); language is one of `en-US`, `en-IN`, `en-GB`, `en-AU`, `hi-IN`. Streaming costs **$0.0001667/second ≈ $0.60/hour per stream** (us-east-1 pricing) — Mic and Host are separate streams, so running both costs ≈ $1.20/hour. The IAM identity needs `transcribe:StartStreamTranscription`.
+- An optional **custom vocabulary** (Settings → Custom words → *Create / update vocabulary*) improves recognition of names and jargon. The vocabulary is named `open-cluely-<language>` and also needs `transcribe:CreateVocabulary`, `transcribe:UpdateVocabulary` and `transcribe:GetVocabulary`. Transcribe phrases can't contain spaces, so spaces become hyphens (`REST API` → `REST-API`).
+
+### AWS credentials (Bedrock and Amazon Transcribe)
+
+One **AWS Auth Method** block in Settings is shared by Amazon Bedrock (AI provider) and Amazon Transcribe (STT provider); it appears when either is selected:
+
+- **Default (AWS credential chain)** — no keys stored; the SDK resolves `AWS_PROFILE`, environment variables, `~/.aws`, or an instance role.
+- **AWS profile** — a named profile from `~/.aws/config` / `~/.aws/credentials`. The app lists profile *names only* (Refresh re-reads the files); credential values are only ever read by the AWS SDK, never by the app.
+- **Access key + secret (+ optional session token)** — static keys; the session token is only for temporary (STS) credentials.
+- **Bedrock API key** — bearer key, sent as `Authorization: Bearer …`. **Bedrock only: Amazon Transcribe cannot use it.** Bedrock *model listing* (Fetch) needs SigV4 credentials and is unavailable in this mode.
+
+#### Separate credentials for Amazon Transcribe (optional)
+
+Bedrock and Transcribe often need *different* IAM identities — e.g. a profile that may call `bedrock:InvokeModel` but not Transcribe, and another with Transcribe access but no Bedrock. Settings → Amazon Transcribe → **Transcribe AWS Credentials** picks what Transcribe signs with, without touching Bedrock:
+
+- **Same as Bedrock (default)** — the shared block above, exactly the historical behavior.
+- **Different AWS profile** — another named profile from `~/.aws` (names only, with Refresh), e.g. one whose IAM identity has `transcribe:StartStreamTranscription` (plus the vocabulary actions if you use Custom words).
+- **Access key + secret (+ optional session token)** — static keys stored only for Transcribe, masked in Settings like every other key.
+
+Each identity needs only its own permissions: the Bedrock one needs `bedrock:InvokeModel` (and `bedrock:ListFoundationModels` for model Fetch), the Transcribe one needs `transcribe:StartStreamTranscription` (plus `transcribe:CreateVocabulary`/`UpdateVocabulary`/`GetVocabulary` for Custom words). If a call is denied, the error names which credentials failed (e.g. `Amazon Transcribe credentials (profile transcribe-profile): User … is not authorized …`) — never the key material.
+
 ### Persisted Files
 
-- In development, state is written to `cache/app-state.json` at the repo root. Portable builds create the same `cache/app-state.json` structure next to the executable.
+- In development, state is written to `cache/app-state.json` at the repo root. Packaged builds (including the Windows portable one, whose EXE self-extracts to a fresh temp dir every launch) keep it in the per-user data directory instead: `~/.config/open-cluely/cache/app-state.json` on Linux, `%APPDATA%\open-cluely\cache\app-state.json` on Windows, `~/Library/Application Support/open-cluely/cache/app-state.json` on macOS.
 - Development screenshots are stored in `.stealth_screenshots/`. Packaged builds store screenshots under the app's user-data path.
 - Saving settings from the UI writes API-key values and selection state to `cache/app-state.json`.
 
@@ -302,8 +373,11 @@ All keyboard shortcuts are customizable. Configure them in `src/config.js` to ma
 - `npm start` runs the app from source.
 - `npm run start:hidden` launches it in background mode from source.
 - `npm run dev` enables Electron logging.
+- `npm test` runs every `test/*.test.js` file via `scripts/run-tests.js` (needs Node 20.19+ or 22.12+; older Node cannot import the renderer's ES modules; a bare `node --test test` fails on Node 24).
 - `npm run build:win` creates the portable Windows executable.
-- `npm run build` runs the default `electron-builder` flow.
+- `npm run build:linux` creates the Linux AppImage and the `.deb` package.
+- `npm run build:mac` creates the macOS build.
+- `npm run build` builds for the current OS.
 
 ## Build
 
@@ -316,39 +390,40 @@ npm run build:win
 Expected output:
 
 ```text
-dist/GoogleChrome.exe
+dist/OpenCluely.exe
 ```
+
+On Linux: `npm run build:linux` produces `dist/Open Cluely-1.0.0.AppImage` and `dist/open-cluely_1.0.0_amd64.deb` (see *Installing the .deb on Linux*).
 
 Notes:
 
 - This is the recommended way to use the app outside development because it gives you a standalone `.exe` to launch directly.
-- `.env` is bundled as an extra resource during packaging.
+- `.env` is **not** bundled during packaging; packaged builds read settings from `cache/app-state.json` in the user-data directory (edit them from the in-app Settings panel).
 - The current Windows build is configured as a portable `x64` target with:
-  - Product name: `Google Chrome (2)`
-  - Executable name: `GoogleChrome.exe`
-  - App ID: `com.google.chrome`
-  - Publisher name: `Google LLC`
+  - Product name: `Open Cluely`
+  - Executable name: `OpenCluely.exe`
+  - App ID: `com.opencluely.app`
 - If the build fails with a symlink privilege error, enable Windows Developer Mode or run the build from an elevated terminal.
-- The repo already includes [`assets/chrome.ico`](./assets/chrome.ico) for the Windows target. Add `assets/chrome.icns` and `assets/chrome.png` before relying on the macOS or Linux targets defined in `package.json`.
+- Original app icons live in [`assets/`](./assets/) (`icon.ico`, `icon.icns`, `icon.png`). Windows and macOS use them directly; Linux uses the size-named PNG set in `build/icons/` (regenerate from `assets/icon.png` when the icon changes) so the `.deb` installs proper `hicolor/<size>/apps` entries.
 
 ### Running The Built App
 
 After building:
 
 1. Open the `dist/` folder.
-2. Run `GoogleChrome.exe`.
+2. Run `OpenCluely.exe`.
 3. If you want background launch behavior, either set `START_HIDDEN=true` before building or launch with:
 
 ```powershell
-.\dist\GoogleChrome.exe --start-hidden
+.\dist\OpenCluely.exe --start-hidden
 ```
 
 ### Build Checks
 
 After packaging, verify:
 
-- `dist/GoogleChrome.exe` exists
-- the executable shows the Chrome icon
+- `dist/OpenCluely.exe` exists
+- the executable shows the Open Cluely icon
 - the app launches correctly without needing `npm start`
 
 For a build-focused walkthrough, see [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md).

@@ -5,6 +5,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const { redactSecretsInText } = require('../../../services/state/secret-masking');
 
 // Names that almost always belong to virtual adapters (Docker, WSL, VPN,
 // hypervisors). Phones cannot route to these IPs, so we want the real
@@ -119,6 +120,12 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
   const wss = new WebSocketServer({ server: httpServer });
 
+  // ws re-emits the attached HTTP server's 'error' (e.g. EADDRINUSE) on the
+  // WebSocketServer. Without a listener that becomes an uncaught exception and
+  // Electron shows a crash dialog. httpServer's own 'error' handler below
+  // already records and logs it, so nothing else to do here.
+  wss.on('error', () => {});
+
   wss.on('connection', (ws) => {
     clients.add(ws);
     setClientCount(clients.size);
@@ -161,8 +168,8 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
         // ── Ask AI ─────────────────────────────────────────────────────────
         case 'ask-ai': {
-          if (!geminiRuntime || !geminiRuntime.hasApiKeys()) {
-            sendTo(ws, 'error', { message: 'No API key configured. Add it in the desktop Settings.' });
+          if (!geminiRuntime || !geminiRuntime.isReady()) {
+            sendTo(ws, 'error', { message: 'AI provider is not configured. Add its credentials in the desktop Settings.' });
             break;
           }
 
@@ -188,7 +195,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
                 const { imageParts } = await screenshotManager.buildImagePartsFromScreenshots({ strict: false });
                 if (imageParts.length > 0) {
                   text = await geminiRuntime.executeWithKeyFailover((svc) => {
-                    if (!svc || !svc.model) throw new Error('AI model not initialized');
+                    if (!svc || !svc.ready()) throw new Error('AI model not initialized');
                     return svc.askAiWithSessionContextAndScreenshots(imageParts, {
                       contextString,
                       transcriptContext: '',
@@ -202,7 +209,7 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
               if (!text) {
                 text = await geminiRuntime.executeWithKeyFailover((svc) => {
-                  if (!svc || !svc.model) throw new Error('AI model not initialized');
+                  if (!svc || !svc.ready()) throw new Error('AI model not initialized');
                   return svc.askAiWithSessionContext({
                     contextString,
                     transcriptContext: '',
@@ -215,9 +222,9 @@ function createMobileServer({ getGeminiRuntime, getScreenshotManager, notifyDesk
 
               broadcast('ai-stream-end', { actionId: 'askAi' });
             } catch (err) {
-              console.error('[MobileServer] ask-ai error:', err.message);
+              console.error('[MobileServer] ask-ai error:', redactSecretsInText(err?.message));
               broadcast('ai-stream-end', { actionId: 'askAi' });
-              broadcast('error', { message: err.message });
+              broadcast('error', { message: redactSecretsInText(err?.message) });
             }
           })();
           break;

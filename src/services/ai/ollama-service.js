@@ -18,6 +18,7 @@ const {
   buildScreenshotAnalysisPrompt,
   buildSuggestResponsePrompt
 } = require('./prompts');
+const { stripRoutingLabels } = require('./response-cleanup');
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 const DEFAULT_OLLAMA_MODEL = 'llama3.2';
@@ -44,6 +45,17 @@ class OllamaService {
     this.apiKey = '';
 
     console.log('OllamaService initialized:', this.modelName, 'at', this.baseUrl);
+  }
+
+  // Shared provider contract: images are never forwarded to Ollama today.
+  get supportsImages() {
+    return false;
+  }
+
+  // Shared provider contract: ready when a base URL is configured (always,
+  // since a default exists — the request itself fails if Ollama is down).
+  ready() {
+    return this.baseUrl.length > 0;
   }
 
   updateConfiguration(options = {}) {
@@ -113,7 +125,9 @@ class OllamaService {
       try {
         await this.waitForRateLimit();
         const result = await this._executeRequest(request);
-        request.resolve(result);
+        // Defensive: a leaked routing label ("Domain: conceptual") never
+        // reaches the user, even when the model ignores the prompt rule.
+        request.resolve(stripRoutingLabels(result));
       } catch (error) {
         request.reject(error);
       }

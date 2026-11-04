@@ -10,6 +10,7 @@ import { setupIpcListeners as setupIpcListenersModule } from './renderer/feature
 import { createShortcutManager } from './renderer/features/settings/shortcut-manager.js';
 import { createSettingsPanelManager } from './renderer/features/settings/settings-panel-manager.js';
 import { createTranscriptionManager } from './renderer/features/transcription/transcription-manager.js';
+import { canStartTranscription, normalizeSttProvider } from './renderer/features/transcription/stt-start-gate.js';
 
 import {
     createTranscriptionSourceState,
@@ -176,6 +177,9 @@ async function copyMobileUrlToClipboard() {
 const transcriptionToggle = document.getElementById('transcription-toggle');
 const sourceSystemToggle = document.getElementById('source-system-toggle');
 const sourceMicToggle = document.getElementById('source-mic-toggle');
+const transcriptionMonitor = document.getElementById('transcription-monitor');
+const monitorHeader = document.getElementById('monitor-header');
+const monitorChevron = document.getElementById('monitor-chevron');
 const monitorMasterState = document.getElementById('monitor-master-state');
 const monitorStatusSystem = document.getElementById('monitor-status-system');
 const monitorStatusMic = document.getElementById('monitor-status-mic');
@@ -234,6 +238,11 @@ const MAX_CHAT_INPUT_HEIGHT = 88;
 let isCloseConfirmationOpen = false;
 let hasGeminiApiKeysConfigured = false;
 let hasAssemblyAiApiKeyConfigured = false;
+// Active speech-to-text provider ('assemblyai' | 'transcribe'), mirrored from
+// settings. The AssemblyAI key gate below applies to AssemblyAI only; with
+// Amazon Transcribe the start is allowed and credential problems surface
+// through the normal transcription error path.
+let activeSttProvider = 'assemblyai';
 const aiActionInFlightState = {
     askAi: false,
     screenAi: false,
@@ -288,9 +297,22 @@ const settingsPanelManager = createSettingsPanelManager({
     settingWindowOpacityValue,
     applySettingsShortcutConfig: (settings) => applySettingsShortcutConfig(settings),
     showFeedback: (message, type) => showFeedback(message, type),
-    onSettingsSaved: (settings) => {
-        applyApiKeyAvailabilityFromSettings(settings);
-        updateUI();
+    onSettingsSaved: () => {
+        refreshProviderStatus();
+    },
+    // Lazy closures: transcriptionManager is constructed right after this.
+    isTranscriptionActive: () => {
+        const statuses = transcriptionManager.sourceStatuses;
+        return ['connecting', 'listening'].includes(statuses.system) ||
+            ['connecting', 'listening'].includes(statuses.mic);
+    },
+    stopTranscription: async () => {
+        const statuses = transcriptionManager.sourceStatuses;
+        const anyActive = ['connecting', 'listening'].includes(statuses.system) ||
+            ['connecting', 'listening'].includes(statuses.mic);
+        if (anyActive) {
+            await transcriptionManager.toggleMasterTranscription();
+        }
     }
 });
 const transcriptionManager = createTranscriptionManager({
@@ -303,6 +325,9 @@ const transcriptionManager = createTranscriptionManager({
     transcriptionToggle,
     sourceSystemToggle,
     sourceMicToggle,
+    transcriptionMonitor,
+    monitorHeader,
+    monitorChevron,
     monitorMasterState,
     monitorStatusSystem,
     monitorStatusMic,
@@ -333,6 +358,16 @@ async function init() {
     if (chatAutoScrollToggle) {
         chatAutoScrollToggle.addEventListener('click', () => setAutoScrollEnabled(!autoScrollEnabledState));
         paintAutoScrollToggle();
+    }
+    if (monitorHeader) {
+        const onMonitorHeaderToggle = () => transcriptionManager.toggleMonitorExpanded();
+        monitorHeader.addEventListener('click', onMonitorHeaderToggle);
+        monitorHeader.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onMonitorHeaderToggle();
+            }
+        });
     }
     if (window.electronAPI?.onClearFromMobile) {
         window.electronAPI.onClearFromMobile(() => {
@@ -446,7 +481,8 @@ function updateThemeToggleUi() {
     themeToggleBtn.classList.toggle('is-dark', isDarkMode);
     themeToggleBtn.setAttribute('aria-pressed', isDarkMode ? 'true' : 'false');
     themeToggleBtn.setAttribute('aria-label', ariaLabel);
-    themeToggleBtn.removeAttribute('title');
+    // Keep the tooltip in sync with the dynamic label so it never goes stale.
+    themeToggleBtn.setAttribute('title', ariaLabel);
 }
 
 function applyTheme(theme, options = {}) {
@@ -544,6 +580,15 @@ function createStreamHandler(actionId) {
         }
     }
 
+    // On failure the placeholder message is junk, not an answer: drop it so
+    // it is never fed back into later AI context as an "AI:" line.
+    function discard() {
+        if (messageRecord) {
+            chatUiManager.removeChatMessage(messageRecord.id);
+            messageRecord = null;
+        }
+    }
+
     function cleanup() {
         if (removeChunkListener) {
             removeChunkListener();
@@ -551,7 +596,7 @@ function createStreamHandler(actionId) {
         }
     }
 
-    return { start, finalize, cleanup };
+    return { start, finalize, discard, cleanup };
 }
 
 function hasConfiguredGeminiApiKeys(value) {
@@ -570,11 +615,17 @@ function applyApiKeyAvailabilityFromSettings(settings) {
     if (!settings || typeof settings !== 'object') {
         hasGeminiApiKeysConfigured = false;
         hasAssemblyAiApiKeyConfigured = false;
+        activeSttProvider = normalizeSttProvider(null);
         return;
     }
 
-    // Ollama doesn't require API keys, so treat it as always configured
-    if (settings.aiProvider === 'ollama') {
+    activeSttProvider = normalizeSttProvider(settings.sttProvider);
+
+    // Main process reports whether the ACTIVE provider is ready (key, AWS
+    // chain, or local server); fall back to Gemini key checks for old payloads.
+    if (typeof settings.aiReady === 'boolean') {
+        hasGeminiApiKeysConfigured = settings.aiReady;
+    } else if (settings.aiProvider === 'ollama') {
         hasGeminiApiKeysConfigured = true;
     } else if (typeof settings.hasGeminiApiKeys === 'boolean') {
         hasGeminiApiKeysConfigured = settings.hasGeminiApiKeys;
@@ -589,6 +640,32 @@ function applyApiKeyAvailabilityFromSettings(settings) {
     }
 }
 
+// Re-reads the main process view of the active provider: readiness flag and
+// the "Provider · model" label in the top bar.
+async function refreshProviderStatus() {
+    try {
+        const settings = await window.electronAPI?.getSettings?.();
+        if (settings && !settings.error) {
+            applyApiKeyAvailabilityFromSettings(settings);
+            updateProviderBadge(settings);
+        }
+    } catch (error) {
+        console.error('Failed to refresh provider status:', error);
+    }
+    updateUI();
+}
+
+function updateProviderBadge(settings) {
+    const badge = document.getElementById('chat-provider-model');
+    if (!badge) {
+        return;
+    }
+    const provider = settings?.aiProviderLabels?.[settings.aiProvider] || settings?.aiProvider || '';
+    const model = settings?.activeModelName || '';
+    badge.textContent = provider && model ? `${provider} \u00B7 ${model}` : provider;
+    badge.title = badge.textContent || 'Active AI provider and model';
+}
+
 async function loadShortcutConfig() {
     if (!window.electronAPI?.getSettings) {
         applyApiKeyAvailabilityFromSettings(null);
@@ -599,6 +676,7 @@ async function loadShortcutConfig() {
         const settings = await window.electronAPI.getSettings();
         applySettingsShortcutConfig(settings);
         applyApiKeyAvailabilityFromSettings(settings);
+        updateProviderBadge(settings);
         return settings;
     } catch (error) {
         console.error('Failed to load shortcut config:', error);
@@ -672,8 +750,12 @@ function setSourceSelected(source, enabled) {
 }
 
 async function toggleMasterTranscription() {
-    if (!hasAssemblyAiApiKeyConfigured) {
-        showFeedback('AssemblyAI API key missing. Add it in Settings.', 'error');
+    const gate = canStartTranscription({
+        sttProvider: activeSttProvider,
+        hasAssemblyAiApiKey: hasAssemblyAiApiKeyConfigured
+    });
+    if (!gate.allowed) {
+        showFeedback(gate.message, 'error');
         return;
     }
 
@@ -725,15 +807,12 @@ async function askAiWithSessionContext() {
         try {
             setAnalyzing(true);
             showLoadingOverlay('Analyzing full session context...');
-            stream.start('**Best Next Answer:**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.askAiWithSessionContext(payload);
 
             if (result?.success && result?.text) {
-                const heading = result.usedScreenshots
-                    ? '**Best Next Answer (Transcript + Screen):**'
-                    : '**Best Next Answer (Transcript):**';
-                stream.finalize(`${heading}\n\n${result.text}`);
+                stream.finalize(result.text);
                 showFeedback('Ask AI ready', 'success');
             } else {
                 throw new Error(result?.error || 'Ask AI failed');
@@ -741,6 +820,7 @@ async function askAiWithSessionContext() {
         } catch (error) {
             console.error('Ask AI error:', error);
             showFeedback('Ask AI failed', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -777,6 +857,7 @@ async function analyzeScreenshotsOnly() {
         } catch (error) {
             console.error('Analysis error:', error);
             showFeedback('Analysis failed', 'error');
+            stream.discard();
             setAnalyzing(false);
             hideLoadingOverlay();
             // Clean up on error since onAnalysisResult may not fire
@@ -870,7 +951,7 @@ async function getResponseSuggestions() {
                 return;
             }
 
-            stream.start('\u{1F4A1} **What should I say?**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.suggestResponse({
                 context: bundle.sessionSummary || 'Current meeting conversation',
@@ -878,7 +959,7 @@ async function getResponseSuggestions() {
             });
 
             if (result.success && result.suggestions) {
-                stream.finalize(`\u{1F4A1} **What should I say?**\n\n${result.suggestions}`);
+                stream.finalize(result.suggestions);
                 showFeedback('Suggestions generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to generate suggestions');
@@ -886,6 +967,7 @@ async function getResponseSuggestions() {
         } catch (error) {
             console.error('Error getting suggestions:', error);
             showFeedback('Failed to generate suggestions', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -915,21 +997,22 @@ async function generateMeetingNotes() {
                 return;
             }
 
-            stream.start('\u{1F4DD} **Meeting Notes**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.generateMeetingNotes({
                 contextString: bundle.contextString
             });
 
             if (result.success && result.notes) {
-                stream.finalize(`\u{1F4DD} **Meeting Notes**\n\n${result.notes}`);
+                stream.finalize(result.notes);
                 showFeedback('Meeting notes generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to generate notes');
             }
         } catch (error) {
-            console.error('Error generating notes:', error);
+            console.error('Error generating meeting notes:', error);
             showFeedback('Failed to generate notes', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -960,14 +1043,14 @@ async function getConversationInsights() {
                 return;
             }
 
-            stream.start('\u{1F4CA} **Conversation Insights**\n\n');
+            stream.start('');
 
             const result = await window.electronAPI.getConversationInsights({
                 contextString: bundle.contextString
             });
 
             if (result.success && result.insights) {
-                stream.finalize(`\u{1F4CA} **Conversation Insights**\n\n${result.insights}`);
+                stream.finalize(result.insights);
                 showFeedback('Insights generated', 'success');
             } else {
                 throw new Error(result.error || 'Failed to get insights');
@@ -975,6 +1058,7 @@ async function getConversationInsights() {
         } catch (error) {
             console.error('Error getting insights:', error);
             showFeedback('Failed to get insights', 'error');
+            stream.discard();
             addChatMessage('system', `Error: ${error.message}`);
         } finally {
             stream.cleanup();
@@ -996,8 +1080,7 @@ function closeSettings() {
 async function saveSettings() {
     const result = await settingsPanelManager.saveSettings();
     if (result?.success && result?.settings) {
-        applyApiKeyAvailabilityFromSettings(result.settings);
-        updateUI();
+        await refreshProviderStatus();
     }
 }
 
@@ -1020,7 +1103,10 @@ function updateUI() {
     const hasEnabledScreenshots = aiBundle.enabledScreenshotIds.length > 0;
     const hasAiContext = hasTranscriptContext || hasEnabledScreenshots || aiBundle.contextString.length > 0;
     const canRunAiActions = hasGeminiApiKeysConfigured;
-    const canRunTranscription = hasAssemblyAiApiKeyConfigured;
+    const canRunTranscription = canStartTranscription({
+        sttProvider: activeSttProvider,
+        hasAssemblyAiApiKey: hasAssemblyAiApiKeyConfigured
+    }).allowed;
     const askAiInFlight = isAiActionInFlight('askAi');
     const screenAiInFlight = isAiActionInFlight('screenAi');
     const suggestInFlight = isAiActionInFlight('suggest');
@@ -1068,12 +1154,13 @@ function showFeedback(message, type = 'info') {
         statusText.className = `status-text ${type} show`;
         statusText.style.display = 'block';
 
+        const visibleMs = type === 'error' ? 8000 : 3000;
         setTimeout(() => {
             statusText.classList.remove('show');
             setTimeout(() => {
                 statusText.style.display = 'none';
             }, 300);
-        }, 3000);
+        }, visibleMs);
     }
 }
 
